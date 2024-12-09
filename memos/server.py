@@ -639,9 +639,12 @@ async def search_entities_v2(
     limit: Annotated[int, Query(ge=1, le=200)] = 48,
     start: int = None,
     end: int = None,
+    tags: str = Query(None, description="Comma-separated list of tags"),
     db: Session = Depends(get_db),
 ):
     library_ids = [int(id) for id in library_ids.split(",")] if library_ids else None
+    # Parse tags parameter
+    tag_list = [tag.strip() for tag in tags.split(",")] if tags else None
 
     try:
         if q.strip() == "":
@@ -658,6 +661,7 @@ async def search_entities_v2(
                 library_ids=library_ids,
                 start=start,
                 end=end,
+                tags=tag_list,
             )
 
         # Convert Entity list to SearchHit list
@@ -713,7 +717,7 @@ async def search_entities_v2(
             out_of=len(hits),
             page=1,
             request_params=RequestParams(
-                collection_name="entities", first_q=q, per_page=limit, q=q
+                collection_name="entities", first_q=q, per_page=limit, q=q, tags=tags
             ),
             search_cutoff=False,
             search_time_ms=0,

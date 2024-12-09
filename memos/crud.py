@@ -473,12 +473,23 @@ def full_text_search(
     library_ids: Optional[List[int]] = None,
     start: Optional[int] = None,
     end: Optional[int] = None,
+    tags: Optional[List[str]] = None,
 ) -> List[int]:
     and_query = and_words(query)
 
     sql_query = """
-    SELECT entities.id FROM entities
+    SELECT DISTINCT entities.id FROM entities
     JOIN entities_fts ON entities.id = entities_fts.id
+    """
+
+    # Add JOIN for tags if needed
+    if tags:
+        sql_query += """
+        JOIN entity_tags ON entities.id = entity_tags.entity_id
+        JOIN tags ON entity_tags.tag_id = tags.id
+        """
+
+    sql_query += """
     WHERE entities_fts MATCH jieba_query(:query)
     AND entities.file_type_group = 'image'
     """
@@ -488,10 +499,16 @@ def full_text_search(
     if library_ids:
         library_ids_str = ", ".join(f"'{id}'" for id in library_ids)
         sql_query += f" AND entities.library_id IN ({library_ids_str})"
+    
     if start is not None and end is not None:
         sql_query += " AND strftime('%s', entities.file_created_at, 'utc') BETWEEN :start AND :end"
         params["start"] = str(start)
         params["end"] = str(end)
+
+    # Add tags filter
+    if tags:
+        tags_str = ", ".join(f"'{tag}'" for tag in tags)
+        sql_query += f" AND tags.name IN ({tags_str})"
 
     sql_query += (
         " ORDER BY bm25(entities_fts), entities.file_created_at DESC LIMIT :limit"
@@ -513,16 +530,27 @@ def vec_search(
     library_ids: Optional[List[int]] = None,
     start: Optional[int] = None,
     end: Optional[int] = None,
+    tags: Optional[List[str]] = None,
 ) -> List[int]:
-    query_embedding = get_embeddings([query])
+    query_embedding = get_embeddings([f"Represent the query for retrieving evidence documents: {query}"])
     if not query_embedding:
         return []
 
     query_embedding = query_embedding[0]
 
     sql_query = """
-    SELECT entities.id FROM entities
+    SELECT DISTINCT entities.id FROM entities
     JOIN entities_vec ON entities.id = entities_vec.rowid
+    """
+
+    # Add JOIN for tags if needed
+    if tags:
+        sql_query += """
+        JOIN entity_tags ON entities.id = entity_tags.entity_id
+        JOIN tags ON entity_tags.tag_id = tags.id
+        """
+
+    sql_query += """
     WHERE entities_vec.embedding MATCH :embedding
     AND entities.file_type_group = 'image'
     """
@@ -537,6 +565,11 @@ def vec_search(
         sql_query += " AND strftime('%s', entities.file_created_at, 'utc') BETWEEN :start AND :end"
         params["start"] = str(start)
         params["end"] = str(end)
+
+    # Add tags filter
+    if tags:
+        tags_str = ", ".join(f"'{tag}'" for tag in tags)
+        sql_query += f" AND tags.name IN ({tags_str})"
 
     sql_query += " AND K = :limit ORDER BY distance, entities.file_created_at DESC"
 
@@ -569,16 +602,17 @@ def hybrid_search(
     library_ids: Optional[List[int]] = None,
     start: Optional[int] = None,
     end: Optional[int] = None,
+    tags: Optional[List[str]] = None,
 ) -> List[Entity]:
     start_time = time.time()
 
     fts_start = time.time()
-    fts_results = full_text_search(query, db, limit, library_ids, start, end)
+    fts_results = full_text_search(query, db, limit, library_ids, start, end, tags)
     fts_end = time.time()
     logger.info(f"Full-text search took {fts_end - fts_start:.4f} seconds")
 
     vec_start = time.time()
-    vec_results = vec_search(query, db, limit, library_ids, start, end)
+    vec_results = vec_search(query, db, limit, library_ids, start, end, tags)
     vec_end = time.time()
     logger.info(f"Vector search took {vec_end - vec_start:.4f} seconds")
 
