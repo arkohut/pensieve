@@ -43,6 +43,9 @@ from .schemas import (
     RequestParams,
     EntityContext,
     BatchIndexRequest,
+    FacetCount,
+    Facet,
+    FacetStats,
 )
 from .read_metadata import read_metadata
 from .logging_config import LOGGING_CONFIG
@@ -640,6 +643,7 @@ async def search_entities_v2(
     start: int = None,
     end: int = None,
     tags: str = Query(None, description="Comma-separated list of tags"),
+    facets: bool = Query(False, description="Include facets in the search results"),
     db: Session = Depends(get_db),
 ):
     library_ids = [int(id) for id in library_ids.split(",")] if library_ids else None
@@ -652,9 +656,10 @@ async def search_entities_v2(
             entities = crud.list_entities(
                 db=db, limit=limit, library_ids=library_ids, start=start, end=end
             )
+            stats = {}
         else:
             # Use hybrid_search when q is not empty
-            entities = crud.hybrid_search(
+            entities, stats = crud.hybrid_search(
                 query=q,
                 db=db,
                 limit=limit,
@@ -662,6 +667,7 @@ async def search_entities_v2(
                 start=start,
                 end=end,
                 tags=tag_list,
+                facets=facets,
             )
 
         # Convert Entity list to SearchHit list
@@ -709,9 +715,30 @@ async def search_entities_v2(
                 )
             )
 
+        # Convert tag_counts to facet_counts format
+        tag_facet_counts = []
+        if stats and "tag_counts" in stats:
+            for tag_name, count in stats["tag_counts"].items():
+                tag_facet_counts.append(
+                    FacetCount(
+                        value=tag_name,
+                        count=count,
+                        highlighted=tag_name,
+                    )
+                )
+
+        facet_counts = [
+            Facet(
+                field_name="tags",
+                counts=tag_facet_counts,
+                sampled=False,
+                stats=FacetStats(total_values=len(tag_facet_counts)),
+            )
+        ] if tag_facet_counts else []
+
         # Build SearchResult
         search_result = SearchResult(
-            facet_counts=[],
+            facet_counts=facet_counts,
             found=len(hits),
             hits=hits,
             out_of=len(hits),

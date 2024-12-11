@@ -475,6 +475,8 @@ def full_text_search(
     end: Optional[int] = None,
     tags: Optional[List[str]] = None,
 ) -> List[int]:
+    start_time = time.time()
+
     and_query = and_words(query)
 
     sql_query = """
@@ -511,10 +513,14 @@ def full_text_search(
         sql_query += f" AND tags.name IN ({tags_str})"
 
     sql_query += (
-        " ORDER BY bm25(entities_fts), entities.file_created_at DESC LIMIT :limit"
+        " ORDER BY rank LIMIT :limit"
     )
 
     result = db.execute(text(sql_query), params).fetchall()
+
+    end_time = time.time()
+    execution_time = end_time - start_time
+    logger.info(f"Full-text search execution time: {execution_time:.4f} seconds")
 
     logger.info(f"Full-text search sql: {sql_query}")
     logger.info(f"Full-text search params: {params}")
@@ -532,7 +538,13 @@ def vec_search(
     end: Optional[int] = None,
     tags: Optional[List[str]] = None,
 ) -> List[int]:
-    query_embedding = get_embeddings([f"Represent the query for retrieving evidence documents: {query}"])
+    start_time = time.time()
+
+    query_embedding = get_embeddings([f"{query}"])
+    end_time = time.time()
+    logger.info(f"Get embedding took {end_time - start_time:.4f} seconds")
+
+    start_time = time.time()
     if not query_embedding:
         return []
 
@@ -576,7 +588,13 @@ def vec_search(
     result = db.execute(text(sql_query), params).fetchall()
 
     ids = [row[0] for row in result]
+    logger.info(f"SQL: {sql_query}")
+    logger.info(f"Params: limit: {limit}")
     logger.info(f"Vector search results: {ids}")
+
+    end_time = time.time()
+    logger.info(f"Vector search execution time: {end_time - start_time:.4f} seconds")
+
     return ids
 
 
@@ -603,23 +621,24 @@ def hybrid_search(
     start: Optional[int] = None,
     end: Optional[int] = None,
     tags: Optional[List[str]] = None,
-) -> List[Entity]:
+    facets: bool = False,
+) -> Tuple[List[Entity], dict]:
     start_time = time.time()
 
     fts_start = time.time()
     fts_results = full_text_search(query, db, limit, library_ids, start, end, tags)
     fts_end = time.time()
-    logger.info(f"Full-text search took {fts_end - fts_start:.4f} seconds")
+    logger.info(f"Full-text search took {fts_end - fts_start:.4f} seconds get {len(fts_results)} results")
 
     vec_start = time.time()
-    vec_results = vec_search(query, db, limit, library_ids, start, end, tags)
+    vec_results = vec_search(query, db, limit * 2, library_ids, start, end, tags)
     vec_end = time.time()
-    logger.info(f"Vector search took {vec_end - vec_start:.4f} seconds")
+    logger.info(f"Vector search took {vec_end - vec_start:.4f} seconds get {len(vec_results)} results")
 
     fusion_start = time.time()
     combined_results = reciprocal_rank_fusion(fts_results, vec_results)
     fusion_end = time.time()
-    logger.info(f"Reciprocal rank fusion took {fusion_end - fusion_start:.4f} seconds")
+    logger.info(f"Reciprocal rank fusion took {fusion_end - fusion_start:.4f} seconds get {len(combined_results)} results")
 
     sorted_ids = [id for id, _ in combined_results][:limit]
     logger.info(f"Hybrid search results (sorted IDs): {sorted_ids}")
@@ -628,20 +647,19 @@ def hybrid_search(
     entities = find_entities_by_ids(sorted_ids, db)
     entities_end = time.time()
     logger.info(
-        f"Finding entities by IDs took {entities_end - entities_start:.4f} seconds"
+        f"Finding entities by IDs took {entities_end - entities_start:.4f} seconds get {len(entities)} results"
     )
 
-    # Create a dictionary mapping entity IDs to entities
     entity_dict = {entity.id: entity for entity in entities}
+    result = [entity_dict[id] for id in sorted_ids]
 
-    # Return entities in the order of sorted_ids
-    result = [entity_dict[id] for id in sorted_ids if id in entity_dict]
+    stats = get_search_stats(query, db, library_ids, start, end, tags) if facets else {}
 
     end_time = time.time()
     total_time = end_time - start_time
     logger.info(f"Total hybrid search time: {total_time:.4f} seconds")
 
-    return result
+    return result, stats
 
 
 def list_entities(
@@ -822,11 +840,9 @@ def update_entity_index(entity_id: int, db: Session):
 def batch_update_entity_indices(entity_ids: List[int], db: Session):
     """Batch update both FTS and vector indexes for multiple entities"""
     try:
-        # 获取实体
         entities = db.query(EntityModel).filter(EntityModel.id.in_(entity_ids)).all()
         found_ids = {entity.id for entity in entities}
         
-        # 检查是否所有请求的实体都找到了
         missing_ids = set(entity_ids) - found_ids
         if missing_ids:
             raise ValueError(f"Entities not found: {missing_ids}")
@@ -890,4 +906,63 @@ def batch_update_entity_indices(entity_ids: List[int], db: Session):
         logger.error(f"Error batch updating indexes: {e}")
         db.rollback()
         raise
+
+
+def get_search_stats(
+    query: str,
+    db: Session,
+    library_ids: Optional[List[int]] = None,
+    start: Optional[int] = None,
+    end: Optional[int] = None,
+    tags: Optional[List[str]] = None,
+) -> dict:
+    """Get statistics for search results including date range and tag counts."""
+
+    MIN_SAMPLE_SIZE = 384
+    MAX_SAMPLE_SIZE = 1200
+
+    fts_results = full_text_search(query, db, limit=MAX_SAMPLE_SIZE, library_ids=library_ids, start=start, end=end, tags=tags)
+    vec_limit = max(min(len(fts_results) * 2, MAX_SAMPLE_SIZE), MIN_SAMPLE_SIZE)
+    vec_results = vec_search(query, db, limit=vec_limit, library_ids=library_ids, start=start, end=end, tags=tags)
+
+    logging.info(f"fts_results: {len(fts_results)} vec_results: {len(vec_results)}")
+    
+    entity_ids = set(fts_results + vec_results)
+    
+    if not entity_ids:
+        return {
+            "date_range": {"earliest": None, "latest": None},
+            "tag_counts": {}
+        }
+
+    entity_ids_str = ','.join(str(id) for id in entity_ids)
+    date_range = db.execute(
+        text(f"""
+            SELECT 
+                MIN(file_created_at) as earliest,
+                MAX(file_created_at) as latest
+            FROM entities
+            WHERE id IN ({entity_ids_str})
+        """)
+    ).first()
+
+    tag_counts = db.execute(
+        text(f"""
+            SELECT t.name, COUNT(*) as count
+            FROM tags t
+            JOIN entity_tags et ON t.id = et.tag_id
+            WHERE et.entity_id IN ({entity_ids_str})
+            GROUP BY t.name
+            ORDER BY count DESC
+        """)
+    ).all()
+
+    return {
+        "date_range": {
+            "earliest": date_range.earliest,
+            "latest": date_range.latest
+        },
+        "tag_counts": {tag: count for tag, count in tag_counts}
+    }
+
 
