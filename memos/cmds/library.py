@@ -404,7 +404,8 @@ def reindex(
 
     if force:
         print("Force flag is set. Recreating FTS and vector tables...")
-        recreate_fts_and_vec_tables()
+        if not recreate_fts_and_vec_tables():
+            return
         print("FTS and vector tables have been recreated.")
 
     with httpx.Client() as client:

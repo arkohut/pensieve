@@ -244,9 +244,11 @@ def recreate_fts_and_vec_tables():
 
             session.commit()
             print("Successfully recreated entities_fts and entities_vec tables.")
+            return True
         except Exception as e:
             session.rollback()
             print(f"Error recreating tables: {e}")
+            return False
 
 
 def init_database():
