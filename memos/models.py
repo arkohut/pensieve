@@ -236,7 +236,11 @@ def recreate_fts_and_vec_tables():
                 text(
                     f"""
                 CREATE VIRTUAL TABLE entities_vec USING vec0(
-                    embedding float[{settings.embedding.num_dim}]
+                    embedding float[{settings.embedding.num_dim}] distance_metric=cosine,
+                    file_type_group text,
+                    created_at_timestamp integer,
+                    app_name text,
+                    library_id integer
                 )
             """
                 )
@@ -287,7 +291,11 @@ def init_database():
                 text(
                     f"""
                 CREATE VIRTUAL TABLE IF NOT EXISTS entities_vec USING vec0(
-                    embedding float[{settings.embedding.num_dim}]
+                    embedding float[{settings.embedding.num_dim}] distance_metric=cosine,
+                    file_type_group text,
+                    created_at_timestamp integer,
+                    app_name text,
+                    library_id integer
                 )
             """
                 )
