@@ -619,7 +619,7 @@ def hybrid_search(
     start: Optional[int] = None,
     end: Optional[int] = None,
     tags: Optional[List[str]] = None,
-    facets: bool = False,
+    use_facet: bool = False,
 ) -> Tuple[List[Entity], dict]:
     start_time = time.time()
 
@@ -651,7 +651,7 @@ def hybrid_search(
     entity_dict = {entity.id: entity for entity in entities}
     result = [entity_dict[id] for id in sorted_ids]
 
-    stats = get_search_stats(query, db, library_ids, start, end, tags) if facets else {}
+    stats = get_search_stats(query, db, library_ids, start, end, tags) if use_facet else {}
 
     end_time = time.time()
     total_time = end_time - start_time
