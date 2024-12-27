@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     database_path: str = "database.db"
     default_library: str = "screenshots"
     screenshots_dir: str = "screenshots"
+    facet: bool = False
 
     # Server settings
     server_host: str = "127.0.0.1"

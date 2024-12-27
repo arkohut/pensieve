@@ -643,12 +643,15 @@ async def search_entities_v2(
     start: int = None,
     end: int = None,
     tags: str = Query(None, description="Comma-separated list of tags"),
-    facets: bool = Query(False, description="Include facets in the search results"),
+    facet: bool = Query(None, description="Include facet in the search results"),
     db: Session = Depends(get_db),
 ):
     library_ids = [int(id) for id in library_ids.split(",")] if library_ids else None
     # Parse tags parameter
     tag_list = [tag.strip() for tag in tags.split(",")] if tags else None
+
+    # Use settings.facet if facet parameter is not provided
+    use_facet = settings.facet if facet is None else facet
 
     try:
         if q.strip() == "":
@@ -667,7 +670,7 @@ async def search_entities_v2(
                 start=start,
                 end=end,
                 tags=tag_list,
-                facets=facets,
+                use_facet=use_facet,
             )
 
         # Convert Entity list to SearchHit list
