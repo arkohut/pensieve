@@ -31,6 +31,7 @@ import logging
 from sqlite_vec import serialize_float32
 import time
 import json
+from sqlalchemy.sql import text, bindparam
 
 logger = logging.getLogger(__name__)
 
@@ -536,7 +537,7 @@ def vec_search(
     library_ids: Optional[List[int]] = None,
     start: Optional[int] = None,
     end: Optional[int] = None,
-    tags: Optional[List[str]] = None,
+    app_names: Optional[List[str]] = None,
 ) -> List[int]:
     start_time = time.time()
 
@@ -550,46 +551,43 @@ def vec_search(
 
     query_embedding = query_embedding[0]
 
-    sql_query = """
-    SELECT DISTINCT entities.id FROM entities
-    JOIN entities_vec ON entities.id = entities_vec.rowid
+    sql_query = f"""
+    SELECT rowid
+    FROM entities_vec
+    WHERE embedding MATCH :embedding
+      AND file_type_group = 'image'
+      AND K = :limit
+      {"AND created_at_timestamp BETWEEN :start AND :end" if start is not None and end is not None else ""}
+      {"AND library_id IN :library_ids" if library_ids else ""}
+      {"AND app_name IN :app_names" if app_names else ""}
+    ORDER BY distance ASC
     """
 
-    # Add JOIN for tags if needed
-    if tags:
-        sql_query += """
-        JOIN entity_tags ON entities.id = entity_tags.entity_id
-        JOIN tags ON entity_tags.tag_id = tags.id
-        """
-
-    sql_query += """
-    WHERE entities_vec.embedding MATCH :embedding
-    AND entities.file_type_group = 'image'
-    """
-
-    params = {"embedding": serialize_float32(query_embedding), "limit": limit}
-
-    if library_ids:
-        library_ids_str = ", ".join(f"'{id}'" for id in library_ids)
-        sql_query += f" AND entities.library_id IN ({library_ids_str})"
+    params = {
+        "embedding": serialize_float32(query_embedding),
+        "limit": limit,
+    }
 
     if start is not None and end is not None:
-        sql_query += " AND strftime('%s', entities.file_created_at, 'utc') BETWEEN :start AND :end"
-        params["start"] = str(start)
-        params["end"] = str(end)
+        params["start"] = int(start)
+        params["end"] = int(end)
+    if library_ids:
+        params["library_ids"] = tuple(library_ids)
+    if app_names:
+        params["app_names"] = tuple(app_names)
 
-    # Add tags filter
-    if tags:
-        tags_str = ", ".join(f"'{tag}'" for tag in tags)
-        sql_query += f" AND tags.name IN ({tags_str})"
+    # Bind parameters with expanding=True for app_names and library_ids
+    sql = text(sql_query)
+    if app_names:
+        sql = sql.bindparams(bindparam("app_names", expanding=True))
+    if library_ids:
+        sql = sql.bindparams(bindparam("library_ids", expanding=True))
 
-    sql_query += " AND K = :limit ORDER BY distance, entities.file_created_at DESC"
-
-    result = db.execute(text(sql_query), params).fetchall()
+    result = db.execute(sql, params).fetchall()
 
     ids = [row[0] for row in result]
     logger.info(f"SQL: {sql_query}")
-    logger.info(f"Params: limit: {limit}")
+    logger.info(f"Params: {params}")
     logger.info(f"Vector search results: {ids}")
 
     end_time = time.time()
@@ -817,16 +815,35 @@ def update_entity_index(entity_id: int, db: Session):
             db.execute(
                 text("DELETE FROM entities_vec WHERE rowid = :id"), {"id": entity.id}
             )
+            
+            # Extract app_name from metadata_entries
+            app_name = next(
+                (entry.value for entry in entity.metadata_entries if entry.key == "active_app"),
+                "unknown"  # Default to 'unknown' if not found
+            )
+            # Get file_type_group from entity
+            file_type_group = entity.file_type_group or "unknown"
+
+            # Convert file_created_at to integer timestamp
+            created_at_timestamp = int(entity.file_created_at.timestamp())
+
             db.execute(
                 text(
                     """
-                    INSERT INTO entities_vec (rowid, embedding)
-                    VALUES (:id, :embedding)
+                    INSERT INTO entities_vec (
+                        rowid, embedding, app_name, file_type_group, created_at_timestamp,
+                        library_id
+                    )
+                    VALUES (:id, :embedding, :app_name, :file_type_group, :created_at_timestamp, :library_id)
                     """
                 ),
                 {
                     "id": entity.id,
                     "embedding": serialize_float32(embeddings[0]),
+                    "app_name": app_name,
+                    "file_type_group": file_type_group,
+                    "created_at_timestamp": created_at_timestamp,
+                    "library_id": entity.library_id,
                 },
             )
 
@@ -883,21 +900,40 @@ def batch_update_entity_indices(entity_ids: List[int], db: Session):
         # Batch update vector table
         if embeddings:
             for entity, embedding in zip(entities, embeddings):
-                if embedding:  # Check if embedding is not empty
+                if embedding:
                     db.execute(
                         text("DELETE FROM entities_vec WHERE rowid = :id"),
                         {"id": entity.id},
                     )
+                    
+                    # Extract app_name from metadata_entries
+                    app_name = next(
+                        (entry.value for entry in entity.metadata_entries if entry.key == "active_app"),
+                        "unknown"  # Default to 'unknown' if not found
+                    )
+                    # Get file_type_group from entity
+                    file_type_group = entity.file_type_group or "unknown"
+
+                    # Convert file_created_at to integer timestamp
+                    created_at_timestamp = int(entity.file_created_at.timestamp())
+
                     db.execute(
                         text(
                             """
-                            INSERT INTO entities_vec (rowid, embedding)
-                            VALUES (:id, :embedding)
+                            INSERT INTO entities_vec (
+                                rowid, embedding, app_name, file_type_group, created_at_timestamp,
+                                library_id
+                            )
+                            VALUES (:id, :embedding, :app_name, :file_type_group, :created_at_timestamp, :library_id)
                             """
                         ),
                         {
                             "id": entity.id,
                             "embedding": serialize_float32(embedding),
+                            "app_name": app_name,
+                            "file_type_group": file_type_group,
+                            "created_at_timestamp": created_at_timestamp,
+                            "library_id": entity.library_id,
                         },
                     )
 
@@ -918,12 +954,12 @@ def get_search_stats(
 ) -> dict:
     """Get statistics for search results including date range and tag counts."""
 
-    MIN_SAMPLE_SIZE = 384
-    MAX_SAMPLE_SIZE = 1200
+    MIN_SAMPLE_SIZE = 2048
+    MAX_SAMPLE_SIZE = 4096
 
     fts_results = full_text_search(query, db, limit=MAX_SAMPLE_SIZE, library_ids=library_ids, start=start, end=end, tags=tags)
     vec_limit = max(min(len(fts_results) * 2, MAX_SAMPLE_SIZE), MIN_SAMPLE_SIZE)
-    vec_results = vec_search(query, db, limit=vec_limit, library_ids=library_ids, start=start, end=end, tags=tags)
+    vec_results = vec_search(query, db, limit=vec_limit, library_ids=library_ids, start=start, end=end, app_names=tags)
 
     logging.info(f"fts_results: {len(fts_results)} vec_results: {len(vec_results)}")
     
