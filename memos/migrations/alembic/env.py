@@ -4,6 +4,9 @@ from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
+import sqlite_vec
+from sqlalchemy import event
+
 from memos import models
 from memos import config as memosConfig
 
@@ -29,6 +32,11 @@ target_metadata = models.Base.metadata
 
 # overwrite the desired value
 config.set_main_option("sqlalchemy.url", f"sqlite:///{memosConfig.get_database_path()}")
+
+
+def load_extension(dbapi_conn, connection_record):
+    dbapi_conn.enable_load_extension(True)
+    sqlite_vec.load(dbapi_conn)
 
 
 def run_migrations_offline() -> None:
@@ -67,6 +75,8 @@ def run_migrations_online() -> None:
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
+
+    event.listen(connectable, 'connect', load_extension)
 
     with connectable.connect() as connection:
         context.configure(
