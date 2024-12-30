@@ -81,11 +81,14 @@ app.add_typer(lib_app, name="lib", callback=callback)
 def serve():
     """Run the server after initializing if necessary."""
     from .models import init_database
-
+    from .migrations import run_migrations
+    
     db_success = init_database()
     if db_success:
+        # Run any pending migrations
+        run_migrations()
+        
         from .server import run_server
-
         run_server()
     else:
         print("Server initialization failed. Unable to start the server.")
@@ -95,9 +98,11 @@ def serve():
 def init():
     """Initialize the database."""
     from .models import init_database
+    from .migrations import run_migrations
 
     db_success = init_database()
     if db_success:
+        run_migrations()
         print("Initialization completed successfully.")
     else:
         print("Initialization failed. Please check the error messages above.")
