@@ -642,13 +642,13 @@ async def search_entities_v2(
     limit: Annotated[int, Query(ge=1, le=200)] = 48,
     start: int = None,
     end: int = None,
-    tags: str = Query(None, description="Comma-separated list of tags"),
+    app_names: str = Query(None, description="Comma-separated list of app names"),
     facet: bool = Query(None, description="Include facet in the search results"),
     db: Session = Depends(get_db),
 ):
     library_ids = [int(id) for id in library_ids.split(",")] if library_ids else None
     # Parse tags parameter
-    tag_list = [tag.strip() for tag in tags.split(",")] if tags else None
+    app_name_list = [app_name.strip() for app_name in app_names.split(",")] if app_names else None
 
     # Use settings.facet if facet parameter is not provided
     use_facet = settings.facet if facet is None else facet
@@ -669,7 +669,7 @@ async def search_entities_v2(
                 library_ids=library_ids,
                 start=start,
                 end=end,
-                tags=tag_list,
+                app_names=app_name_list,
                 use_facet=use_facet,
             )
 
@@ -719,25 +719,27 @@ async def search_entities_v2(
             )
 
         # Convert tag_counts to facet_counts format
-        tag_facet_counts = []
-        if stats and "tag_counts" in stats:
-            for tag_name, count in stats["tag_counts"].items():
-                tag_facet_counts.append(
+        app_name_facet_counts = []
+        if stats and "app_name_counts" in stats:
+            for app_name, count in stats["app_name_counts"].items():
+                app_name_facet_counts.append(
                     FacetCount(
-                        value=tag_name,
+                        value=app_name,
                         count=count,
-                        highlighted=tag_name,
+                        highlighted=app_name,
                     )
                 )
 
         facet_counts = [
             Facet(
-                field_name="tags",
-                counts=tag_facet_counts,
+                field_name="app_names",
+                counts=app_name_facet_counts,
                 sampled=False,
-                stats=FacetStats(total_values=len(tag_facet_counts)),
+                stats=FacetStats(total_values=len(app_name_facet_counts)),
             )
-        ] if tag_facet_counts else []
+        ] if app_name_facet_counts else []
+
+        logging.info(app_name_list)
 
         # Build SearchResult
         search_result = SearchResult(
@@ -747,7 +749,7 @@ async def search_entities_v2(
             out_of=len(hits),
             page=1,
             request_params=RequestParams(
-                collection_name="entities", first_q=q, per_page=limit, q=q, tags=tags
+                collection_name="entities", first_q=q, per_page=limit, q=q, app_names=app_name_list
             ),
             search_cutoff=False,
             search_time_ms=0,

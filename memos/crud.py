@@ -474,7 +474,7 @@ def full_text_search(
     library_ids: Optional[List[int]] = None,
     start: Optional[int] = None,
     end: Optional[int] = None,
-    tags: Optional[List[str]] = None,
+    app_names: Optional[List[str]] = None,
 ) -> List[int]:
     start_time = time.time()
 
@@ -486,10 +486,9 @@ def full_text_search(
     """
 
     # Add JOIN for tags if needed
-    if tags:
+    if app_names:
         sql_query += """
-        JOIN entity_tags ON entities.id = entity_tags.entity_id
-        JOIN tags ON entity_tags.tag_id = tags.id
+        JOIN metadata_entries ON entities.id = metadata_entries.entity_id
         """
 
     sql_query += """
@@ -509,9 +508,9 @@ def full_text_search(
         params["end"] = str(end)
 
     # Add tags filter
-    if tags:
-        tags_str = ", ".join(f"'{tag}'" for tag in tags)
-        sql_query += f" AND tags.name IN ({tags_str})"
+    if app_names:
+        app_names_str = ", ".join(f"'{app_name}'" for app_name in app_names)
+        sql_query += f" AND metadata_entries.key = 'active_app' AND metadata_entries.value IN ({app_names_str})"
 
     sql_query += (
         " ORDER BY rank LIMIT :limit"
@@ -618,18 +617,18 @@ def hybrid_search(
     library_ids: Optional[List[int]] = None,
     start: Optional[int] = None,
     end: Optional[int] = None,
-    tags: Optional[List[str]] = None,
+    app_names: Optional[List[str]] = None,
     use_facet: bool = False,
 ) -> Tuple[List[Entity], dict]:
     start_time = time.time()
 
     fts_start = time.time()
-    fts_results = full_text_search(query, db, limit, library_ids, start, end, tags)
+    fts_results = full_text_search(query, db, limit, library_ids, start, end, app_names)
     fts_end = time.time()
     logger.info(f"Full-text search took {fts_end - fts_start:.4f} seconds get {len(fts_results)} results")
 
     vec_start = time.time()
-    vec_results = vec_search(query, db, limit * 2, library_ids, start, end, tags)
+    vec_results = vec_search(query, db, limit * 2, library_ids, start, end, app_names)
     vec_end = time.time()
     logger.info(f"Vector search took {vec_end - vec_start:.4f} seconds get {len(vec_results)} results")
 
@@ -651,7 +650,7 @@ def hybrid_search(
     entity_dict = {entity.id: entity for entity in entities}
     result = [entity_dict[id] for id in sorted_ids]
 
-    stats = get_search_stats(query, db, library_ids, start, end, tags) if use_facet else {}
+    stats = get_search_stats(query, db, library_ids, start, end, app_names) if use_facet else {}
 
     end_time = time.time()
     total_time = end_time - start_time
@@ -950,16 +949,16 @@ def get_search_stats(
     library_ids: Optional[List[int]] = None,
     start: Optional[int] = None,
     end: Optional[int] = None,
-    tags: Optional[List[str]] = None,
+    app_names: Optional[List[str]] = None,
 ) -> dict:
     """Get statistics for search results including date range and tag counts."""
 
     MIN_SAMPLE_SIZE = 2048
     MAX_SAMPLE_SIZE = 4096
 
-    fts_results = full_text_search(query, db, limit=MAX_SAMPLE_SIZE, library_ids=library_ids, start=start, end=end, tags=tags)
+    fts_results = full_text_search(query, db, limit=MAX_SAMPLE_SIZE, library_ids=library_ids, start=start, end=end, app_names=app_names)
     vec_limit = max(min(len(fts_results) * 2, MAX_SAMPLE_SIZE), MIN_SAMPLE_SIZE)
-    vec_results = vec_search(query, db, limit=vec_limit, library_ids=library_ids, start=start, end=end, app_names=tags)
+    vec_results = vec_search(query, db, limit=vec_limit, library_ids=library_ids, start=start, end=end, app_names=app_names)
 
     logging.info(f"fts_results: {len(fts_results)} vec_results: {len(vec_results)}")
     
@@ -968,7 +967,7 @@ def get_search_stats(
     if not entity_ids:
         return {
             "date_range": {"earliest": None, "latest": None},
-            "tag_counts": {}
+            "app_name_counts": {}
         }
 
     entity_ids_str = ','.join(str(id) for id in entity_ids)
@@ -982,13 +981,12 @@ def get_search_stats(
         """)
     ).first()
 
-    tag_counts = db.execute(
+    app_name_counts = db.execute(
         text(f"""
-            SELECT t.name, COUNT(*) as count
-            FROM tags t
-            JOIN entity_tags et ON t.id = et.tag_id
-            WHERE et.entity_id IN ({entity_ids_str})
-            GROUP BY t.name
+            SELECT me.value, COUNT(*) as count
+            FROM metadata_entries me
+            WHERE me.entity_id IN ({entity_ids_str}) and me.key = 'active_app'
+            GROUP BY me.value
             ORDER BY count DESC
         """)
     ).all()
@@ -998,7 +996,7 @@ def get_search_stats(
             "earliest": date_range.earliest,
             "latest": date_range.latest
         },
-        "tag_counts": {tag: count for tag, count in tag_counts}
+        "app_name_counts": {app_name: count for app_name, count in app_name_counts}
     }
 
 
