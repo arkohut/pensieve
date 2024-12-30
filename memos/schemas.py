@@ -260,6 +260,7 @@ class RequestParams(BaseModel):
     first_q: str
     per_page: int
     q: str
+    app_names: List[str] | None = None
 
 
 class SearchResult(BaseModel):

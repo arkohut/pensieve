@@ -48,7 +48,7 @@
 		search_time_ms: number;
 	}
 
-	let selectedTags: Record<string, boolean> = {};
+	let selectedAppNames: Record<string, boolean> = {};
 	let selectedDates: Record<string, boolean> = {};
 
 	const debounceDelay = 500;
@@ -86,7 +86,7 @@
 		start: number,
 		end: number,
 		selectedLibraries: number[],
-		selectedTags: string[],
+		selectedAppNames: string[],
 		selectedDates: string[],
 		updateFacets: boolean = false
 	) {
@@ -103,8 +103,8 @@
 			if (selectedLibraries.length > 0) {
 				url += `&library_ids=${selectedLibraries.join(',')}`;
 			}
-			if (selectedTags.length > 0) {
-				url += `&tags=${selectedTags.join(',')}`;
+			if (selectedAppNames.length > 0) {
+				url += `&app_names=${selectedAppNames.join(',')}`;
 			}
 			if (selectedDates.length > 0) {
 				url += `&created_dates=${selectedDates.join(',')}`;
@@ -116,9 +116,9 @@
 			const result = await response.json();
 			if (updateFacets) {
 				facetCounts = result.facet_counts;
-				selectedTags = Object.fromEntries(
+				selectedAppNames = Object.fromEntries(
 					result.facet_counts
-						.find((f) => f.field_name === 'tags')
+						.find((f) => f.field_name === 'app_names')
 						?.counts.map((t) => [t.value, false]) || []
 				);
 				selectedDates = Object.fromEntries(
@@ -150,7 +150,7 @@
 					startTimestamp,
 					endTimestamp,
 					selectedLibraries,
-					Object.keys(selectedTags).filter((tag) => selectedTags[tag]),
+					Object.keys(selectedAppNames).filter((app_name) => selectedAppNames[app_name]),
 					Object.keys(selectedDates).filter((date) => selectedDates[date]),
 					true
 				);
@@ -178,7 +178,7 @@
 			startTimestamp,
 			endTimestamp,
 			selectedLibraries,
-			Object.keys(selectedTags).filter((tag) => selectedTags[tag]),
+			Object.keys(selectedAppNames).filter((app_name) => selectedAppNames[app_name]),
 			Object.keys(selectedDates).filter((date) => selectedDates[date]),
 			false
 		);
@@ -190,8 +190,8 @@
 		}
 	}
 
-	function handleTagChange(tag: string, checked: boolean) {
-		selectedTags[tag] = checked;
+	function handleAppNameChange(app_name: string, checked: boolean) {
+		selectedAppNames[app_name] = checked;
 		handleFiltersChange();
 	}
 
@@ -253,7 +253,7 @@
 				startTimestamp,
 				endTimestamp,
 				selectedLibraries,
-				Object.keys(selectedTags).filter((tag) => selectedTags[tag]),
+				Object.keys(selectedAppNames).filter((tag) => selectedAppNames[tag]),
 				Object.keys(selectedDates).filter((date) => selectedDates[date]),
 				true
 			);
@@ -324,11 +324,11 @@
 			{#if searchResult && searchResult.facet_counts && searchResult.facet_counts.length > 0}
 				<div class="xl:w-1/7 lg:w-1/6 md:w-1/5 sm:w-full pr-4">
 					{#each searchResult.facet_counts as facet}
-						{#if facet.field_name === 'tags' || facet.field_name === 'created_date'}
+						{#if facet.field_name === 'app_names' || facet.field_name === 'created_date'}
 							<FacetFilter
 								{facet}
-								selectedItems={facet.field_name === 'tags' ? selectedTags : selectedDates}
-								onItemChange={facet.field_name === 'tags' ? handleTagChange : handleDateChange}
+								selectedItems={facet.field_name === 'app_names' ? selectedAppNames : selectedDates}
+								onItemChange={facet.field_name === 'app_names' ? handleAppNameChange : handleDateChange}
 							/>
 						{/if}
 					{/each}
