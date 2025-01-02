@@ -206,7 +206,7 @@ def load_extension(dbapi_conn, connection_record):
 
 
 def recreate_fts_and_vec_tables():
-    """Recreate the entities_fts and entities_vec tables without repopulating data."""
+    """Recreate the entities_fts and entities_vec_v2 tables without repopulating data."""
     db_path = get_database_path()
     engine = create_engine(f"sqlite:///{db_path}")
     event.listen(engine, "connect", load_extension)
@@ -217,7 +217,7 @@ def recreate_fts_and_vec_tables():
         try:
             # Drop existing tables
             session.execute(text("DROP TABLE IF EXISTS entities_fts"))
-            session.execute(text("DROP TABLE IF EXISTS entities_vec"))
+            session.execute(text("DROP TABLE IF EXISTS entities_vec_v2"))
 
             # Recreate entities_fts table
             session.execute(
@@ -231,11 +231,11 @@ def recreate_fts_and_vec_tables():
                 )
             )
 
-            # Recreate entities_vec table
+            # Recreate entities_vec_v2 table
             session.execute(
                 text(
                     f"""
-                CREATE VIRTUAL TABLE entities_vec USING vec0(
+                CREATE VIRTUAL TABLE entities_vec_v2 USING vec0(
                     embedding float[{settings.embedding.num_dim}] distance_metric=cosine,
                     file_type_group text,
                     created_at_timestamp integer,
@@ -247,7 +247,7 @@ def recreate_fts_and_vec_tables():
             )
 
             session.commit()
-            print("Successfully recreated entities_fts and entities_vec tables.")
+            print("Successfully recreated entities_fts and entities_vec_v2 tables.")
             return True
         except Exception as e:
             session.rollback()
@@ -290,7 +290,7 @@ def init_database():
             conn.execute(
                 text(
                     f"""
-                CREATE VIRTUAL TABLE IF NOT EXISTS entities_vec USING vec0(
+                CREATE VIRTUAL TABLE IF NOT EXISTS entities_vec_v2 USING vec0(
                     embedding float[{settings.embedding.num_dim}] distance_metric=cosine,
                     file_type_group text,
                     created_at_timestamp integer,

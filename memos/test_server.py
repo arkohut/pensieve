@@ -127,8 +127,12 @@ def client():
         conn.execute(
             text(
                 f"""
-                CREATE VIRTUAL TABLE IF NOT EXISTS entities_vec USING vec0(
-                    embedding float[{settings.embedding.num_dim}]
+                CREATE VIRTUAL TABLE IF NOT EXISTS entities_vec_v2 USING vec0(
+                    embedding float[{settings.embedding.num_dim}] distance_metric=cosine,
+                    file_type_group text,
+                    created_at_timestamp integer,
+                    app_name text,
+                    library_id integer
                 )
                 """
             )
@@ -143,7 +147,7 @@ def client():
     Base.metadata.drop_all(bind=engine)
     with engine.connect() as conn:
         conn.execute(text("DROP TABLE IF EXISTS entities_fts"))
-        conn.execute(text("DROP TABLE IF EXISTS entities_vec"))
+        conn.execute(text("DROP TABLE IF EXISTS entities_vec_v2"))
         conn.commit()
 
 
@@ -444,10 +448,10 @@ def test_remove_entity(client):
         assert fts_count == 1, "Entity was not automatically added to entities_fts table"
 
         vec_count = conn.execute(
-            text("SELECT COUNT(*) FROM entities_vec WHERE rowid = :id"),
+            text("SELECT COUNT(*) FROM entities_vec_v2 WHERE rowid = :id"),
             {"id": entity_id}
         ).scalar()
-        assert vec_count == 1, "Entity was not automatically added to entities_vec table"
+        assert vec_count == 1, "Entity was not automatically added to entities_vec_v2 table"
 
     # Delete the entity
     delete_response = client.delete(f"/libraries/{library_id}/entities/{entity_id}")
@@ -458,7 +462,7 @@ def test_remove_entity(client):
     assert get_response.status_code == 404
     assert get_response.json() == {"detail": "Entity not found"}
 
-    # Verify the entity is deleted from entities_fts and entities_vec tables
+    # Verify the entity is deleted from entities_fts and entities_vec_v2 tables
     with engine.connect() as conn:
         # Check entities_fts
         fts_count = conn.execute(
@@ -467,12 +471,12 @@ def test_remove_entity(client):
         ).scalar()
         assert fts_count == 0, "Entity was not deleted from entities_fts table"
 
-        # Check entities_vec
+        # Check entities_vec_v2
         vec_count = conn.execute(
-            text("SELECT COUNT(*) FROM entities_vec WHERE rowid = :id"),
+            text("SELECT COUNT(*) FROM entities_vec_v2 WHERE rowid = :id"),
             {"id": entity_id}
         ).scalar()
-        assert vec_count == 0, "Entity was not deleted from entities_vec table"
+        assert vec_count == 0, "Entity was not deleted from entities_vec_v2 table"
 
     # Test for entity not found in the specified library
     invalid_delete_response = client.delete(f"/libraries/{library_id}/entities/9999")
