@@ -43,7 +43,7 @@ dependencies = [
     "einops",
     "modelscope",
     "mss",
-    "sqlite_vec",
+    "sqlite_vec>=0.1.6",
     "watchdog",
     "alembic",
 ]

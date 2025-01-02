@@ -195,7 +195,7 @@ def remove_entity(entity_id: int, db: Session):
         # Delete the entity from FTS and vec tables first
         db.execute(text("DELETE FROM entities_fts WHERE id = :id"), {"id": entity_id})
         db.execute(
-            text("DELETE FROM entities_vec WHERE rowid = :id"), {"id": entity_id}
+            text("DELETE FROM entities_vec_v2 WHERE rowid = :id"), {"id": entity_id}
         )
 
         # Then delete the entity itself
@@ -552,7 +552,7 @@ def vec_search(
 
     sql_query = f"""
     SELECT rowid
-    FROM entities_vec
+    FROM entities_vec_v2
     WHERE embedding MATCH :embedding
       AND file_type_group = 'image'
       AND K = :limit
@@ -812,7 +812,7 @@ def update_entity_index(entity_id: int, db: Session):
 
         if embeddings and embeddings[0]:
             db.execute(
-                text("DELETE FROM entities_vec WHERE rowid = :id"), {"id": entity.id}
+                text("DELETE FROM entities_vec_v2 WHERE rowid = :id"), {"id": entity.id}
             )
             
             # Extract app_name from metadata_entries
@@ -829,7 +829,7 @@ def update_entity_index(entity_id: int, db: Session):
             db.execute(
                 text(
                     """
-                    INSERT INTO entities_vec (
+                    INSERT INTO entities_vec_v2 (
                         rowid, embedding, app_name, file_type_group, created_at_timestamp,
                         library_id
                     )
@@ -901,7 +901,7 @@ def batch_update_entity_indices(entity_ids: List[int], db: Session):
             for entity, embedding in zip(entities, embeddings):
                 if embedding:
                     db.execute(
-                        text("DELETE FROM entities_vec WHERE rowid = :id"),
+                        text("DELETE FROM entities_vec_v2 WHERE rowid = :id"),
                         {"id": entity.id},
                     )
                     
@@ -919,7 +919,7 @@ def batch_update_entity_indices(entity_ids: List[int], db: Session):
                     db.execute(
                         text(
                             """
-                            INSERT INTO entities_vec (
+                            INSERT INTO entities_vec_v2 (
                                 rowid, embedding, app_name, file_type_group, created_at_timestamp,
                                 library_id
                             )
