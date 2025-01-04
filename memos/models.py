@@ -23,7 +23,12 @@ import sys
 from pathlib import Path
 
 
-class Base(DeclarativeBase):
+class RawBase(DeclarativeBase):
+    pass
+
+
+class Base(RawBase):
+    __abstract__ = True
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), nullable=False
@@ -63,6 +68,25 @@ class FolderModel(Base):
     last_modified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=False)
 
 
+class EntityPluginStatusModel(RawBase):
+    __tablename__ = "entity_plugin_status"
+
+    entity_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("entities.id", ondelete="CASCADE"), primary_key=True
+    )
+    plugin_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("plugins.id", ondelete="CASCADE"), primary_key=True
+    )
+    processed_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index("idx_entity_plugin_entity_id", "entity_id"),
+        Index("idx_entity_plugin_plugin_id", "plugin_id"),
+    )
+
+
 class EntityModel(Base):
     __tablename__ = "entities"
     filepath: Mapped[str] = mapped_column(String, nullable=False)
@@ -93,6 +117,9 @@ class EntityModel(Base):
         lazy="joined",
         cascade="all, delete",
         overlaps="entities",
+    )
+    plugin_status: Mapped[List["EntityPluginStatusModel"]] = relationship(
+        "EntityPluginStatusModel", cascade="all, delete-orphan"
     )
 
     # 添加索引
@@ -264,14 +291,14 @@ def init_database():
         max_overflow=20,
         pool_timeout=60,
         pool_recycle=3600,
-        connect_args={"timeout": 60}
+        connect_args={"timeout": 60},
     )
 
     # Use a single event listener for both extension loading and WAL mode setting
     event.listen(engine, "connect", load_extension)
 
     try:
-        Base.metadata.create_all(engine)
+        RawBase.metadata.create_all(engine)
         print(f"Database initialized successfully at {db_path}")
 
         # Create FTS and Vec tables

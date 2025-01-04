@@ -180,45 +180,59 @@ def new_folders(
 
 
 async def trigger_webhooks(
-    library: Library, entity: Entity, request: Request, plugins: List[int] = None
+    library: Library, 
+    entity: Entity, 
+    request: Request, 
+    plugins: List[int] = None,
+    db: Session = Depends(get_db),
 ):
+    """Trigger webhooks for plugins that haven't processed the entity yet"""
     async with httpx.AsyncClient() as client:
         tasks = []
+        pending_plugins = crud.get_pending_plugins(entity.id, library.id, db)
+        
         for plugin in library.plugins:
-            if plugins is None or plugin.id in plugins:
-                if plugin.webhook_url:
-                    location = str(
-                        request.url_for("get_entity_by_id", entity_id=entity.id)
-                    )
-                    webhook_url = plugin.webhook_url
-                    if webhook_url.startswith("/"):
-                        webhook_url = str(request.base_url)[:-1] + webhook_url
-                        logging.debug("webhook_url: %s", webhook_url)
-                    task = client.post(
-                        webhook_url,
-                        json=entity.model_dump(mode="json"),
-                        headers={"Location": location},
-                        timeout=60.0,
-                    )
-                    tasks.append(task)
+            # Skip if specific plugins are requested and this one isn't in the list
+            if plugins is not None and plugin.id not in plugins:
+                continue
+                
+            # Skip if entity has already been processed by this plugin
+            if plugin.id not in pending_plugins:
+                continue
 
-        responses = await asyncio.gather(*tasks, return_exceptions=True)
+            if plugin.webhook_url:
+                logging.info("Triggering plugin %d for entity %d", plugin.id, entity.id)
+                location = str(request.url_for("get_entity_by_id", entity_id=entity.id))
+                webhook_url = plugin.webhook_url
+                if webhook_url.startswith("/"):
+                    webhook_url = str(request.base_url)[:-1] + webhook_url
+                task = client.post(
+                    webhook_url,
+                    json=entity.model_dump(mode="json"),
+                    headers={"Location": location},
+                    timeout=60.0,
+                )
+                tasks.append((plugin.id, task))
 
-        for plugin, response in zip(library.plugins, responses):
-            if plugins is None or plugin.id in plugins:
-                if isinstance(response, Exception):
+        for plugin_id, task in tasks:
+            try:
+                response = await task
+                if response.status_code < 400:
+                    # Record successful plugin processing
+                    crud.record_plugin_processed(entity.id, plugin_id, db)
+                else:
                     logging.error(
-                        "Error triggering webhook for plugin %d: %s",
-                        plugin.id,
-                        response,
-                    )
-                elif response.status_code >= 400:
-                    logging.error(
-                        "Error triggering webhook for plugin %d: %d - %s",
-                        plugin.id,
+                        "Error processing entity with plugin %d: %d - %s",
+                        plugin_id,
                         response.status_code,
                         response.text,
                     )
+            except Exception as e:
+                logging.error(
+                    "Error processing entity with plugin %d: %s",
+                    plugin_id,
+                    str(e),
+                )
 
 
 @app.post("/libraries/{library_id}/entities", response_model=Entity, tags=["entity"])
@@ -239,7 +253,7 @@ async def new_entity(
 
     entity = crud.create_entity(library_id, new_entity, db)
     if trigger_webhooks_flag:
-        await trigger_webhooks(library, entity, request, plugins)
+        await trigger_webhooks(library, entity, request, plugins, db)
 
     if update_index:
         crud.update_entity_index(entity.id, db)
@@ -360,7 +374,7 @@ async def update_entity(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Library not found"
             )
-        await trigger_webhooks(library, entity, request, plugins)
+        await trigger_webhooks(library, entity, request, plugins, db)
 
     if update_index:
         crud.update_entity_index(entity.id, db)
