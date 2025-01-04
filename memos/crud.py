@@ -33,7 +33,7 @@ from sqlite_vec import serialize_float32
 import time
 import json
 from sqlalchemy.sql import text, bindparam
-
+from datetime import datetime
 logger = logging.getLogger(__name__)
 
 
@@ -864,80 +864,87 @@ def batch_update_entity_indices(entity_ids: List[int], db: Session):
         if missing_ids:
             raise ValueError(f"Entities not found: {missing_ids}")
 
-        # Prepare FTS data for all entities
-        fts_data = []
-        vec_metadata_list = []
+        # Check existing vector indices and their timestamps
+        existing_vec_indices = db.execute(
+            text("""
+                SELECT rowid, created_at_timestamp
+                FROM entities_vec_v2
+                WHERE rowid IN :entity_ids
+            """).bindparams(bindparam('entity_ids', expanding=True)),
+            {"entity_ids": tuple(entity_ids)}
+        ).fetchall()
+
+        # Create lookup of vector index timestamps
+        vec_timestamps = {row[0]: row[1] for row in existing_vec_indices}
+        
+        # Separate entities that need indexing
+        needs_index = []
 
         for entity in entities:
-            # Prepare FTS data
+            entity_last_scan = int(entity.last_scan_at.timestamp())
+            vec_timestamp = vec_timestamps.get(entity.id, 0)
+            
+            # Entity needs full indexing if:
+            # 1. Its last_scan_at is more recent than the vector index timestamp
+            if entity_last_scan > vec_timestamp:
+                needs_index.append(entity)
+
+        logger.info(f"Entities needing full indexing: {len(needs_index)}/{len(entity_ids)}")
+
+        # Handle entities needing full indexing
+        if needs_index:
+            vec_metadata_list = [prepare_vec_data(entity) for entity in needs_index]
+            embeddings = get_embeddings(vec_metadata_list)
+            
+            for entity, embedding in zip(needs_index, embeddings):
+                db.execute(text("DELETE FROM entities_vec_v2 WHERE rowid = :id"), {"id": entity.id})
+                
+                app_name = next(
+                    (entry.value for entry in entity.metadata_entries if entry.key == "active_app"),
+                    "unknown"
+                )
+                file_type_group = entity.file_type_group or "unknown"
+                created_at_timestamp = int(datetime.now().timestamp())
+
+                db.execute(
+                    text("""
+                        INSERT INTO entities_vec_v2 (
+                            rowid, embedding, app_name, file_type_group, 
+                            created_at_timestamp, library_id
+                        )
+                        VALUES (
+                            :id, :embedding, :app_name, :file_type_group,
+                            :created_at_timestamp, :library_id
+                        )
+                    """),
+                    {
+                        "id": entity.id,
+                        "embedding": serialize_float32(embedding),
+                        "app_name": app_name,
+                        "file_type_group": file_type_group,
+                        "created_at_timestamp": created_at_timestamp,
+                        "library_id": entity.library_id,
+                    },
+                )
+
+        # Update FTS index for all entities
+        for entity in entities:
             tags, fts_metadata = prepare_fts_data(entity)
-            fts_data.append((entity.id, entity.filepath, tags, fts_metadata))
-
-            # Prepare vector data
-            vec_metadata = prepare_vec_data(entity)
-            vec_metadata_list.append(vec_metadata)
-
-        # Batch update FTS table
-        for entity_id, filepath, tags, metadata in fts_data:
             db.execute(
-                text(
-                    """
+                text("""
                     INSERT OR REPLACE INTO entities_fts(id, filepath, tags, metadata)
                     VALUES(:id, :filepath, :tags, :metadata)
-                    """
-                ),
+                """),
                 {
-                    "id": entity_id,
-                    "filepath": filepath,
+                    "id": entity.id,
+                    "filepath": entity.filepath,
                     "tags": tags,
-                    "metadata": metadata,
+                    "metadata": fts_metadata,
                 },
             )
 
-        # Batch get embeddings
-        embeddings = get_embeddings(vec_metadata_list)
-
-        # Batch update vector table
-        if embeddings:
-            for entity, embedding in zip(entities, embeddings):
-                if embedding:
-                    db.execute(
-                        text("DELETE FROM entities_vec_v2 WHERE rowid = :id"),
-                        {"id": entity.id},
-                    )
-                    
-                    # Extract app_name from metadata_entries
-                    app_name = next(
-                        (entry.value for entry in entity.metadata_entries if entry.key == "active_app"),
-                        "unknown"  # Default to 'unknown' if not found
-                    )
-                    # Get file_type_group from entity
-                    file_type_group = entity.file_type_group or "unknown"
-
-                    # Convert file_created_at to integer timestamp
-                    created_at_timestamp = int(entity.file_created_at.timestamp())
-
-                    db.execute(
-                        text(
-                            """
-                            INSERT INTO entities_vec_v2 (
-                                rowid, embedding, app_name, file_type_group, created_at_timestamp,
-                                library_id
-                            )
-                            VALUES (:id, :embedding, :app_name, :file_type_group, :created_at_timestamp, :library_id)
-                            """
-                        ),
-                        {
-                            "id": entity.id,
-                            "embedding": serialize_float32(embedding),
-                            "app_name": app_name,
-                            "file_type_group": file_type_group,
-                            "created_at_timestamp": created_at_timestamp,
-                            "library_id": entity.library_id,
-                        },
-                    )
-
         db.commit()
+        
     except Exception as e:
         logger.error(f"Error batch updating indexes: {e}")
         db.rollback()

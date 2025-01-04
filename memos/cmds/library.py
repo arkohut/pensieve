@@ -472,7 +472,10 @@ def reindex(
 
                     offset += limit
 
-    print(f"Reindexing completed for library {library_id}")
+    if folders:
+        print(f"Reindexing completed for library {library_id} with folders: {folders}")
+    else:
+        print(f"Reindexing completed for library {library_id}")
 
 
 def has_entity_changes(new_entity: dict, existing_entity: dict) -> bool:
