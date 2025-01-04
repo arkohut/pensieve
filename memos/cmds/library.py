@@ -169,12 +169,12 @@ def is_temp_file(filename):
     )
 
 
-async def loop_files(library_id, folder, folder_path, force, plugins, batch_size):
+async def loop_files(library, folder, folder_path, force, plugins, batch_size):
     """
     Process files in the folder
 
     Args:
-        library_id: Library ID
+        library: Library object
         folder: Folder information
         folder_path: Folder path
         force: Whether to force update
@@ -197,7 +197,7 @@ async def loop_files(library_id, folder, folder_path, force, plugins, batch_size
         # 2. Process file batches
         added_file_count, updated_file_count = await process_file_batches(
             client,
-            library_id,
+            library,
             folder,
             candidate_files,
             force,
@@ -207,7 +207,7 @@ async def loop_files(library_id, folder, folder_path, force, plugins, batch_size
 
         # 3. Check for deleted files
         deleted_file_count = await check_deleted_files(
-            client, library_id, folder, folder_path, scanned_files
+            client, library.get('id'), folder, folder_path, scanned_files
         )
 
         return added_file_count, updated_file_count, deleted_file_count
@@ -272,7 +272,7 @@ def scan(
             continue
 
         added_file_count, updated_file_count, deleted_file_count = asyncio.run(
-            loop_files(library_id, folder, folder_path, force, plugins, batch_size)
+            loop_files(library, folder, folder_path, force, plugins, batch_size)
         )
         total_files_added += added_file_count
         total_files_updated += updated_file_count
@@ -1062,7 +1062,7 @@ def format_error_message(
 
 async def process_file_batches(
     client: httpx.AsyncClient,
-    library_id: int,
+    library: dict,
     folder: dict,
     candidate_files: list,
     force: bool,
@@ -1074,7 +1074,7 @@ async def process_file_batches(
 
     Args:
         client: httpx async client
-        library_id: Library ID
+        library: Library object
         folder: Folder information
         candidate_files: List of candidate files
         force: Whether to force update
@@ -1087,6 +1087,10 @@ async def process_file_batches(
     added_file_count = 0
     updated_file_count = 0
     batching = 50
+
+    library_id = library.get('id')
+    library_plugins = [plugin.get('id') for plugin in library.get('plugins', [])]
+    target_plugins = library_plugins if plugins is None else [plugin for plugin in library_plugins if plugin in plugins]
 
     with tqdm(total=len(candidate_files), desc="Processing files", leave=True) as pbar:
         for i in range(0, len(candidate_files), batching):
@@ -1121,7 +1125,14 @@ async def process_file_batches(
 
                 existing_entity = existing_entities_dict.get(str(file_path))
                 if existing_entity:
-                    if not force:
+                    if force:
+                        # Directly update without merging if force is true
+                        tasks.append(
+                            update_entity(
+                                client, semaphore, plugins, new_entity, existing_entity
+                            )
+                        )
+                    else:
                         # Merge existing metadata with new metadata
                         new_metadata_keys = {
                             entry["key"]
@@ -1143,17 +1154,21 @@ async def process_file_batches(
                         merged_tags = new_tags.union(existing_tags)
                         new_entity["tags"] = list(merged_tags)
 
-                    # Only update if there are actual changes or force flag is set
-                    if force or has_entity_changes(new_entity, existing_entity):
-                        tasks.append(
-                            update_entity(
-                                client, semaphore, plugins, new_entity, existing_entity
+                        # Check if the entity needs to be processed by any plugins
+                        processed_plugins = {plugin_status.get("plugin_id") for plugin_status in existing_entity.get("plugin_status", [])}
+                        has_unprocessed_plugins = any(plugin_id not in processed_plugins for plugin_id in target_plugins)
+
+                        # Only update if there are actual changes or the entity needs to be processed by any plugins
+                        if has_unprocessed_plugins or has_entity_changes(new_entity, existing_entity):
+                            tasks.append(
+                                update_entity(
+                                    client, semaphore, plugins, new_entity, existing_entity
+                                )
                             )
-                        )
-                    else:
-                        pbar.write(f"Skipping file: {file_path}")
-                        pbar.update(1)
-                        continue
+                        else:
+                            pbar.write(f"Skipping file: {file_path} #{existing_entity.get('id')}")
+                            pbar.update(1)
+                            continue
                 else:
                     tasks.append(
                         add_entity(client, semaphore, library_id, plugins, new_entity)

@@ -24,6 +24,7 @@ from .models import (
     TagModel,
     EntityMetadataModel,
     EntityTagModel,
+    EntityPluginStatusModel,
 )
 from collections import defaultdict
 from .embedding import get_embeddings
@@ -998,5 +999,46 @@ def get_search_stats(
         },
         "app_name_counts": {app_name: count for app_name, count in app_name_counts}
     }
+
+
+def record_plugin_processed(
+    entity_id: int, 
+    plugin_id: int, 
+    db: Session
+):
+    """Record that an entity has been processed by a plugin"""
+    status = EntityPluginStatusModel(
+        entity_id=entity_id,
+        plugin_id=plugin_id
+    )
+    db.merge(status)  # merge will insert or update
+    db.commit()
+
+
+def get_pending_plugins(
+    entity_id: int,
+    library_id: int,
+    db: Session
+) -> List[int]:
+    """Get list of plugin IDs that haven't processed this entity yet"""
+    # Get all plugins associated with the library
+    library_plugins = (
+        db.query(PluginModel.id)
+        .join(LibraryPluginModel)
+        .filter(LibraryPluginModel.library_id == library_id)
+        .all()
+    )
+    library_plugin_ids = [p.id for p in library_plugins]
+    
+    # Get plugins that have already processed this entity
+    processed_plugins = (
+        db.query(EntityPluginStatusModel.plugin_id)
+        .filter(EntityPluginStatusModel.entity_id == entity_id)
+        .all()
+    )
+    processed_plugin_ids = [p.plugin_id for p in processed_plugins]
+    
+    # Return plugins that need to process this entity
+    return list(set(library_plugin_ids) - set(processed_plugin_ids))
 
 
