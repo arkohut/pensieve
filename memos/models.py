@@ -266,6 +266,7 @@ def recreate_fts_and_vec_tables():
                     embedding float[{settings.embedding.num_dim}] distance_metric=cosine,
                     file_type_group text,
                     created_at_timestamp integer,
+                    file_created_at_timestamp integer,
                     app_name text,
                     library_id integer
                 )
