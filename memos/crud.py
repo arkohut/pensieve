@@ -557,7 +557,7 @@ def vec_search(
     WHERE embedding MATCH :embedding
       AND file_type_group = 'image'
       AND K = :limit
-      {"AND created_at_timestamp BETWEEN :start AND :end" if start is not None and end is not None else ""}
+      {"AND file_created_at_timestamp BETWEEN :start AND :end" if start is not None and end is not None else ""}
       {"AND library_id IN :library_ids" if library_ids else ""}
       {"AND app_name IN :app_names" if app_names else ""}
     ORDER BY distance ASC
@@ -831,10 +831,10 @@ def update_entity_index(entity_id: int, db: Session):
                 text(
                     """
                     INSERT INTO entities_vec_v2 (
-                        rowid, embedding, app_name, file_type_group, created_at_timestamp,
+                        rowid, embedding, app_name, file_type_group, created_at_timestamp, file_created_at_timestamp,
                         library_id
                     )
-                    VALUES (:id, :embedding, :app_name, :file_type_group, :created_at_timestamp, :library_id)
+                    VALUES (:id, :embedding, :app_name, :file_type_group, :created_at_timestamp, :file_created_at_timestamp, :library_id)
                     """
                 ),
                 {
@@ -843,6 +843,7 @@ def update_entity_index(entity_id: int, db: Session):
                     "app_name": app_name,
                     "file_type_group": file_type_group,
                     "created_at_timestamp": created_at_timestamp,
+                    "file_created_at_timestamp": int(entity.file_created_at.timestamp()),
                     "library_id": entity.library_id,
                 },
             )
@@ -910,11 +911,11 @@ def batch_update_entity_indices(entity_ids: List[int], db: Session):
                     text("""
                         INSERT INTO entities_vec_v2 (
                             rowid, embedding, app_name, file_type_group, 
-                            created_at_timestamp, library_id
+                            created_at_timestamp, file_created_at_timestamp, library_id
                         )
                         VALUES (
                             :id, :embedding, :app_name, :file_type_group,
-                            :created_at_timestamp, :library_id
+                            :created_at_timestamp, :file_created_at_timestamp, :library_id
                         )
                     """),
                     {
@@ -923,6 +924,7 @@ def batch_update_entity_indices(entity_ids: List[int], db: Session):
                         "app_name": app_name,
                         "file_type_group": file_type_group,
                         "created_at_timestamp": created_at_timestamp,
+                        "file_created_at_timestamp": int(entity.file_created_at.timestamp()),
                         "library_id": entity.library_id,
                     },
                 )
