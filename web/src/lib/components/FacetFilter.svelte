@@ -6,7 +6,7 @@
   export let selectedItems: Record<string, boolean>;
   export let onItemChange: (item: string, checked: boolean) => void;
 
-  $: title = facet.field_name === 'tags' ? 'Tags' : 'Created Date';
+  $: title = facet.field_name === 'app_names' ? 'App Names' : 'Created Date';
 </script>
 
 <div class="mb-4">

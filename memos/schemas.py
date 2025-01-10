@@ -156,6 +156,11 @@ class EntityMetadata(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class EntityPluginStatus(BaseModel):
+    plugin_id: int
+    processed_at: datetime
+
+
 class Entity(BaseModel):
     id: int
     filepath: str
@@ -170,6 +175,7 @@ class Entity(BaseModel):
     library_id: int
     tags: List[Tag] = []
     metadata_entries: List[EntityMetadata] = []
+    plugin_status: List[EntityPluginStatus] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -260,6 +266,7 @@ class RequestParams(BaseModel):
     first_q: str
     per_page: int
     q: str
+    app_names: List[str] | None = None
 
 
 class SearchResult(BaseModel):
