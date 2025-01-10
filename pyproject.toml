@@ -43,8 +43,9 @@ dependencies = [
     "einops",
     "modelscope",
     "mss",
-    "sqlite_vec",
+    "sqlite_vec>=0.1.6",
     "watchdog",
+    "alembic",
 ]
 
 [project.urls]
@@ -59,4 +60,8 @@ include = ["memos*"]
 [tool.setuptools.package-data]
 "*" = ["static/**/*"]
 "memos.plugins.ocr" = ["*.yaml", "models/*.onnx"]
-"memos" = ["simple_tokenizer/**/*", "default_config.yaml"]
+"memos" = [
+    "simple_tokenizer/**/*",
+    "default_config.yaml",
+    "migrations/**/*",
+]

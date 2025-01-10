@@ -23,7 +23,12 @@ import sys
 from pathlib import Path
 
 
-class Base(DeclarativeBase):
+class RawBase(DeclarativeBase):
+    pass
+
+
+class Base(RawBase):
+    __abstract__ = True
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), nullable=False
@@ -63,6 +68,25 @@ class FolderModel(Base):
     last_modified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=False)
 
 
+class EntityPluginStatusModel(RawBase):
+    __tablename__ = "entity_plugin_status"
+
+    entity_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("entities.id", ondelete="CASCADE"), primary_key=True
+    )
+    plugin_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("plugins.id", ondelete="CASCADE"), primary_key=True
+    )
+    processed_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index("idx_entity_plugin_entity_id", "entity_id"),
+        Index("idx_entity_plugin_plugin_id", "plugin_id"),
+    )
+
+
 class EntityModel(Base):
     __tablename__ = "entities"
     filepath: Mapped[str] = mapped_column(String, nullable=False)
@@ -93,6 +117,9 @@ class EntityModel(Base):
         lazy="joined",
         cascade="all, delete",
         overlaps="entities",
+    )
+    plugin_status: Mapped[List["EntityPluginStatusModel"]] = relationship(
+        "EntityPluginStatusModel", cascade="all, delete-orphan"
     )
 
     # 添加索引
@@ -206,7 +233,7 @@ def load_extension(dbapi_conn, connection_record):
 
 
 def recreate_fts_and_vec_tables():
-    """Recreate the entities_fts and entities_vec tables without repopulating data."""
+    """Recreate the entities_fts and entities_vec_v2 tables without repopulating data."""
     db_path = get_database_path()
     engine = create_engine(f"sqlite:///{db_path}")
     event.listen(engine, "connect", load_extension)
@@ -217,7 +244,7 @@ def recreate_fts_and_vec_tables():
         try:
             # Drop existing tables
             session.execute(text("DROP TABLE IF EXISTS entities_fts"))
-            session.execute(text("DROP TABLE IF EXISTS entities_vec"))
+            session.execute(text("DROP TABLE IF EXISTS entities_vec_v2"))
 
             # Recreate entities_fts table
             session.execute(
@@ -231,22 +258,29 @@ def recreate_fts_and_vec_tables():
                 )
             )
 
-            # Recreate entities_vec table
+            # Recreate entities_vec_v2 table
             session.execute(
                 text(
                     f"""
-                CREATE VIRTUAL TABLE entities_vec USING vec0(
-                    embedding float[{settings.embedding.num_dim}]
+                CREATE VIRTUAL TABLE entities_vec_v2 USING vec0(
+                    embedding float[{settings.embedding.num_dim}] distance_metric=cosine,
+                    file_type_group text,
+                    created_at_timestamp integer,
+                    file_created_at_timestamp integer,
+                    app_name text,
+                    library_id integer
                 )
             """
                 )
             )
 
             session.commit()
-            print("Successfully recreated entities_fts and entities_vec tables.")
+            print("Successfully recreated entities_fts and entities_vec_v2 tables.")
+            return True
         except Exception as e:
             session.rollback()
             print(f"Error recreating tables: {e}")
+            return False
 
 
 def init_database():
@@ -258,14 +292,14 @@ def init_database():
         max_overflow=20,
         pool_timeout=60,
         pool_recycle=3600,
-        connect_args={"timeout": 60}
+        connect_args={"timeout": 60},
     )
 
     # Use a single event listener for both extension loading and WAL mode setting
     event.listen(engine, "connect", load_extension)
 
     try:
-        Base.metadata.create_all(engine)
+        RawBase.metadata.create_all(engine)
         print(f"Database initialized successfully at {db_path}")
 
         # Create FTS and Vec tables
@@ -284,8 +318,12 @@ def init_database():
             conn.execute(
                 text(
                     f"""
-                CREATE VIRTUAL TABLE IF NOT EXISTS entities_vec USING vec0(
-                    embedding float[{settings.embedding.num_dim}]
+                CREATE VIRTUAL TABLE IF NOT EXISTS entities_vec_v2 USING vec0(
+                    embedding float[{settings.embedding.num_dim}] distance_metric=cosine,
+                    file_type_group text,
+                    created_at_timestamp integer,
+                    app_name text,
+                    library_id integer
                 )
             """
                 )

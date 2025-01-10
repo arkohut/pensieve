@@ -24,6 +24,7 @@ from .models import (
     TagModel,
     EntityMetadataModel,
     EntityTagModel,
+    EntityPluginStatusModel,
 )
 from collections import defaultdict
 from .embedding import get_embeddings
@@ -31,7 +32,8 @@ import logging
 from sqlite_vec import serialize_float32
 import time
 import json
-
+from sqlalchemy.sql import text, bindparam
+from datetime import datetime
 logger = logging.getLogger(__name__)
 
 
@@ -194,7 +196,7 @@ def remove_entity(entity_id: int, db: Session):
         # Delete the entity from FTS and vec tables first
         db.execute(text("DELETE FROM entities_fts WHERE id = :id"), {"id": entity_id})
         db.execute(
-            text("DELETE FROM entities_vec WHERE rowid = :id"), {"id": entity_id}
+            text("DELETE FROM entities_vec_v2 WHERE rowid = :id"), {"id": entity_id}
         )
 
         # Then delete the entity itself
@@ -473,12 +475,24 @@ def full_text_search(
     library_ids: Optional[List[int]] = None,
     start: Optional[int] = None,
     end: Optional[int] = None,
+    app_names: Optional[List[str]] = None,
 ) -> List[int]:
+    start_time = time.time()
+
     and_query = and_words(query)
 
     sql_query = """
-    SELECT entities.id FROM entities
+    SELECT DISTINCT entities.id FROM entities
     JOIN entities_fts ON entities.id = entities_fts.id
+    """
+
+    # Add JOIN for tags if needed
+    if app_names:
+        sql_query += """
+        JOIN metadata_entries ON entities.id = metadata_entries.entity_id
+        """
+
+    sql_query += """
     WHERE entities_fts MATCH jieba_query(:query)
     AND entities.file_type_group = 'image'
     """
@@ -488,16 +502,26 @@ def full_text_search(
     if library_ids:
         library_ids_str = ", ".join(f"'{id}'" for id in library_ids)
         sql_query += f" AND entities.library_id IN ({library_ids_str})"
+    
     if start is not None and end is not None:
         sql_query += " AND strftime('%s', entities.file_created_at, 'utc') BETWEEN :start AND :end"
         params["start"] = str(start)
         params["end"] = str(end)
 
+    # Add tags filter
+    if app_names:
+        app_names_str = ", ".join(f"'{app_name}'" for app_name in app_names)
+        sql_query += f" AND metadata_entries.key = 'active_app' AND metadata_entries.value IN ({app_names_str})"
+
     sql_query += (
-        " ORDER BY bm25(entities_fts), entities.file_created_at DESC LIMIT :limit"
+        " ORDER BY rank LIMIT :limit"
     )
 
     result = db.execute(text(sql_query), params).fetchall()
+
+    end_time = time.time()
+    execution_time = end_time - start_time
+    logger.info(f"Full-text search execution time: {execution_time:.4f} seconds")
 
     logger.info(f"Full-text search sql: {sql_query}")
     logger.info(f"Full-text search params: {params}")
@@ -513,37 +537,62 @@ def vec_search(
     library_ids: Optional[List[int]] = None,
     start: Optional[int] = None,
     end: Optional[int] = None,
+    app_names: Optional[List[str]] = None,
 ) -> List[int]:
-    query_embedding = get_embeddings([query])
+    start_time = time.time()
+
+    query_embedding = get_embeddings([f"{query}"])
+    end_time = time.time()
+    logger.info(f"Get embedding took {end_time - start_time:.4f} seconds")
+
+    start_time = time.time()
     if not query_embedding:
         return []
 
     query_embedding = query_embedding[0]
 
-    sql_query = """
-    SELECT entities.id FROM entities
-    JOIN entities_vec ON entities.id = entities_vec.rowid
-    WHERE entities_vec.embedding MATCH :embedding
-    AND entities.file_type_group = 'image'
+    sql_query = f"""
+    SELECT rowid
+    FROM entities_vec_v2
+    WHERE embedding MATCH :embedding
+      AND file_type_group = 'image'
+      AND K = :limit
+      {"AND file_created_at_timestamp BETWEEN :start AND :end" if start is not None and end is not None else ""}
+      {"AND library_id IN :library_ids" if library_ids else ""}
+      {"AND app_name IN :app_names" if app_names else ""}
+    ORDER BY distance ASC
     """
 
-    params = {"embedding": serialize_float32(query_embedding), "limit": limit}
-
-    if library_ids:
-        library_ids_str = ", ".join(f"'{id}'" for id in library_ids)
-        sql_query += f" AND entities.library_id IN ({library_ids_str})"
+    params = {
+        "embedding": serialize_float32(query_embedding),
+        "limit": limit,
+    }
 
     if start is not None and end is not None:
-        sql_query += " AND strftime('%s', entities.file_created_at, 'utc') BETWEEN :start AND :end"
-        params["start"] = str(start)
-        params["end"] = str(end)
+        params["start"] = int(start)
+        params["end"] = int(end)
+    if library_ids:
+        params["library_ids"] = tuple(library_ids)
+    if app_names:
+        params["app_names"] = tuple(app_names)
 
-    sql_query += " AND K = :limit ORDER BY distance, entities.file_created_at DESC"
+    # Bind parameters with expanding=True for app_names and library_ids
+    sql = text(sql_query)
+    if app_names:
+        sql = sql.bindparams(bindparam("app_names", expanding=True))
+    if library_ids:
+        sql = sql.bindparams(bindparam("library_ids", expanding=True))
 
-    result = db.execute(text(sql_query), params).fetchall()
+    result = db.execute(sql, params).fetchall()
 
     ids = [row[0] for row in result]
+    logger.info(f"SQL: {sql_query}")
+    logger.info(f"Params: {params}")
     logger.info(f"Vector search results: {ids}")
+
+    end_time = time.time()
+    logger.info(f"Vector search execution time: {end_time - start_time:.4f} seconds")
+
     return ids
 
 
@@ -569,23 +618,25 @@ def hybrid_search(
     library_ids: Optional[List[int]] = None,
     start: Optional[int] = None,
     end: Optional[int] = None,
-) -> List[Entity]:
+    app_names: Optional[List[str]] = None,
+    use_facet: bool = False,
+) -> Tuple[List[Entity], dict]:
     start_time = time.time()
 
     fts_start = time.time()
-    fts_results = full_text_search(query, db, limit, library_ids, start, end)
+    fts_results = full_text_search(query, db, limit, library_ids, start, end, app_names)
     fts_end = time.time()
-    logger.info(f"Full-text search took {fts_end - fts_start:.4f} seconds")
+    logger.info(f"Full-text search took {fts_end - fts_start:.4f} seconds get {len(fts_results)} results")
 
     vec_start = time.time()
-    vec_results = vec_search(query, db, limit, library_ids, start, end)
+    vec_results = vec_search(query, db, limit * 2, library_ids, start, end, app_names)
     vec_end = time.time()
-    logger.info(f"Vector search took {vec_end - vec_start:.4f} seconds")
+    logger.info(f"Vector search took {vec_end - vec_start:.4f} seconds get {len(vec_results)} results")
 
     fusion_start = time.time()
     combined_results = reciprocal_rank_fusion(fts_results, vec_results)
     fusion_end = time.time()
-    logger.info(f"Reciprocal rank fusion took {fusion_end - fusion_start:.4f} seconds")
+    logger.info(f"Reciprocal rank fusion took {fusion_end - fusion_start:.4f} seconds get {len(combined_results)} results")
 
     sorted_ids = [id for id, _ in combined_results][:limit]
     logger.info(f"Hybrid search results (sorted IDs): {sorted_ids}")
@@ -594,20 +645,19 @@ def hybrid_search(
     entities = find_entities_by_ids(sorted_ids, db)
     entities_end = time.time()
     logger.info(
-        f"Finding entities by IDs took {entities_end - entities_start:.4f} seconds"
+        f"Finding entities by IDs took {entities_end - entities_start:.4f} seconds get {len(entities)} results"
     )
 
-    # Create a dictionary mapping entity IDs to entities
     entity_dict = {entity.id: entity for entity in entities}
+    result = [entity_dict[id] for id in sorted_ids]
 
-    # Return entities in the order of sorted_ids
-    result = [entity_dict[id] for id in sorted_ids if id in entity_dict]
+    stats = get_search_stats(query, db, library_ids, start, end, app_names) if use_facet else {}
 
     end_time = time.time()
     total_time = end_time - start_time
     logger.info(f"Total hybrid search time: {total_time:.4f} seconds")
 
-    return result
+    return result, stats
 
 
 def list_entities(
@@ -763,18 +813,38 @@ def update_entity_index(entity_id: int, db: Session):
 
         if embeddings and embeddings[0]:
             db.execute(
-                text("DELETE FROM entities_vec WHERE rowid = :id"), {"id": entity.id}
+                text("DELETE FROM entities_vec_v2 WHERE rowid = :id"), {"id": entity.id}
             )
+            
+            # Extract app_name from metadata_entries
+            app_name = next(
+                (entry.value for entry in entity.metadata_entries if entry.key == "active_app"),
+                "unknown"  # Default to 'unknown' if not found
+            )
+            # Get file_type_group from entity
+            file_type_group = entity.file_type_group or "unknown"
+
+            # Convert file_created_at to integer timestamp
+            created_at_timestamp = int(entity.file_created_at.timestamp())
+
             db.execute(
                 text(
                     """
-                    INSERT INTO entities_vec (rowid, embedding)
-                    VALUES (:id, :embedding)
+                    INSERT INTO entities_vec_v2 (
+                        rowid, embedding, app_name, file_type_group, created_at_timestamp, file_created_at_timestamp,
+                        library_id
+                    )
+                    VALUES (:id, :embedding, :app_name, :file_type_group, :created_at_timestamp, :file_created_at_timestamp, :library_id)
                     """
                 ),
                 {
                     "id": entity.id,
                     "embedding": serialize_float32(embeddings[0]),
+                    "app_name": app_name,
+                    "file_type_group": file_type_group,
+                    "created_at_timestamp": created_at_timestamp,
+                    "file_created_at_timestamp": int(entity.file_created_at.timestamp()),
+                    "library_id": entity.library_id,
                 },
             )
 
@@ -788,72 +858,196 @@ def update_entity_index(entity_id: int, db: Session):
 def batch_update_entity_indices(entity_ids: List[int], db: Session):
     """Batch update both FTS and vector indexes for multiple entities"""
     try:
-        # 获取实体
         entities = db.query(EntityModel).filter(EntityModel.id.in_(entity_ids)).all()
         found_ids = {entity.id for entity in entities}
         
-        # 检查是否所有请求的实体都找到了
         missing_ids = set(entity_ids) - found_ids
         if missing_ids:
             raise ValueError(f"Entities not found: {missing_ids}")
 
-        # Prepare FTS data for all entities
-        fts_data = []
-        vec_metadata_list = []
+        # Check existing vector indices and their timestamps
+        existing_vec_indices = db.execute(
+            text("""
+                SELECT rowid, created_at_timestamp
+                FROM entities_vec_v2
+                WHERE rowid IN :entity_ids
+            """).bindparams(bindparam('entity_ids', expanding=True)),
+            {"entity_ids": tuple(entity_ids)}
+        ).fetchall()
+
+        # Create lookup of vector index timestamps
+        vec_timestamps = {row[0]: row[1] for row in existing_vec_indices}
+        
+        # Separate entities that need indexing
+        needs_index = []
 
         for entity in entities:
-            # Prepare FTS data
+            entity_last_scan = int(entity.last_scan_at.timestamp())
+            vec_timestamp = vec_timestamps.get(entity.id, 0)
+            
+            # Entity needs full indexing if:
+            # 1. Its last_scan_at is more recent than the vector index timestamp
+            if entity_last_scan > vec_timestamp:
+                needs_index.append(entity)
+
+        logger.info(f"Entities needing full indexing: {len(needs_index)}/{len(entity_ids)}")
+
+        # Handle entities needing full indexing
+        if needs_index:
+            vec_metadata_list = [prepare_vec_data(entity) for entity in needs_index]
+            embeddings = get_embeddings(vec_metadata_list)
+            
+            for entity, embedding in zip(needs_index, embeddings):
+                db.execute(text("DELETE FROM entities_vec_v2 WHERE rowid = :id"), {"id": entity.id})
+                
+                app_name = next(
+                    (entry.value for entry in entity.metadata_entries if entry.key == "active_app"),
+                    "unknown"
+                )
+                file_type_group = entity.file_type_group or "unknown"
+                created_at_timestamp = int(datetime.now().timestamp())
+
+                db.execute(
+                    text("""
+                        INSERT INTO entities_vec_v2 (
+                            rowid, embedding, app_name, file_type_group, 
+                            created_at_timestamp, file_created_at_timestamp, library_id
+                        )
+                        VALUES (
+                            :id, :embedding, :app_name, :file_type_group,
+                            :created_at_timestamp, :file_created_at_timestamp, :library_id
+                        )
+                    """),
+                    {
+                        "id": entity.id,
+                        "embedding": serialize_float32(embedding),
+                        "app_name": app_name,
+                        "file_type_group": file_type_group,
+                        "created_at_timestamp": created_at_timestamp,
+                        "file_created_at_timestamp": int(entity.file_created_at.timestamp()),
+                        "library_id": entity.library_id,
+                    },
+                )
+
+        # Update FTS index for all entities
+        for entity in entities:
             tags, fts_metadata = prepare_fts_data(entity)
-            fts_data.append((entity.id, entity.filepath, tags, fts_metadata))
-
-            # Prepare vector data
-            vec_metadata = prepare_vec_data(entity)
-            vec_metadata_list.append(vec_metadata)
-
-        # Batch update FTS table
-        for entity_id, filepath, tags, metadata in fts_data:
             db.execute(
-                text(
-                    """
+                text("""
                     INSERT OR REPLACE INTO entities_fts(id, filepath, tags, metadata)
                     VALUES(:id, :filepath, :tags, :metadata)
-                    """
-                ),
+                """),
                 {
-                    "id": entity_id,
-                    "filepath": filepath,
+                    "id": entity.id,
+                    "filepath": entity.filepath,
                     "tags": tags,
-                    "metadata": metadata,
+                    "metadata": fts_metadata,
                 },
             )
 
-        # Batch get embeddings
-        embeddings = get_embeddings(vec_metadata_list)
-
-        # Batch update vector table
-        if embeddings:
-            for entity, embedding in zip(entities, embeddings):
-                if embedding:  # Check if embedding is not empty
-                    db.execute(
-                        text("DELETE FROM entities_vec WHERE rowid = :id"),
-                        {"id": entity.id},
-                    )
-                    db.execute(
-                        text(
-                            """
-                            INSERT INTO entities_vec (rowid, embedding)
-                            VALUES (:id, :embedding)
-                            """
-                        ),
-                        {
-                            "id": entity.id,
-                            "embedding": serialize_float32(embedding),
-                        },
-                    )
-
         db.commit()
+        
     except Exception as e:
         logger.error(f"Error batch updating indexes: {e}")
         db.rollback()
         raise
+
+
+def get_search_stats(
+    query: str,
+    db: Session,
+    library_ids: Optional[List[int]] = None,
+    start: Optional[int] = None,
+    end: Optional[int] = None,
+    app_names: Optional[List[str]] = None,
+) -> dict:
+    """Get statistics for search results including date range and tag counts."""
+
+    MIN_SAMPLE_SIZE = 2048
+    MAX_SAMPLE_SIZE = 4096
+
+    fts_results = full_text_search(query, db, limit=MAX_SAMPLE_SIZE, library_ids=library_ids, start=start, end=end, app_names=app_names)
+    vec_limit = max(min(len(fts_results) * 2, MAX_SAMPLE_SIZE), MIN_SAMPLE_SIZE)
+    vec_results = vec_search(query, db, limit=vec_limit, library_ids=library_ids, start=start, end=end, app_names=app_names)
+
+    logging.info(f"fts_results: {len(fts_results)} vec_results: {len(vec_results)}")
+    
+    entity_ids = set(fts_results + vec_results)
+    
+    if not entity_ids:
+        return {
+            "date_range": {"earliest": None, "latest": None},
+            "app_name_counts": {}
+        }
+
+    entity_ids_str = ','.join(str(id) for id in entity_ids)
+    date_range = db.execute(
+        text(f"""
+            SELECT 
+                MIN(file_created_at) as earliest,
+                MAX(file_created_at) as latest
+            FROM entities
+            WHERE id IN ({entity_ids_str})
+        """)
+    ).first()
+
+    app_name_counts = db.execute(
+        text(f"""
+            SELECT me.value, COUNT(*) as count
+            FROM metadata_entries me
+            WHERE me.entity_id IN ({entity_ids_str}) and me.key = 'active_app'
+            GROUP BY me.value
+            ORDER BY count DESC
+        """)
+    ).all()
+
+    return {
+        "date_range": {
+            "earliest": date_range.earliest,
+            "latest": date_range.latest
+        },
+        "app_name_counts": {app_name: count for app_name, count in app_name_counts}
+    }
+
+
+def record_plugin_processed(
+    entity_id: int, 
+    plugin_id: int, 
+    db: Session
+):
+    """Record that an entity has been processed by a plugin"""
+    status = EntityPluginStatusModel(
+        entity_id=entity_id,
+        plugin_id=plugin_id
+    )
+    db.merge(status)  # merge will insert or update
+    db.commit()
+
+
+def get_pending_plugins(
+    entity_id: int,
+    library_id: int,
+    db: Session
+) -> List[int]:
+    """Get list of plugin IDs that haven't processed this entity yet"""
+    # Get all plugins associated with the library
+    library_plugins = (
+        db.query(PluginModel.id)
+        .join(LibraryPluginModel)
+        .filter(LibraryPluginModel.library_id == library_id)
+        .all()
+    )
+    library_plugin_ids = [p.id for p in library_plugins]
+    
+    # Get plugins that have already processed this entity
+    processed_plugins = (
+        db.query(EntityPluginStatusModel.plugin_id)
+        .filter(EntityPluginStatusModel.entity_id == entity_id)
+        .all()
+    )
+    processed_plugin_ids = [p.plugin_id for p in processed_plugins]
+    
+    # Return plugins that need to process this entity
+    return list(set(library_plugin_ids) - set(processed_plugin_ids))
+
 
