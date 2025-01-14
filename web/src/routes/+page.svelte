@@ -51,7 +51,7 @@
 	let selectedAppNames: Record<string, boolean> = {};
 	let selectedDates: Record<string, boolean> = {};
 
-	const debounceDelay = 500;
+	const debounceDelay = 800;
 	const apiEndpoint =
 		typeof PUBLIC_API_ENDPOINT !== 'undefined' ? PUBLIC_API_ENDPOINT : window.location.origin;
 
@@ -59,6 +59,8 @@
 
 	let isScrolled = false;
 	let headerElement: HTMLElement;
+
+	let currentAbortController: AbortController | null = null;
 
 	// 添加一个计算属性来生成输入框的类名
 	$: inputClasses = `w-full p-2 text-lg border-gray-500 transition-all duration-300 ${
@@ -122,6 +124,13 @@
 		selectedDates: string[],
 		updateFacets: boolean = false
 	) {
+		// Cancel any ongoing request
+		if (currentAbortController) {
+			currentAbortController.abort();
+		}
+		
+		// Create new abort controller for this request
+		currentAbortController = new AbortController();
 		isLoading = true;
 
 		try {
@@ -133,7 +142,9 @@
 				selectedAppNames,
 				selectedDates
 			});
-			const response = await fetch(url);
+			const response = await fetch(url, {
+				signal: currentAbortController.signal
+			});
 			if (!response.ok) {
 				throw new Error('Network response was not ok');
 			}
@@ -158,15 +169,28 @@
 			};
 			console.log(searchResult);
 		} catch (error) {
-			console.error('Search error:', error);
+			// Only log error if it's not an abort error
+			if (error instanceof Error && error.name !== 'AbortError') {
+				console.error('Search error:', error);
+			}
 		} finally {
 			isLoading = false;
+			if (currentAbortController) {
+				currentAbortController = null;
+			}
 		}
 	}
 
 	function handleSearchStringChange() {
 		console.log('handleSearchStringChange', searchString);
 		clearTimeout(debounceTimer);
+		
+		// Immediately abort any ongoing request
+		if (currentAbortController) {
+			currentAbortController.abort();
+			currentAbortController = null;
+		}
+
 		if (searchString.trim()) {
 			debounceTimer = setTimeout(() => {
 				searchItems(
@@ -394,7 +418,7 @@
 								<figure class="px-4 pt-4 mb-4 relative">
 									<img
 										class="w-full h-48 object-cover"
-										src={`${apiEndpoint}/files/${hit.document.filepath}`}
+										src={`${apiEndpoint}/files/${hit.document.filepath.replace(/^\/+/, '')}`}
 										alt=""
 									/>
 									{#if getAppName(hit.document) !== "unknown"}
@@ -444,8 +468,8 @@
 		id={searchResult.hits[selectedImage].document.id}
 		library_id={searchResult.hits[selectedImage].document.library_id}
 		folder_id={searchResult.hits[selectedImage].document.folder_id}
-		image={`${apiEndpoint}/files/${searchResult.hits[selectedImage].document.filepath}`}
-		video={`${apiEndpoint}/files/video/${searchResult.hits[selectedImage].document.filepath}`}
+		image={`${apiEndpoint}/files/${searchResult.hits[selectedImage].document.filepath.replace(/^\/+/, '')}`}
+		video={`${apiEndpoint}/files/video/${searchResult.hits[selectedImage].document.filepath.replace(/^\/+/, '')}`}
 		created_at={searchResult.hits[selectedImage].document.file_created_at * 1000}
 		filepath={searchResult.hits[selectedImage].document.filepath}
 		title={getEntityTitle(searchResult.hits[selectedImage].document)}
