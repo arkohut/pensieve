@@ -15,12 +15,7 @@
 	import { Github } from 'lucide-svelte';
 
 	let searchString = '';
-	/**
-	 * @type {any[]}
-	 */
-	let searchResults = [];
 	let isLoading = false;
-	let debounceTimer: ReturnType<typeof setTimeout>;
 	let showModal = false;
 	let selectedImage = 0;
 
@@ -51,7 +46,6 @@
 	let selectedAppNames: Record<string, boolean> = {};
 	let selectedDates: Record<string, boolean> = {};
 
-	const debounceDelay = 800;
 	const apiEndpoint =
 		typeof PUBLIC_API_ENDPOINT !== 'undefined' ? PUBLIC_API_ENDPOINT : window.location.origin;
 
@@ -62,8 +56,10 @@
 
 	let currentAbortController: AbortController | null = null;
 
+	let debounceTimer: ReturnType<typeof setTimeout>;
+
 	// 添加一个计算属性来生成输入框的类名
-	$: inputClasses = `w-full p-2 text-lg border-gray-500 transition-all duration-300 ${
+	$: inputClasses = `w-full p-2 transition-all duration-300 ${
 		!isScrolled ? 'mt-4' : ''
 	}`;
 
@@ -181,18 +177,15 @@
 		}
 	}
 
-	function handleSearchStringChange() {
-		console.log('handleSearchStringChange', searchString);
-		clearTimeout(debounceTimer);
-		
-		// Immediately abort any ongoing request
-		if (currentAbortController) {
-			currentAbortController.abort();
-			currentAbortController = null;
+	function handleFiltersChange() {
+		// Clear any existing timer
+		if (debounceTimer) {
+			clearTimeout(debounceTimer);
 		}
 
-		if (searchString.trim()) {
-			debounceTimer = setTimeout(() => {
+		// Set a new timer
+		debounceTimer = setTimeout(() => {
+			if (!isLoading) {
 				searchItems(
 					searchString,
 					startTimestamp,
@@ -200,43 +193,14 @@
 					selectedLibraries,
 					Object.keys(selectedAppNames).filter((app_name) => selectedAppNames[app_name]),
 					Object.keys(selectedDates).filter((date) => selectedDates[date]),
-					true
+					false
 				);
-			}, debounceDelay);
-		} else {
-			searchResults = [];
-			searchResult = null;
-			facetCounts = null;
-		}
+			}
+		}, 300);
 	}
 
-	$: {
-		if (searchString.trim()) {
-			handleSearchStringChange();
-		} else {
-			searchResults = [];
-			searchResult = null;
-			facetCounts = null;
-		}
-	}
-
-	function handleFiltersChange() {
-		searchItems(
-			searchString,
-			startTimestamp,
-			endTimestamp,
-			selectedLibraries,
-			Object.keys(selectedAppNames).filter((app_name) => selectedAppNames[app_name]),
-			Object.keys(selectedDates).filter((date) => selectedDates[date]),
-			false
-		);
-	}
-
-	$: {
-		if (startTimestamp != null || endTimestamp != null || selectedLibraries.length > 0) {
-			handleFiltersChange();
-		}
-	}
+	$: [startTimestamp, endTimestamp], handleFiltersChange();
+	$: selectedLibraries, handleFiltersChange();
 
 	function handleAppNameChange(app_name: string, checked: boolean) {
 		selectedAppNames[app_name] = checked;
@@ -294,7 +258,7 @@
 	};
 
 	function handleEnterPress(event: KeyboardEvent) {
-		if (event.key === 'Enter') {
+		if (event.key === 'Enter' && !isLoading) {
 			event.preventDefault();
 			searchItems(
 				searchString,
@@ -345,14 +309,16 @@
 			 class:flex-row={isScrolled}
 		>
 			<Logo size={isScrolled ? 32 : 128} withBorder={!isScrolled} hasGap={!isScrolled} class_="transition-transform duration-300 ease-in-out mr-4" />
-			<Input
-				type="text"
-				class={inputClasses}
-				bind:value={searchString}
-				placeholder={$_('searchPlaceholder')}
-				on:keydown={handleEnterPress}
-				autofocus
-			/>
+			<div class="flex {inputClasses}">
+				<Input
+					type="text"
+					class="w-full text-lg border-gray-500"
+					bind:value={searchString}
+					placeholder={$_('searchPlaceholder')}
+					on:keydown={handleEnterPress}
+					autofocus
+				/>
+			</div>
 			<div class="mx-auto max-w-screen-lg">
 				<div class="flex space-x-2" class:mt-4={!isScrolled} class:ml-4={isScrolled}>
 					<LibraryFilter bind:selectedLibraryIds={selectedLibraries} />
@@ -433,7 +399,7 @@
 							</div>
 						{/each}
 					</div>
-				{:else if searchString}
+				{:else if searchResult}
 					<p class="text-center">{$_('noResults')}</p>
 				{:else}
 					<p class="text-center"></p>
