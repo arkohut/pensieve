@@ -81,10 +81,42 @@
 		};
 	});
 
+	interface SearchParams {
+		query: string;
+		start: number | null;
+		end: number | null;
+		selectedLibraries: number[];
+		selectedAppNames: string[];
+		selectedDates: string[];
+	}
+
+	function buildSearchUrl(params: SearchParams): string {
+		const searchParams = new URLSearchParams();
+		searchParams.append('q', params.query);
+
+		if (params.start != null && params.start > 0) {
+			searchParams.append('start', Math.floor(params.start / 1000).toString());
+		}
+		if (params.end != null && params.end > 0) {
+			searchParams.append('end', Math.floor(params.end / 1000).toString());
+		}
+		if (params.selectedLibraries.length > 0) {
+			searchParams.append('library_ids', params.selectedLibraries.join(','));
+		}
+		if (params.selectedAppNames.length > 0) {
+			searchParams.append('app_names', params.selectedAppNames.join(','));
+		}
+		if (params.selectedDates.length > 0) {
+			searchParams.append('created_dates', params.selectedDates.join(','));
+		}
+
+		return `${apiEndpoint}/search?${searchParams.toString()}`;
+	}
+
 	async function searchItems(
 		query: string,
-		start: number,
-		end: number,
+		start: number | null,
+		end: number | null,
 		selectedLibraries: number[],
 		selectedAppNames: string[],
 		selectedDates: string[],
@@ -93,22 +125,14 @@
 		isLoading = true;
 
 		try {
-			let url = `${apiEndpoint}/search?q=${encodeURIComponent(query)}`;
-			if (start > 0) {
-				url += `&start=${Math.floor(start / 1000)}`;
-			}
-			if (end > 0) {
-				url += `&end=${Math.floor(end / 1000)}`;
-			}
-			if (selectedLibraries.length > 0) {
-				url += `&library_ids=${selectedLibraries.join(',')}`;
-			}
-			if (selectedAppNames.length > 0) {
-				url += `&app_names=${selectedAppNames.join(',')}`;
-			}
-			if (selectedDates.length > 0) {
-				url += `&created_dates=${selectedDates.join(',')}`;
-			}
+			const url = buildSearchUrl({
+				query,
+				start,
+				end,
+				selectedLibraries,
+				selectedAppNames,
+				selectedDates
+			});
 			const response = await fetch(url);
 			if (!response.ok) {
 				throw new Error('Network response was not ok');
