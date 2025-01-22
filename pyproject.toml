@@ -46,7 +46,8 @@ dependencies = [
     "sqlite_vec>=0.1.6",
     "watchdog",
     "alembic",
-    "logfire",
+    "logfire[sqlalchemy]",
+    "logfire[fastapi]",
 ]
 
 [project.urls]
