@@ -106,20 +106,26 @@ class EntityModel(Base):
         Integer, ForeignKey("folders.id"), nullable=False
     )
     folder: Mapped["FolderModel"] = relationship(
-        "FolderModel", back_populates="entities"
+        "FolderModel", 
+        back_populates="entities",
+        lazy="select"
     )
     metadata_entries: Mapped[List["EntityMetadataModel"]] = relationship(
-        "EntityMetadataModel", lazy="joined", cascade="all, delete-orphan"
+        "EntityMetadataModel", 
+        lazy="select",
+        cascade="all, delete-orphan"
     )
     tags: Mapped[List["TagModel"]] = relationship(
         "TagModel",
         secondary="entity_tags",
-        lazy="joined",
+        lazy="select",
         cascade="all, delete",
         overlaps="entities",
     )
     plugin_status: Mapped[List["EntityPluginStatusModel"]] = relationship(
-        "EntityPluginStatusModel", cascade="all, delete-orphan"
+        "EntityPluginStatusModel", 
+        cascade="all, delete-orphan",
+        lazy="select"
     )
 
     # 添加索引
@@ -129,12 +135,18 @@ class EntityModel(Base):
         Index("idx_file_type", "file_type"),
         Index("idx_library_id", "library_id"),
         Index("idx_folder_id", "folder_id"),
+        Index("idx_file_type_group", "file_type_group"),
+        Index("idx_file_created_at", "file_created_at"),
     )
 
     @classmethod
     def update_last_scan_at(cls, session: Session, entity: "EntityModel"):
         entity.last_scan_at = func.now()
         session.add(entity)
+
+    @property
+    def tag_names(self) -> List[str]:
+        return [tag.name for tag in self.tags]
 
 
 class TagModel(Base):
@@ -252,7 +264,8 @@ def recreate_fts_and_vec_tables():
                     """
                 CREATE VIRTUAL TABLE entities_fts USING fts5(
                     id, filepath, tags, metadata,
-                    tokenize = 'simple 0'
+                    tokenize = 'simple 0',
+                    prefix = '2 3 4'
                 )
             """
                 )
@@ -267,6 +280,7 @@ def recreate_fts_and_vec_tables():
                     file_type_group text,
                     created_at_timestamp integer,
                     file_created_at_timestamp integer,
+                    file_created_at_date text partition key,
                     app_name text,
                     library_id integer
                 )
@@ -309,7 +323,8 @@ def init_database():
                     """
                 CREATE VIRTUAL TABLE IF NOT EXISTS entities_fts USING fts5(
                     id, filepath, tags, metadata,
-                    tokenize = 'simple 0'
+                    tokenize = 'simple 0',
+                    prefix = '2 3 4'
                 )
             """
                 )
