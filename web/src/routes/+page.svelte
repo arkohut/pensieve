@@ -13,6 +13,7 @@
 	import LanguageSwitcher from '$lib/LanguageSwitcher.svelte';
 	import { _ } from 'svelte-i18n';
 	import { Github } from 'lucide-svelte';
+	import { Skeleton } from '$lib/components/ui/skeleton';
 
 	let searchString = '';
 	let isLoading = false;
@@ -260,6 +261,7 @@
 	function handleEnterPress(event: KeyboardEvent) {
 		if (event.key === 'Enter' && !isLoading) {
 			event.preventDefault();
+			selectedAppNames = {};
 			searchItems(
 				searchString,
 				startTimestamp,
@@ -352,7 +354,20 @@
 			<!-- 右侧面板 -->
 			<div class="{searchResult && searchResult.facet_counts && searchResult.facet_counts.length > 0 ? 'xl:w-6/7 lg:w-5/6 md:w-4/5' : 'w-full'}">
 				{#if isLoading}
-					<p class="text-center">{$_('loading')}</p>
+					<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+						{#each Array(8) as _}
+							<div class="bg-white rounded-lg overflow-hidden border border-gray-300">
+								<div class="px-4 pt-4">
+									<Skeleton class="h-4 w-3/4 mb-2" />
+									<Skeleton class="h-4 w-1/2" />
+									<Skeleton class="h-3 w-1/4 mt-2" />
+								</div>
+								<div class="px-4 pt-4 pb-4">
+									<Skeleton class="w-full h-48" />
+								</div>
+							</div>
+						{/each}
+					</div>
 				{:else if searchResult && searchResult.hits.length > 0}
 					{#if searchResult['search_time_ms'] > 0}
 						<p class="search-summary mb-4 text-center">
@@ -400,9 +415,13 @@
 						{/each}
 					</div>
 				{:else if searchResult}
-					<p class="text-center">{$_('noResults')}</p>
+					<div class="flex justify-center items-center min-h-[200px]">
+						<p>{$_('noResults')}</p>
+					</div>
 				{:else}
-					<p class="text-center"></p>
+					<div class="flex justify-center items-center min-h-[200px]">
+						<p></p>
+					</div>
 				{/if}
 			</div>
 		</div>

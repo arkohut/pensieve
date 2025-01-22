@@ -43,6 +43,7 @@ def upgrade() -> None:
                     file_type_group text,
                     created_at_timestamp integer,
                     file_created_at_timestamp integer,
+                    file_created_at_date text partition key,
                     app_name text,
                     library_id integer
                 )

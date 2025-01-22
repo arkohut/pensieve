@@ -46,6 +46,7 @@ dependencies = [
     "sqlite_vec>=0.1.6",
     "watchdog",
     "alembic",
+    "logfire",
 ]
 
 [project.urls]
