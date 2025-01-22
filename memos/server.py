@@ -2,6 +2,9 @@ import os
 import httpx
 import uvicorn
 import mimetypes
+
+import logfire
+
 from fastapi import FastAPI, HTTPException, Depends, status, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -63,6 +66,9 @@ mimetypes.add_type("application/javascript", ".js")
 
 app = FastAPI()
 
+logfire.configure(send_to_logfire='if-token-present')
+logfire.instrument_fastapi(app, excluded_urls=["/files"])
+
 engine = create_engine(
     f"sqlite:///{get_database_path()}",
     pool_size=10,
@@ -73,6 +79,8 @@ engine = create_engine(
 )
 event.listen(engine, "connect", load_extension)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+logfire.instrument_sqlalchemy(engine=engine)
 
 app.add_middleware(
     CORSMiddleware,
@@ -151,8 +159,9 @@ def list_libraries(db: Session = Depends(get_db)):
 def get_library_by_id(library_id: int, db: Session = Depends(get_db)):
     library = crud.get_library_by_id(library_id, db)
     if library is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Library not found"
+        return JSONResponse(
+            content={"detail": "Library not found"},
+            status_code=status.HTTP_404_NOT_FOUND
         )
     return library
 
@@ -251,12 +260,16 @@ async def new_entity(
             status_code=status.HTTP_404_NOT_FOUND, detail="Library not found"
         )
 
-    entity = crud.create_entity(library_id, new_entity, db)
+    with logfire.span("create new entity {filepath=}", filepath=new_entity.filepath):
+        entity = crud.create_entity(library_id, new_entity, db)
+
     if trigger_webhooks_flag:
-        await trigger_webhooks(library, entity, request, plugins, db)
+        with logfire.span("trigger webhooks {entity_id=}", entity_id=entity.id):
+            await trigger_webhooks(library, entity, request, plugins, db)
 
     if update_index:
-        crud.update_entity_index(entity.id, db)
+        with logfire.span("update entity index {entity_id=}", entity_id=entity.id):
+            crud.update_entity_index(entity.id, db)
 
     return entity
 
@@ -304,8 +317,9 @@ def get_entity_by_filepath(
 ):
     entity = crud.get_entity_by_filepath(filepath, db)
     if entity is None or entity.library_id != library_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found"
+        return JSONResponse(
+            content={"detail": "Entity not found"}, 
+            status_code=status.HTTP_404_NOT_FOUND
         )
     return entity
 
@@ -326,9 +340,10 @@ def get_entities_by_filepaths(
 def get_entity_by_id(entity_id: int, db: Session = Depends(get_db)):
     entity = crud.get_entity_by_id(entity_id, db)
     if entity is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found"
-        )
+            return JSONResponse(
+                content={"detail": "Entity not found"},
+                status_code=status.HTTP_404_NOT_FOUND
+            )
     return entity
 
 
@@ -342,8 +357,9 @@ def get_entity_by_id_in_library(
 ):
     entity = crud.get_entity_by_id(entity_id, db)
     if entity is None or entity.library_id != library_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found"
+        return JSONResponse(
+            content={"detail": "Entity not found"},
+            status_code=status.HTTP_404_NOT_FOUND
         )
     return entity
 
@@ -358,12 +374,13 @@ async def update_entity(
     plugins: Annotated[List[int] | None, Query()] = None,
     update_index: bool = False,
 ):
-    entity = crud.find_entity_by_id(entity_id, db)
-    if entity is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Entity not found",
-        )
+    with logfire.span("fetch entity {entity_id=}", entity_id=entity_id):
+        entity = crud.get_entity_by_id(entity_id, db)
+        if entity is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Entity not found",
+            )
 
     if updated_entity:
         entity = crud.update_entity(entity_id, updated_entity, db)
@@ -467,12 +484,13 @@ def patch_entity_metadata(
     update_metadata: UpdateEntityMetadataParam,
     db: Session = Depends(get_db),
 ):
-    entity = crud.get_entity_by_id(entity_id, db)
-    if entity is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Entity not found",
-        )
+    with logfire.span("fetch entity {entity_id=}", entity_id=entity_id):
+        entity = crud.get_entity_by_id(entity_id, db)
+        if entity is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Entity not found",
+            )
 
     # Use the CRUD function to update the metadata entries
     entity = crud.update_entity_metadata_entries(
@@ -646,7 +664,10 @@ async def get_file(file_path: str):
     if full_path.is_file():
         return FileResponse(full_path)
     else:
-        raise HTTPException(status_code=404, detail="File not found")
+        return JSONResponse(
+            content={"detail": "File not found"},
+            status_code=status.HTTP_404_NOT_FOUND
+        )
 
 
 @app.get("/search", response_model=SearchResult, tags=["search"])
