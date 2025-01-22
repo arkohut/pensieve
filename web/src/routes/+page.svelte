@@ -260,6 +260,7 @@
 	function handleEnterPress(event: KeyboardEvent) {
 		if (event.key === 'Enter' && !isLoading) {
 			event.preventDefault();
+			selectedAppNames = {};
 			searchItems(
 				searchString,
 				startTimestamp,
