@@ -301,22 +301,106 @@ class PostgreSQLInitializer(DatabaseInitializer):
     """PostgreSQL-specific database initializer."""
     def init_extensions(self):
         """Initialize PostgreSQL-specific extensions."""
-        # TODO: Initialize PostgreSQL extensions like pg_vector if needed
-        pass
+        with self.engine.connect() as conn:
+            # Create a custom text search configuration for Chinese and English
+            conn.execute(
+                text(
+                    """
+                    -- Create a custom text search configuration
+                    CREATE TEXT SEARCH CONFIGURATION IF NOT EXISTS chinese_english (COPY = simple);
+                    """
+                )
+            )
 
     def init_specific_features(self):
         """Initialize PostgreSQL-specific features."""
-        # TODO: Implement PostgreSQL-specific initialization
-        # This could include:
-        # - Setting up full-text search using tsvector
-        # - Setting up vector similarity search using pgvector
-        # - Creating necessary indexes and extensions
-        pass
+        with self.engine.connect() as conn:
+            # Create the tsvector column and index for full-text search
+            conn.execute(
+                text(
+                    """
+                    -- Create a table to store the full-text search data
+                    CREATE TABLE IF NOT EXISTS entities_fts (
+                        id INTEGER PRIMARY KEY,
+                        filepath TEXT,
+                        tags TEXT,
+                        metadata TEXT,
+                        search_vector tsvector GENERATED ALWAYS AS (
+                            setweight(to_tsvector('simple', coalesce(filepath, '')), 'A') ||
+                            setweight(to_tsvector('simple', coalesce(tags, '')), 'B') ||
+                            setweight(to_tsvector('simple', coalesce(metadata, '')), 'C')
+                        ) STORED,
+                        -- Add raw text columns for prefix/substring search
+                        search_text TEXT GENERATED ALWAYS AS (
+                            coalesce(filepath, '') || ' ' || 
+                            coalesce(tags, '') || ' ' || 
+                            coalesce(metadata, '')
+                        ) STORED
+                    );
+
+                    -- Create a GIN index for fast full-text search
+                    CREATE INDEX IF NOT EXISTS idx_entities_fts_search_vector 
+                    ON entities_fts USING gin(search_vector);
+
+                    -- Create trigram index for fuzzy matching on filepath and search_text
+                    CREATE EXTENSION IF NOT EXISTS pg_trgm;
+                    CREATE INDEX IF NOT EXISTS idx_entities_fts_filepath_trgm 
+                    ON entities_fts USING gin(filepath gin_trgm_ops);
+                    CREATE INDEX IF NOT EXISTS idx_entities_fts_search_text_trgm
+                    ON entities_fts USING gin(search_text gin_trgm_ops);
+                    """
+                )
+            )
 
     def recreate_index_tables(self) -> bool:
         """Recreate PostgreSQL-specific index tables."""
-        # TODO: Implement PostgreSQL-specific table recreation
-        # This could include:
-        # - Recreating full-text search tables/indexes
-        # - Recreating vector similarity search tables/indexes
-        return True 
+        Session = sessionmaker(bind=self.engine)
+        
+        with Session() as session:
+            try:
+                # Drop existing tables
+                session.execute(text("DROP TABLE IF EXISTS entities_fts CASCADE"))
+
+                # Recreate entities_fts table with tsvector support
+                session.execute(
+                    text(
+                        """
+                        CREATE TABLE entities_fts (
+                            id INTEGER PRIMARY KEY,
+                            filepath TEXT,
+                            tags TEXT,
+                            metadata TEXT,
+                            search_vector tsvector GENERATED ALWAYS AS (
+                                setweight(to_tsvector('simple', coalesce(filepath, '')), 'A') ||
+                                setweight(to_tsvector('simple', coalesce(tags, '')), 'B') ||
+                                setweight(to_tsvector('simple', coalesce(metadata, '')), 'C')
+                            ) STORED,
+                            -- Add raw text columns for prefix/substring search
+                            search_text TEXT GENERATED ALWAYS AS (
+                                coalesce(filepath, '') || ' ' || 
+                                coalesce(tags, '') || ' ' || 
+                                coalesce(metadata, '')
+                            ) STORED
+                        );
+
+                        -- Create a GIN index for fast full-text search
+                        CREATE INDEX idx_entities_fts_search_vector 
+                        ON entities_fts USING gin(search_vector);
+
+                        -- Create trigram index for fuzzy matching on filepath and search_text
+                        CREATE EXTENSION IF NOT EXISTS pg_trgm;
+                        CREATE INDEX idx_entities_fts_filepath_trgm 
+                        ON entities_fts USING gin(filepath gin_trgm_ops);
+                        CREATE INDEX idx_entities_fts_search_text_trgm
+                        ON entities_fts USING gin(search_text gin_trgm_ops);
+                        """
+                    )
+                )
+
+                session.commit()
+                print("Successfully recreated entities_fts table.")
+                return True
+            except Exception as e:
+                session.rollback()
+                print(f"Error recreating tables: {e}")
+                return False 
