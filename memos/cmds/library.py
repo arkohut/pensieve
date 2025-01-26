@@ -383,7 +383,7 @@ def reindex(
 ):
     print(f"Reindexing library {library_id}")
 
-    from memos.models import recreate_fts_and_vec_tables
+    from memos.databases.initializers import recreate_fts_and_vec_tables
 
     # Get the library
     response = httpx.get(f"{BASE_URL}/libraries/{library_id}")

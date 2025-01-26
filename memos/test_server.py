@@ -24,20 +24,23 @@ from memos.schemas import (
     UpdateEntityMetadataParam,
     FolderType,
 )
-from memos.models import Base, load_extension
+from memos.models import Base
+from memos.databases.initializers import SQLiteInitializer
 from memos.config import settings
 
 
-engine = create_engine(
+# Use SQLite for testing by default
+test_engine = create_engine(
     "sqlite:///:memory:",
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
 
-# 添加扩展加载事件监听器
-event.listen(engine, "connect", load_extension)
+# Initialize SQLite with the test engine
+test_initializer = SQLiteInitializer(test_engine, settings)
+test_initializer.init_extensions()
 
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
 
 def load_fixture(filename):
@@ -106,46 +109,18 @@ app.dependency_overrides[get_db] = override_get_db
 # Setup a fixture for the FastAPI test client
 @pytest.fixture
 def client():
-    # 创建所有基本表
-    Base.metadata.create_all(bind=engine)
+    # Create all base tables
+    Base.metadata.create_all(bind=test_engine)
 
-    # 创建 FTS 和 Vec 表
-    with engine.connect() as conn:
-        # 创建 FTS 表
-        conn.execute(
-            text(
-                """
-                CREATE VIRTUAL TABLE IF NOT EXISTS entities_fts USING fts5(
-                    id, filepath, tags, metadata,
-                    tokenize = 'simple 0'
-                )
-                """
-            )
-        )
-
-        # 创建 Vec 表
-        conn.execute(
-            text(
-                f"""
-                CREATE VIRTUAL TABLE IF NOT EXISTS entities_vec_v2 USING vec0(
-                    embedding float[{settings.embedding.num_dim}] distance_metric=cosine,
-                    file_type_group text,
-                    created_at_timestamp integer,
-                    app_name text,
-                    library_id integer
-                )
-                """
-            )
-        )
-
-        conn.commit()
+    # Create FTS and Vec tables for SQLite
+    test_initializer.init_specific_features()
 
     with TestClient(app) as client:
         yield client
 
-    # 清理数据库
-    Base.metadata.drop_all(bind=engine)
-    with engine.connect() as conn:
+    # Clean up database
+    Base.metadata.drop_all(bind=test_engine)
+    with test_engine.connect() as conn:
         conn.execute(text("DROP TABLE IF EXISTS entities_fts"))
         conn.execute(text("DROP TABLE IF EXISTS entities_vec_v2"))
         conn.commit()
@@ -440,7 +415,7 @@ def test_remove_entity(client):
     library_id, _, entity_id = setup_library_with_entity(client)
 
     # Verify the entity data was automatically inserted into fts and vec tables by event listeners
-    with engine.connect() as conn:
+    with test_engine.connect() as conn:
         fts_count = conn.execute(
             text("SELECT COUNT(*) FROM entities_fts WHERE id = :id"),
             {"id": entity_id}
@@ -463,7 +438,7 @@ def test_remove_entity(client):
     assert get_response.json() == {"detail": "Entity not found"}
 
     # Verify the entity is deleted from entities_fts and entities_vec_v2 tables
-    with engine.connect() as conn:
+    with test_engine.connect() as conn:
         # Check entities_fts
         fts_count = conn.execute(
             text("SELECT COUNT(*) FROM entities_fts WHERE id = :id"),

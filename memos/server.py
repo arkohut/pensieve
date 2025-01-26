@@ -11,11 +11,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
-from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from typing import List, Annotated
 from pathlib import Path
-import asyncio
 import json
 import cv2
 from PIL import Image
@@ -52,7 +50,7 @@ from .schemas import (
 )
 from .read_metadata import read_metadata
 from .logging_config import LOGGING_CONFIG
-from .models import load_extension
+from .databases.initializers import create_db_initializer
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -69,15 +67,9 @@ app = FastAPI()
 logfire.configure(send_to_logfire='if-token-present')
 logfire.instrument_fastapi(app, excluded_urls=["/files"])
 
-engine = create_engine(
-    f"sqlite:///{get_database_path()}",
-    pool_size=10,
-    max_overflow=20,
-    pool_timeout=60,
-    pool_recycle=3600,
-    connect_args={"timeout": 60},
-)
-event.listen(engine, "connect", load_extension)
+# Create database engine and initializer
+engine, initializer = create_db_initializer(settings)
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 logfire.instrument_sqlalchemy(engine=engine)
