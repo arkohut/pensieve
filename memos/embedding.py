@@ -3,6 +3,10 @@ import numpy as np
 from .config import settings
 import logging
 import httpx
+import logfire
+from functools import lru_cache
+import hashlib
+import json
 
 # Configure logger
 logging.basicConfig(level=logging.INFO)
@@ -58,7 +62,17 @@ def generate_embeddings(texts: List[str]) -> List[List[float]]:
     return embeddings.tolist()
 
 
-def get_embeddings(texts: List[str]) -> List[List[float]]:
+def _hash_texts(texts: List[str]) -> str:
+    """Generate a stable hash for a list of texts."""
+    texts_json = json.dumps(texts, sort_keys=True)
+    return hashlib.sha256(texts_json.encode()).hexdigest()
+
+
+@logfire.instrument
+@lru_cache(maxsize=100)  # Cache last 100 requests
+def get_embeddings_cached(texts_hash: str, texts_tuple: tuple) -> List[List[float]]:
+    """Internal cached function that works with immutable types."""
+    texts = list(texts_tuple)
     if settings.embedding.use_local:
         embeddings = generate_embeddings(texts)
     else:
@@ -69,6 +83,15 @@ def get_embeddings(texts: List[str]) -> List[List[float]]:
         [round(float(x), 5) for x in embedding]
         for embedding in embeddings
     ]
+
+
+@logfire.instrument
+def get_embeddings(texts: List[str]) -> List[List[float]]:
+    """Get embeddings with caching support."""
+    # Convert texts to immutable type and create a hash
+    texts_hash = _hash_texts(texts)
+    texts_tuple = tuple(texts)
+    return get_embeddings_cached(texts_hash, texts_tuple)
 
 
 def get_remote_embeddings(texts: List[str]) -> List[List[float]]:
