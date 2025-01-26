@@ -9,6 +9,7 @@ from sqlite_vec import serialize_float32
 from collections import defaultdict
 from datetime import datetime
 from .embedding import get_embeddings
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,16 @@ class SearchProvider(ABC):
         end: Optional[int] = None,
         app_names: Optional[List[str]] = None,
     ) -> List[int]:
+        pass
+
+    @abstractmethod
+    def update_entity_index(self, entity_id: int, db: Session):
+        """Update both FTS and vector indexes for an entity"""
+        pass
+
+    @abstractmethod
+    def batch_update_entity_indices(self, entity_ids: List[int], db: Session):
+        """Batch update both FTS and vector indexes for multiple entities"""
         pass
 
     @abstractmethod
@@ -91,6 +102,16 @@ class PostgreSQLSearchProvider(SearchProvider):
         # Return empty list as placeholder
         return []
 
+    def update_entity_index(self, entity_id: int, db: Session):
+        """Update both FTS and vector indexes for an entity"""
+        logger.info("PostgreSQL update_entity_index (placeholder) called")
+        pass
+
+    def batch_update_entity_indices(self, entity_ids: List[int], db: Session):
+        """Batch update both FTS and vector indexes for multiple entities"""
+        logger.info("PostgreSQL batch_update_entity_indices (placeholder) called")
+        pass
+
     def hybrid_search(
         self,
         query: str,
@@ -127,6 +148,283 @@ class SqliteSearchProvider(SearchProvider):
         words = input_string.split()
         result = " AND ".join(words)
         return result
+
+    def prepare_fts_data(self, entity) -> tuple[str, str]:
+        tags = ", ".join(entity.tag_names)
+        fts_metadata = "\n".join(
+            [
+                f"{entry.key}: {self.process_ocr_result(entry.value) if entry.key == 'ocr_result' else entry.value}"
+                for entry in entity.metadata_entries
+            ]
+        )
+        return tags, fts_metadata
+
+    def prepare_vec_data(self, entity) -> str:
+        vec_metadata = "\n".join(
+            [
+                f"{entry.key}: {entry.value}"
+                for entry in entity.metadata_entries
+                if entry.key not in ["ocr_result", "sequence"]
+            ]
+        )
+        ocr_result = next(
+            (
+                entry.value
+                for entry in entity.metadata_entries
+                if entry.key == "ocr_result"
+            ),
+            "",
+        )
+        vec_metadata += (
+            f"\nocr_result: {self.process_ocr_result(ocr_result, max_length=128)}"
+        )
+        return vec_metadata
+
+    def process_ocr_result(self, value, max_length=4096):
+        try:
+            ocr_data = json.loads(value)
+            if isinstance(ocr_data, list) and all(
+                isinstance(item, dict)
+                and "dt_boxes" in item
+                and "rec_txt" in item
+                and "score" in item
+                for item in ocr_data
+            ):
+                return " ".join(item["rec_txt"] for item in ocr_data[:max_length])
+            else:
+                return json.dumps(ocr_data, indent=2)
+        except json.JSONDecodeError:
+            return value
+
+    def update_entity_index(self, entity_id: int, db: Session):
+        """Update both FTS and vector indexes for an entity"""
+        try:
+            from .crud import get_entity_by_id
+
+            entity = get_entity_by_id(entity_id, db)
+            if not entity:
+                raise ValueError(f"Entity with id {entity_id} not found")
+
+            # Update FTS index
+            tags, fts_metadata = self.prepare_fts_data(entity)
+            db.execute(
+                text(
+                    """
+                    INSERT OR REPLACE INTO entities_fts(id, filepath, tags, metadata)
+                    VALUES(:id, :filepath, :tags, :metadata)
+                    """
+                ),
+                {
+                    "id": entity.id,
+                    "filepath": entity.filepath,
+                    "tags": tags,
+                    "metadata": fts_metadata,
+                },
+            )
+
+            # Update vector index
+            vec_metadata = self.prepare_vec_data(entity)
+            with logfire.span("get embedding for entity metadata"):
+                embeddings = get_embeddings([vec_metadata])
+                logfire.info(f"vec_metadata: {vec_metadata}")
+
+            if embeddings and embeddings[0]:
+                db.execute(
+                    text("DELETE FROM entities_vec_v2 WHERE rowid = :id"),
+                    {"id": entity.id},
+                )
+
+                # Extract app_name from metadata_entries
+                app_name = next(
+                    (
+                        entry.value
+                        for entry in entity.metadata_entries
+                        if entry.key == "active_app"
+                    ),
+                    "unknown",  # Default to 'unknown' if not found
+                )
+                # Get file_type_group from entity
+                file_type_group = entity.file_type_group or "unknown"
+
+                # Convert file_created_at to integer timestamp
+                created_at_timestamp = int(entity.file_created_at.timestamp())
+
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO entities_vec_v2 (
+                            rowid, embedding, app_name, file_type_group, created_at_timestamp, file_created_at_timestamp,
+                            file_created_at_date, library_id
+                        )
+                        VALUES (:id, :embedding, :app_name, :file_type_group, :created_at_timestamp, :file_created_at_timestamp, :file_created_at_date, :library_id)
+                        """
+                    ),
+                    {
+                        "id": entity.id,
+                        "embedding": serialize_float32(embeddings[0]),
+                        "app_name": app_name,
+                        "file_type_group": file_type_group,
+                        "created_at_timestamp": created_at_timestamp,
+                        "file_created_at_timestamp": int(
+                            entity.file_created_at.timestamp()
+                        ),
+                        "file_created_at_date": entity.file_created_at.strftime(
+                            "%Y-%m-%d"
+                        ),
+                        "library_id": entity.library_id,
+                    },
+                )
+
+            db.commit()
+        except Exception as e:
+            logger.error(f"Error updating indexes for entity {entity_id}: {e}")
+            db.rollback()
+            raise
+
+    def batch_update_entity_indices(self, entity_ids: List[int], db: Session):
+        """Batch update both FTS and vector indexes for multiple entities"""
+        try:
+            from sqlalchemy.orm import selectinload
+            from .models import EntityModel
+
+            entities = (
+                db.query(EntityModel)
+                .filter(EntityModel.id.in_(entity_ids))
+                .options(
+                    selectinload(EntityModel.metadata_entries),
+                    selectinload(EntityModel.tags),
+                )
+                .all()
+            )
+            found_ids = {entity.id for entity in entities}
+
+            missing_ids = set(entity_ids) - found_ids
+            if missing_ids:
+                raise ValueError(f"Entities not found: {missing_ids}")
+
+            # Check existing vector indices and their timestamps
+            existing_vec_indices = db.execute(
+                text(
+                    """
+                    SELECT rowid, created_at_timestamp
+                    FROM entities_vec_v2
+                    WHERE rowid IN :entity_ids
+                """
+                ).bindparams(bindparam("entity_ids", expanding=True)),
+                {"entity_ids": tuple(entity_ids)},
+            ).fetchall()
+
+            # Create lookup of vector index timestamps
+            vec_timestamps = {row[0]: row[1] for row in existing_vec_indices}
+
+            # Separate entities that need indexing
+            needs_index = []
+
+            for entity in entities:
+                entity_last_scan = int(entity.last_scan_at.timestamp())
+                vec_timestamp = vec_timestamps.get(entity.id, 0)
+
+                # Entity needs full indexing if last_scan_at is
+                # more recent than the vector index timestamp
+                if entity_last_scan > vec_timestamp:
+                    needs_index.append(entity)
+
+            logger.info(
+                f"Entities needing full indexing: {len(needs_index)}/{len(entity_ids)}"
+            )
+
+            # Handle entities needing full indexing
+            if needs_index:
+                vec_metadata_list = [
+                    self.prepare_vec_data(entity) for entity in needs_index
+                ]
+                with logfire.span("get embedding in batch indexing"):
+                    embeddings = get_embeddings(vec_metadata_list)
+                    logfire.info(f"vec_metadata_list: {vec_metadata_list}")
+
+                # Delete all existing vector indices in one query
+                if needs_index:
+                    db.execute(
+                        text(
+                            "DELETE FROM entities_vec_v2 WHERE rowid IN :ids"
+                        ).bindparams(bindparam("ids", expanding=True)),
+                        {"ids": tuple(entity.id for entity in needs_index)},
+                    )
+
+                    # Prepare batch insert data
+                    created_at_timestamp = int(datetime.now().timestamp())
+                    insert_values = []
+                    for entity, embedding in zip(needs_index, embeddings):
+                        app_name = next(
+                            (
+                                entry.value
+                                for entry in entity.metadata_entries
+                                if entry.key == "active_app"
+                            ),
+                            "unknown",
+                        )
+                        file_type_group = entity.file_type_group or "unknown"
+
+                        insert_values.append(
+                            {
+                                "id": entity.id,
+                                "embedding": serialize_float32(embedding),
+                                "app_name": app_name,
+                                "file_type_group": file_type_group,
+                                "created_at_timestamp": created_at_timestamp,
+                                "file_created_at_timestamp": int(
+                                    entity.file_created_at.timestamp()
+                                ),
+                                "file_created_at_date": entity.file_created_at.strftime(
+                                    "%Y-%m-%d"
+                                ),
+                                "library_id": entity.library_id,
+                            }
+                        )
+
+                    # Execute batch insert
+                    db.execute(
+                        text(
+                            """
+                            INSERT INTO entities_vec_v2 (
+                                rowid, embedding, app_name, file_type_group,
+                                created_at_timestamp, file_created_at_timestamp,
+                                file_created_at_date, library_id
+                            )
+                            VALUES (
+                                :id, :embedding, :app_name, :file_type_group,
+                                :created_at_timestamp, :file_created_at_timestamp,
+                                :file_created_at_date, :library_id
+                            )
+                        """
+                        ),
+                        insert_values,
+                    )
+
+            # Update FTS index for all entities
+            for entity in entities:
+                tags, fts_metadata = self.prepare_fts_data(entity)
+                db.execute(
+                    text(
+                        """
+                        INSERT OR REPLACE INTO entities_fts(id, filepath, tags, metadata)
+                        VALUES(:id, :filepath, :tags, :metadata)
+                    """
+                    ),
+                    {
+                        "id": entity.id,
+                        "filepath": entity.filepath,
+                        "tags": tags,
+                        "metadata": fts_metadata,
+                    },
+                )
+
+            db.commit()
+
+        except Exception as e:
+            logger.error(f"Error batch updating indexes: {e}")
+            db.rollback()
+            raise
 
     def full_text_search(
         self,
