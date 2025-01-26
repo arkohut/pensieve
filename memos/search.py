@@ -66,6 +66,60 @@ class SearchProvider(ABC):
         """Get statistics for search results including date range and app name counts."""
         pass
 
+    def prepare_vec_data(self, entity) -> str:
+        """Prepare metadata for vector embedding.
+        
+        Args:
+            entity: The entity object containing metadata entries
+            
+        Returns:
+            str: Processed metadata string for vector embedding
+        """
+        vec_metadata = "\n".join(
+            [
+                f"{entry.key}: {entry.value}"
+                for entry in entity.metadata_entries
+                if entry.key not in ["ocr_result", "sequence"]
+            ]
+        )
+        ocr_result = next(
+            (
+                entry.value
+                for entry in entity.metadata_entries
+                if entry.key == "ocr_result"
+            ),
+            "",
+        )
+        vec_metadata += (
+            f"\nocr_result: {self.process_ocr_result(ocr_result, max_length=128)}"
+        )
+        return vec_metadata
+
+    def process_ocr_result(self, value, max_length=4096):
+        """Process OCR result data.
+        
+        Args:
+            value: OCR result data as string
+            max_length: Maximum number of items to process
+            
+        Returns:
+            str: Processed OCR result
+        """
+        try:
+            ocr_data = json.loads(value)
+            if isinstance(ocr_data, list) and all(
+                isinstance(item, dict)
+                and "dt_boxes" in item
+                and "rec_txt" in item
+                and "score" in item
+                for item in ocr_data
+            ):
+                return " ".join(item["rec_txt"] for item in ocr_data[:max_length])
+            else:
+                return json.dumps(ocr_data, indent=2)
+        except json.JSONDecodeError:
+            return value
+
 
 class PostgreSQLSearchProvider(SearchProvider):
     """
@@ -136,6 +190,65 @@ class PostgreSQLSearchProvider(SearchProvider):
                 },
             )
 
+            # Update vector index
+            vec_metadata = self.prepare_vec_data(entity)
+            with logfire.span("get embedding for entity metadata"):
+                embeddings = get_embeddings([vec_metadata])
+                logfire.info(f"vec_metadata: {vec_metadata}")
+
+            if embeddings and embeddings[0]:
+                # Extract app_name from metadata_entries
+                app_name = next(
+                    (
+                        entry.value
+                        for entry in entity.metadata_entries
+                        if entry.key == "active_app"
+                    ),
+                    "unknown",  # Default to 'unknown' if not found
+                )
+                # Get file_type_group from entity
+                file_type_group = entity.file_type_group or "unknown"
+
+                # Convert file_created_at to integer timestamp
+                created_at_timestamp = int(datetime.now().timestamp())
+                file_created_at_timestamp = int(entity.file_created_at.timestamp())
+                file_created_at_date = entity.file_created_at.strftime("%Y-%m-%d")
+
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO entities_vec_v2 (
+                            rowid, embedding, app_name, file_type_group,
+                            created_at_timestamp, file_created_at_timestamp,
+                            file_created_at_date, library_id
+                        )
+                        VALUES (
+                            :id, vector(:embedding), :app_name, :file_type_group,
+                            :created_at_timestamp, :file_created_at_timestamp,
+                            :file_created_at_date, :library_id
+                        )
+                        ON CONFLICT (rowid) DO UPDATE SET
+                            embedding = vector(:embedding),
+                            app_name = :app_name,
+                            file_type_group = :file_type_group,
+                            created_at_timestamp = :created_at_timestamp,
+                            file_created_at_timestamp = :file_created_at_timestamp,
+                            file_created_at_date = :file_created_at_date,
+                            library_id = :library_id
+                        """
+                    ),
+                    {
+                        "id": entity.id,
+                        "embedding": str(embeddings[0]),  # Convert to string for PostgreSQL vector type
+                        "app_name": app_name,
+                        "file_type_group": file_type_group,
+                        "created_at_timestamp": created_at_timestamp,
+                        "file_created_at_timestamp": file_created_at_timestamp,
+                        "file_created_at_date": file_created_at_date,
+                        "library_id": entity.library_id,
+                    },
+                )
+
             db.commit()
         except Exception as e:
             logger.error(f"Error updating indexes for entity {entity_id}: {e}")
@@ -186,28 +299,76 @@ class PostgreSQLSearchProvider(SearchProvider):
                     },
                 )
 
+            # Update vector index for all entities
+            vec_metadata_list = [self.prepare_vec_data(entity) for entity in entities]
+            with logfire.span("get embedding in batch indexing"):
+                embeddings = get_embeddings(vec_metadata_list)
+                logfire.info(f"vec_metadata_list: {vec_metadata_list}")
+
+            # Prepare batch insert data for vector index
+            created_at_timestamp = int(datetime.now().timestamp())
+            insert_values = []
+            for entity, embedding in zip(entities, embeddings):
+                if embedding:
+                    app_name = next(
+                        (
+                            entry.value
+                            for entry in entity.metadata_entries
+                            if entry.key == "active_app"
+                        ),
+                        "unknown",
+                    )
+                    file_type_group = entity.file_type_group or "unknown"
+                    file_created_at_timestamp = int(entity.file_created_at.timestamp())
+                    file_created_at_date = entity.file_created_at.strftime("%Y-%m-%d")
+
+                    insert_values.append(
+                        {
+                            "id": entity.id,
+                            "embedding": str(embedding),  # Convert to string for PostgreSQL vector type
+                            "app_name": app_name,
+                            "file_type_group": file_type_group,
+                            "created_at_timestamp": created_at_timestamp,
+                            "file_created_at_timestamp": file_created_at_timestamp,
+                            "file_created_at_date": file_created_at_date,
+                            "library_id": entity.library_id,
+                        }
+                    )
+
+            # Batch insert/update vector index
+            if insert_values:
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO entities_vec_v2 (
+                            rowid, embedding, app_name, file_type_group,
+                            created_at_timestamp, file_created_at_timestamp,
+                            file_created_at_date, library_id
+                        )
+                        VALUES (
+                            :id, vector(:embedding), :app_name, :file_type_group,
+                            :created_at_timestamp, :file_created_at_timestamp,
+                            :file_created_at_date, :library_id
+                        )
+                        ON CONFLICT (rowid) DO UPDATE SET
+                            embedding = vector(:embedding),
+                            app_name = :app_name,
+                            file_type_group = :file_type_group,
+                            created_at_timestamp = :created_at_timestamp,
+                            file_created_at_timestamp = :file_created_at_timestamp,
+                            file_created_at_date = :file_created_at_date,
+                            library_id = :library_id
+                        """
+                    ),
+                    insert_values,
+                )
+
             db.commit()
 
         except Exception as e:
             logger.error(f"Error batch updating indexes: {e}")
             db.rollback()
             raise
-
-    def process_ocr_result(self, value, max_length=4096):
-        try:
-            ocr_data = json.loads(value)
-            if isinstance(ocr_data, list) and all(
-                isinstance(item, dict)
-                and "dt_boxes" in item
-                and "rec_txt" in item
-                and "score" in item
-                for item in ocr_data
-            ):
-                return " ".join(item["rec_txt"] for item in ocr_data[:max_length])
-            else:
-                return json.dumps(ocr_data, indent=2)
-        except json.JSONDecodeError:
-            return value
 
     def full_text_search(
         self,
@@ -293,7 +454,40 @@ class PostgreSQLSearchProvider(SearchProvider):
         end: Optional[int] = None,
         app_names: Optional[List[str]] = None,
     ) -> List[int]:
-        return []
+        sql_query = """
+        SELECT rowid
+        FROM entities_vec_v2
+        WHERE file_type_group = 'image'
+        """
+
+        params = {
+            "embedding": str(embeddings),  # Convert to string for PostgreSQL vector type
+            "limit": limit
+        }
+
+        if library_ids:
+            sql_query += " AND library_id = ANY(:library_ids)"
+            params["library_ids"] = library_ids
+
+        if start is not None and end is not None:
+            sql_query += " AND file_created_at_timestamp BETWEEN :start AND :end"
+            params["start"] = start
+            params["end"] = end
+
+        if app_names:
+            sql_query += " AND app_name = ANY(:app_names)"
+            params["app_names"] = app_names
+
+        # Add vector similarity search
+        sql_query += """
+        ORDER BY embedding <=> vector(:embedding)
+        LIMIT :limit
+        """
+
+        sql = text(sql_query)
+        result = db.execute(sql, params).fetchall()
+
+        return [row[0] for row in result]
 
     def reciprocal_rank_fusion(
         self, fts_results: List[int], vec_results: List[int], k: int = 60
@@ -451,43 +645,6 @@ class SqliteSearchProvider(SearchProvider):
             ]
         )
         return tags, fts_metadata
-
-    def prepare_vec_data(self, entity) -> str:
-        vec_metadata = "\n".join(
-            [
-                f"{entry.key}: {entry.value}"
-                for entry in entity.metadata_entries
-                if entry.key not in ["ocr_result", "sequence"]
-            ]
-        )
-        ocr_result = next(
-            (
-                entry.value
-                for entry in entity.metadata_entries
-                if entry.key == "ocr_result"
-            ),
-            "",
-        )
-        vec_metadata += (
-            f"\nocr_result: {self.process_ocr_result(ocr_result, max_length=128)}"
-        )
-        return vec_metadata
-
-    def process_ocr_result(self, value, max_length=4096):
-        try:
-            ocr_data = json.loads(value)
-            if isinstance(ocr_data, list) and all(
-                isinstance(item, dict)
-                and "dt_boxes" in item
-                and "rec_txt" in item
-                and "score" in item
-                for item in ocr_data
-            ):
-                return " ".join(item["rec_txt"] for item in ocr_data[:max_length])
-            else:
-                return json.dumps(ocr_data, indent=2)
-        except json.JSONDecodeError:
-            return value
 
     def update_entity_index(self, entity_id: int, db: Session):
         """Update both FTS and vector indexes for an entity"""
