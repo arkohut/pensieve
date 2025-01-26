@@ -194,7 +194,12 @@ def get_entity_by_filepath(filepath: str, db: Session) -> Entity | None:
 
 
 def get_entities_by_filepaths(filepaths: List[str], db: Session) -> List[Entity]:
-    return db.query(EntityModel).filter(EntityModel.filepath.in_(filepaths)).all()
+    return (
+        db.query(EntityModel)
+        .options(joinedload(EntityModel.metadata_entries), joinedload(EntityModel.tags))
+        .filter(EntityModel.filepath.in_(filepaths))
+        .all()
+    )
 
 
 def remove_entity(entity_id: int, db: Session):
@@ -473,204 +478,6 @@ def and_words(input_string):
     return result
 
 
-def full_text_search(
-    query: str,
-    db: Session,
-    limit: int = 200,
-    library_ids: Optional[List[int]] = None,
-    start: Optional[int] = None,
-    end: Optional[int] = None,
-    app_names: Optional[List[str]] = None,
-) -> List[int]:
-    start_time = time.time()
-
-    and_query = and_words(query)
-
-    sql_query = """
-    WITH fts_matches AS (
-        SELECT id, rank
-        FROM entities_fts
-        WHERE entities_fts MATCH jieba_query(:query)
-    )
-    SELECT e.id 
-    FROM fts_matches f
-    JOIN entities e ON e.id = f.id
-    WHERE e.file_type_group = 'image'
-    """
-
-    params = {"query": and_query, "limit": limit}
-
-    # Only add bindparams if the parameters are provided
-    bindparams = []
-
-    if library_ids:
-        sql_query += " AND e.library_id IN :library_ids"
-        params["library_ids"] = tuple(library_ids)
-        bindparams.append(bindparam("library_ids", expanding=True))
-
-    if start is not None and end is not None:
-        sql_query += " AND strftime('%s', e.file_created_at, 'utc') BETWEEN :start AND :end"
-        params["start"] = start
-        params["end"] = end
-
-    if app_names:
-        sql_query += """
-        AND EXISTS (
-            SELECT 1 FROM metadata_entries me 
-            WHERE me.entity_id = e.id 
-            AND me.key = 'active_app' 
-            AND me.value IN :app_names
-        )
-        """
-        params["app_names"] = tuple(app_names)
-        bindparams.append(bindparam("app_names", expanding=True))
-
-    sql_query += " ORDER BY f.rank LIMIT :limit"
-
-    # Only add bindparams if we have any
-    sql = text(sql_query)
-    if bindparams:
-        sql = sql.bindparams(*bindparams)
-
-    result = db.execute(sql, params).fetchall()
-
-    execution_time = time.time() - start_time
-    logger.info(f"Full-text search execution time: {execution_time:.4f} seconds")
-
-    ids = [row[0] for row in result]
-    return ids
-
-
-def vec_search(
-    query: str,
-    db: Session,
-    limit: int = 200,
-    library_ids: Optional[List[int]] = None,
-    start: Optional[int] = None,
-    end: Optional[int] = None,
-    app_names: Optional[List[str]] = None,
-) -> List[int]:
-    with logfire.span("get_embeddings for {query=}", query=query):
-        query_embedding = get_embeddings([f"{query}"])
-
-    if not query_embedding:
-        return []
-
-    query_embedding = query_embedding[0]
-
-    start_date = None
-    end_date = None
-    if start is not None and end is not None:
-        start_date = datetime.fromtimestamp(start).strftime("%Y-%m-%d")
-        end_date = datetime.fromtimestamp(end).strftime("%Y-%m-%d")
-
-    sql_query = f"""
-    SELECT rowid
-    FROM entities_vec_v2
-    WHERE embedding MATCH :embedding
-      AND file_type_group = 'image'
-      AND K = :limit
-      {"AND file_created_at_date BETWEEN :start_date AND :end_date" if start_date is not None and end_date is not None else ""}
-      {"AND file_created_at_timestamp BETWEEN :start AND :end" if start is not None and end is not None else ""}
-      {"AND library_id IN :library_ids" if library_ids else ""}
-      {"AND app_name IN :app_names" if app_names else ""}
-    ORDER BY distance ASC
-    """
-
-    params = {
-        "embedding": serialize_float32(query_embedding),
-        "limit": limit,
-    }
-
-    if start is not None and end is not None:
-        params["start"] = int(start)
-        params["end"] = int(end)
-        params["start_date"] = start_date
-        params["end_date"] = end_date
-    if library_ids:
-        params["library_ids"] = tuple(library_ids)
-    if app_names:
-        params["app_names"] = tuple(app_names)
-
-    # Bind parameters with expanding=True for app_names and library_ids
-    sql = text(sql_query)
-    if app_names:
-        sql = sql.bindparams(bindparam("app_names", expanding=True))
-    if library_ids:
-        sql = sql.bindparams(bindparam("library_ids", expanding=True))
-
-    with logfire.span("vec_search inside {query=}", query=query):
-        result = db.execute(sql, params).fetchall()
-
-    ids = [row[0] for row in result]
-    # logger.info(f"SQL: {sql_query}")
-    # logger.info(f"Params: {params}")
-    # logger.info(f"Vector search results: {ids}")
-
-    return ids
-
-
-def reciprocal_rank_fusion(
-    fts_results: List[int], vec_results: List[int], k: int = 60
-) -> List[Tuple[int, float]]:
-    rank_dict = defaultdict(float)
-
-    # Weight for full-text search results: 0.7
-    for rank, result_id in enumerate(fts_results):
-        rank_dict[result_id] += 0.7 * (1 / (k + rank + 1))
-
-    # Weight for vector search results: 0.3  
-    for rank, result_id in enumerate(vec_results):
-        rank_dict[result_id] += 0.3 * (1 / (k + rank + 1))
-
-    sorted_results = sorted(rank_dict.items(), key=lambda x: x[1], reverse=True)
-    return sorted_results
-
-
-def hybrid_search(
-    query: str,
-    db: Session,
-    limit: int = 200,
-    library_ids: Optional[List[int]] = None,
-    start: Optional[int] = None,
-    end: Optional[int] = None,
-    app_names: Optional[List[str]] = None,
-    use_facet: bool = False,
-) -> Tuple[List[Entity], dict]:
-
-    with logfire.span("full_text_search"):
-        fts_results = full_text_search(
-            query, db, limit, library_ids, start, end, app_names
-        )
-    logger.info(f"Full-text search obtained {len(fts_results)} results")
-
-    with logfire.span("vector_search"):
-        vec_results = vec_search(
-            query, db, limit * 2, library_ids, start, end, app_names
-        )
-    logger.info(f"Vector search obtained {len(vec_results)} results")
-
-    with logfire.span("reciprocal_rank_fusion"):
-        combined_results = reciprocal_rank_fusion(fts_results, vec_results)
-
-    sorted_ids = [id for id, _ in combined_results][:limit]
-    logger.info(f"Hybrid search results (sorted IDs): {sorted_ids}")
-
-    with logfire.span("find_entities_by_ids"):
-        entities = find_entities_by_ids(sorted_ids, db)
-
-    entity_dict = {entity.id: entity for entity in entities}
-    result = [entity_dict[id] for id in sorted_ids]
-
-    if use_facet:
-        with logfire.span("get_search_stats"):
-            stats = get_search_stats(query, db, library_ids, start, end, app_names)
-    else:
-        stats = {}
-
-    return result, stats
-
-
 def list_entities(
     db: Session,
     limit: int = 200,
@@ -886,7 +693,8 @@ def batch_update_entity_indices(entity_ids: List[int], db: Session):
             db.query(EntityModel)
             .filter(EntityModel.id.in_(entity_ids))
             .options(
-                selectinload(EntityModel.metadata_entries), selectinload(EntityModel.tags)
+                selectinload(EntityModel.metadata_entries),
+                selectinload(EntityModel.tags),
             )
             .all()
         )
@@ -1017,87 +825,6 @@ def batch_update_entity_indices(entity_ids: List[int], db: Session):
         logger.error(f"Error batch updating indexes: {e}")
         db.rollback()
         raise
-
-
-def get_search_stats(
-    query: str,
-    db: Session,
-    library_ids: Optional[List[int]] = None,
-    start: Optional[int] = None,
-    end: Optional[int] = None,
-    app_names: Optional[List[str]] = None,
-) -> dict:
-    """Get statistics for search results including date range and tag counts."""
-
-    MIN_SAMPLE_SIZE = 2048
-    MAX_SAMPLE_SIZE = 4096
-
-    with logfire.span(
-        "full_text_search in stats {query=} {limit=}",
-        query=query,
-        limit=MAX_SAMPLE_SIZE,
-    ):
-        fts_results = full_text_search(
-            query,
-            db,
-            limit=MAX_SAMPLE_SIZE,
-            library_ids=library_ids,
-            start=start,
-            end=end,
-            app_names=app_names,
-        )
-
-    vec_limit = max(min(len(fts_results) * 2, MAX_SAMPLE_SIZE), MIN_SAMPLE_SIZE)
-
-    with logfire.span(
-        "vec_search in stats {query=} {limit=}", query=query, limit=vec_limit
-    ):
-        vec_results = vec_search(
-            query,
-            db,
-            limit=vec_limit,
-            library_ids=library_ids,
-            start=start,
-            end=end,
-            app_names=app_names,
-        )
-
-    logfire.info(f"fts_results: {len(fts_results)} vec_results: {len(vec_results)}")
-
-    entity_ids = set(fts_results + vec_results)
-
-    if not entity_ids:
-        return {"date_range": {"earliest": None, "latest": None}, "app_name_counts": {}}
-
-    entity_ids_str = ",".join(str(id) for id in entity_ids)
-    date_range = db.execute(
-        text(
-            f"""
-            SELECT 
-                MIN(file_created_at) as earliest,
-                MAX(file_created_at) as latest
-            FROM entities
-            WHERE id IN ({entity_ids_str})
-        """
-        )
-    ).first()
-
-    app_name_counts = db.execute(
-        text(
-            f"""
-            SELECT me.value, COUNT(*) as count
-            FROM metadata_entries me
-            WHERE me.entity_id IN ({entity_ids_str}) and me.key = 'active_app'
-            GROUP BY me.value
-            ORDER BY count DESC
-        """
-        )
-    ).all()
-
-    return {
-        "date_range": {"earliest": date_range.earliest, "latest": date_range.latest},
-        "app_name_counts": {app_name: count for app_name, count in app_name_counts},
-    }
 
 
 def record_plugin_processed(entity_id: int, plugin_id: int, db: Session):
