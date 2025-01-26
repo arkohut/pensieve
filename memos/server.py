@@ -265,7 +265,7 @@ async def new_entity(
 
     if update_index:
         with logfire.span("update entity index {entity_id=}", entity_id=entity.id):
-            crud.update_entity_index(entity.id, db)
+            search_provider.update_entity_index(entity.id, db)
 
     return entity
 
@@ -390,7 +390,7 @@ async def update_entity(
         await trigger_webhooks(library, entity, request, plugins, db)
 
     if update_index:
-        crud.update_entity_index(entity.id, db)
+        search_provider.update_entity_index(entity.id, db)
 
     return entity
 
@@ -428,7 +428,7 @@ def update_index(entity_id: int, db: Session = Depends(get_db)):
             detail="Entity not found",
         )
 
-    crud.update_entity_index(entity.id, db)
+    search_provider.update_entity_index(entity.id, db)
 
 
 @app.post(
@@ -441,7 +441,7 @@ async def batch_update_index(request: BatchIndexRequest, db: Session = Depends(g
     Batch update the FTS and vector indexes for multiple entities.
     """
     try:
-        crud.batch_update_entity_indices(request.entity_ids, db)
+        search_provider.batch_update_entity_indices(request.entity_ids, db)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
