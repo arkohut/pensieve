@@ -1,5 +1,12 @@
 base_dir: ~/.memos
+
+# Database settings
+# Can be either:
+# 1. A file path for SQLite (relative to base_dir): database.db
+# 2. SQLite URL: sqlite:///absolute/path/to/database.db
+# 3. PostgreSQL URL: postgresql://user:password@localhost:5432/dbname
 database_path: database.db
+
 default_library: screenshots
 screenshots_dir: screenshots
 

@@ -80,10 +80,10 @@ app.add_typer(lib_app, name="lib", callback=callback)
 @app.command()
 def serve():
     """Run the server after initializing if necessary."""
-    from .models import init_database
+    from .databases.initializers import init_database
     from .migrations import run_migrations
     
-    db_success = init_database()
+    db_success = init_database(settings)
     if db_success:
         # Run any pending migrations
         run_migrations()
@@ -97,10 +97,10 @@ def serve():
 @app.command()
 def init():
     """Initialize the database."""
-    from .models import init_database
+    from .databases.initializers import init_database
     from .migrations import run_migrations
 
-    db_success = init_database()
+    db_success = init_database(settings)
     if db_success:
         run_migrations()
         print("Initialization completed successfully.")

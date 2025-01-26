@@ -107,11 +107,26 @@ class Settings(BaseSettings):
 
     @property
     def resolved_database_path(self) -> Path:
-        return self.resolved_base_dir / self.database_path
+        # Only resolve path for SQLite database with relative path
+        if not any(self.database_path.startswith(prefix) for prefix in ["postgresql://", "sqlite://"]):
+            return self.resolved_base_dir / self.database_path
+        return None
 
     @property
     def resolved_screenshots_dir(self) -> Path:
         return self.resolved_base_dir / self.screenshots_dir
+
+    @property
+    def database_url(self) -> str:
+        # If database_path starts with a URL scheme, use it directly
+        if self.database_path.startswith(("postgresql://", "sqlite://")):
+            return self.database_path
+        # Otherwise treat it as a SQLite database path relative to base_dir
+        return f"sqlite:///{self.resolved_database_path}"
+
+    @property
+    def is_sqlite(self) -> bool:
+        return self.database_path.startswith("sqlite://") or not self.database_path.startswith("postgresql://")
 
     @property
     def server_endpoint(self) -> str:
