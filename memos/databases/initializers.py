@@ -302,7 +302,9 @@ class PostgreSQLInitializer(DatabaseInitializer):
     def init_extensions(self):
         """Initialize PostgreSQL-specific extensions."""
         with self.engine.connect() as conn:
-            # Create a custom text search configuration for Chinese and English
+            # Create extensions in a separate transaction
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
             conn.execute(
                 text(
                     """
@@ -311,6 +313,7 @@ class PostgreSQLInitializer(DatabaseInitializer):
                     """
                 )
             )
+            conn.commit()
 
     def init_specific_features(self):
         """Initialize PostgreSQL-specific features."""
@@ -318,7 +321,7 @@ class PostgreSQLInitializer(DatabaseInitializer):
             # Create the tsvector column and index for full-text search
             conn.execute(
                 text(
-                    """
+                    f"""
                     -- Create a table to store the full-text search data
                     CREATE TABLE IF NOT EXISTS entities_fts (
                         id INTEGER PRIMARY KEY,
@@ -343,7 +346,6 @@ class PostgreSQLInitializer(DatabaseInitializer):
                     ON entities_fts USING gin(search_vector);
 
                     -- Create trigram index for fuzzy matching on filepath and search_text
-                    CREATE EXTENSION IF NOT EXISTS pg_trgm;
                     CREATE INDEX IF NOT EXISTS idx_entities_fts_filepath_trgm 
                     ON entities_fts USING gin(filepath gin_trgm_ops);
                     CREATE INDEX IF NOT EXISTS idx_entities_fts_search_text_trgm
@@ -351,6 +353,42 @@ class PostgreSQLInitializer(DatabaseInitializer):
                     """
                 )
             )
+            conn.commit()
+
+            # Create vector table and indexes in a separate transaction
+            conn.execute(
+                text(
+                    f"""
+                    -- Create vector search table
+                    CREATE TABLE IF NOT EXISTS entities_vec_v2 (
+                        rowid INTEGER PRIMARY KEY,
+                        embedding vector({self.settings.embedding.num_dim}),
+                        file_type_group TEXT,
+                        created_at_timestamp INTEGER,
+                        file_created_at_timestamp INTEGER,
+                        file_created_at_date TEXT,
+                        app_name TEXT,
+                        library_id INTEGER
+                    );
+
+                    -- Create index for vector similarity search using HNSW
+                    CREATE INDEX IF NOT EXISTS idx_entities_vec_v2_embedding 
+                    ON entities_vec_v2 USING hnsw (embedding vector_cosine_ops)
+                    WITH (m = 16, ef_construction = 64);
+
+                    -- Create indexes for filtering
+                    CREATE INDEX IF NOT EXISTS idx_entities_vec_v2_file_type_group 
+                    ON entities_vec_v2(file_type_group);
+                    CREATE INDEX IF NOT EXISTS idx_entities_vec_v2_file_created_at_date 
+                    ON entities_vec_v2(file_created_at_date);
+                    CREATE INDEX IF NOT EXISTS idx_entities_vec_v2_app_name 
+                    ON entities_vec_v2(app_name);
+                    CREATE INDEX IF NOT EXISTS idx_entities_vec_v2_library_id 
+                    ON entities_vec_v2(library_id);
+                    """
+                )
+            )
+            conn.commit()
 
     def recreate_index_tables(self) -> bool:
         """Recreate PostgreSQL-specific index tables."""
@@ -360,11 +398,18 @@ class PostgreSQLInitializer(DatabaseInitializer):
             try:
                 # Drop existing tables
                 session.execute(text("DROP TABLE IF EXISTS entities_fts CASCADE"))
+                session.execute(text("DROP TABLE IF EXISTS entities_vec_v2 CASCADE"))
+                session.commit()
+
+                # Ensure extensions are created
+                session.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+                session.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+                session.commit()
 
                 # Recreate entities_fts table with tsvector support
                 session.execute(
                     text(
-                        """
+                        f"""
                         CREATE TABLE entities_fts (
                             id INTEGER PRIMARY KEY,
                             filepath TEXT,
@@ -388,7 +433,6 @@ class PostgreSQLInitializer(DatabaseInitializer):
                         ON entities_fts USING gin(search_vector);
 
                         -- Create trigram index for fuzzy matching on filepath and search_text
-                        CREATE EXTENSION IF NOT EXISTS pg_trgm;
                         CREATE INDEX idx_entities_fts_filepath_trgm 
                         ON entities_fts USING gin(filepath gin_trgm_ops);
                         CREATE INDEX idx_entities_fts_search_text_trgm
@@ -396,9 +440,44 @@ class PostgreSQLInitializer(DatabaseInitializer):
                         """
                     )
                 )
-
                 session.commit()
-                print("Successfully recreated entities_fts table.")
+
+                # Create vector table and indexes in a separate transaction
+                session.execute(
+                    text(
+                        f"""
+                        -- Create vector search table
+                        CREATE TABLE entities_vec_v2 (
+                            rowid INTEGER PRIMARY KEY,
+                            embedding vector({self.settings.embedding.num_dim}),
+                            file_type_group TEXT,
+                            created_at_timestamp INTEGER,
+                            file_created_at_timestamp INTEGER,
+                            file_created_at_date TEXT,
+                            app_name TEXT,
+                            library_id INTEGER
+                        );
+
+                        -- Create index for vector similarity search using HNSW
+                        CREATE INDEX idx_entities_vec_v2_embedding 
+                        ON entities_vec_v2 USING hnsw (embedding vector_cosine_ops)
+                        WITH (m = 16, ef_construction = 64);
+
+                        -- Create indexes for filtering
+                        CREATE INDEX idx_entities_vec_v2_file_type_group 
+                        ON entities_vec_v2(file_type_group);
+                        CREATE INDEX idx_entities_vec_v2_file_created_at_date 
+                        ON entities_vec_v2(file_created_at_date);
+                        CREATE INDEX idx_entities_vec_v2_app_name 
+                        ON entities_vec_v2(app_name);
+                        CREATE INDEX idx_entities_vec_v2_library_id 
+                        ON entities_vec_v2(library_id);
+                        """
+                    )
+                )
+                session.commit()
+
+                print("Successfully recreated entities_fts and entities_vec_v2 tables.")
                 return True
             except Exception as e:
                 session.rollback()
