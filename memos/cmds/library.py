@@ -404,7 +404,7 @@ def reindex(
 
     if force:
         print("Force flag is set. Recreating FTS and vector tables...")
-        if not recreate_fts_and_vec_tables():
+        if not recreate_fts_and_vec_tables(settings):
             return
         print("FTS and vector tables have been recreated.")
 
