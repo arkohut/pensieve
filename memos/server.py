@@ -19,7 +19,7 @@ import cv2
 from PIL import Image
 import logging
 
-from .config import get_database_path, settings
+from .config import settings
 from memos.plugins.vlm import main as vlm_main
 from memos.plugins.ocr import main as ocr_main
 from . import crud
@@ -838,7 +838,7 @@ def get_entity_context(
 
 
 def run_server():
-    logging.info("Database path: %s", get_database_path())
+    logging.info("Database path: %s", settings.database_url)
     logging.info("VLM plugin enabled: %s", settings.vlm)
     logging.info("OCR plugin enabled: %s", settings.ocr)
 

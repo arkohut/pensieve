@@ -6,6 +6,7 @@ Create Date: 2025-01-02 10:11:48.997145
 
 """
 from typing import Sequence, Union
+from urllib.parse import urlparse
 
 from alembic import op
 import sqlalchemy as sa
@@ -21,7 +22,16 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def get_db_type():
+    config = op.get_context().config
+    url = config.get_main_option("sqlalchemy.url")
+    return urlparse(url).scheme
+
+
 def upgrade() -> None:
+    if get_db_type() != 'sqlite':
+        return
+
     conn = op.get_bind()
     inspector = inspect(conn)
     tables = inspector.get_table_names()
