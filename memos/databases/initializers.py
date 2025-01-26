@@ -119,9 +119,13 @@ def create_db_initializer(settings, **engine_kwargs):
         settings.database_url,
         **default_engine_kwargs
     )
-    
+        
     # Create the appropriate initializer based on database type
-    initializer = SQLiteInitializer(engine, settings) if settings.is_sqlite else PostgreSQLInitializer(engine, settings)
+    if settings.is_sqlite:
+        initializer = SQLiteInitializer(engine, settings)
+    else:
+        print("Using PostgreSQL")
+        initializer = PostgreSQLInitializer(engine, settings)
     
     return engine, initializer
 
