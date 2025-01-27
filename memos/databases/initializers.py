@@ -298,6 +298,10 @@ class SQLiteInitializer(DatabaseInitializer):
 
 
 class PostgreSQLInitializer(DatabaseInitializer):
+    def __init__(self, engine, settings):
+        super().__init__(engine, settings)
+        self.init_extensions()
+
     """PostgreSQL-specific database initializer."""
     def init_extensions(self):
         """Initialize PostgreSQL-specific extensions."""
@@ -305,14 +309,6 @@ class PostgreSQLInitializer(DatabaseInitializer):
             # Create extensions in a separate transaction
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-            conn.execute(
-                text(
-                    """
-                    -- Create a custom text search configuration
-                    CREATE TEXT SEARCH CONFIGURATION IF NOT EXISTS chinese_english (COPY = simple);
-                    """
-                )
-            )
             conn.commit()
 
     def init_specific_features(self):
