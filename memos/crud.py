@@ -78,7 +78,7 @@ def create_library(library: NewLibraryParam, db: Session) -> Library:
 
 
 def get_libraries(db: Session) -> List[Library]:
-    return db.query(LibraryModel).all()
+    return db.query(LibraryModel).order_by(LibraryModel.id.asc()).all()
 
 
 def get_library_by_name(library_name: str, db: Session) -> Library | None:
@@ -171,21 +171,36 @@ def get_entities_of_folder(
     offset: int = 0,
     path_prefix: str | None = None,
 ) -> Tuple[List[Entity], int]:
-    query = (
-        db.query(EntityModel)
-        .options(joinedload(EntityModel.metadata_entries), joinedload(EntityModel.tags))
+    # First get the entity IDs with limit and offset
+    id_query = (
+        db.query(EntityModel.id)
         .filter(
             EntityModel.folder_id == folder_id,
             EntityModel.library_id == library_id,
         )
+        .order_by(EntityModel.file_last_modified_at.asc())
     )
 
     # Add path_prefix filter if provided
     if path_prefix:
-        query = query.filter(EntityModel.filepath.like(f"{path_prefix}%"))
+        id_query = id_query.filter(EntityModel.filepath.like(f"{path_prefix}%"))
 
-    total_count = query.count()
-    entities = query.limit(limit).offset(offset).all()
+    total_count = id_query.count()
+    entity_ids = id_query.limit(limit).offset(offset).all()
+    entity_ids = [id[0] for id in entity_ids]
+
+    # Then get the full entities with relationships for those IDs
+    entities = (
+        db.query(EntityModel)
+        .options(
+            joinedload(EntityModel.metadata_entries),
+            joinedload(EntityModel.tags),
+            joinedload(EntityModel.plugin_status)
+        )
+        .filter(EntityModel.id.in_(entity_ids))
+        .order_by(EntityModel.file_last_modified_at.asc())
+        .all()
+    )
 
     return entities, total_count
 
@@ -197,7 +212,11 @@ def get_entity_by_filepath(filepath: str, db: Session) -> Entity | None:
 def get_entities_by_filepaths(filepaths: List[str], db: Session) -> List[Entity]:
     return (
         db.query(EntityModel)
-        .options(joinedload(EntityModel.metadata_entries), joinedload(EntityModel.tags))
+        .options(
+            joinedload(EntityModel.metadata_entries),
+            joinedload(EntityModel.tags),
+            joinedload(EntityModel.plugin_status),
+        )
         .filter(EntityModel.filepath.in_(filepaths))
         .all()
     )
@@ -228,7 +247,7 @@ def create_plugin(newPlugin: NewPluginParam, db: Session) -> Plugin:
 
 
 def get_plugins(db: Session) -> List[Plugin]:
-    return db.query(PluginModel).all()
+    return db.query(PluginModel).order_by(PluginModel.id.asc()).all()
 
 
 def get_plugin_by_name(plugin_name: str, db: Session) -> Plugin | None:
@@ -471,12 +490,6 @@ def remove_plugin_from_library(library_id: int, plugin_id: int, db: Session):
         db.commit()
     else:
         raise ValueError(f"Plugin {plugin_id} not found in library {library_id}")
-
-
-def and_words(input_string):
-    words = input_string.split()
-    result = " AND ".join(words)
-    return result
 
 
 def list_entities(
