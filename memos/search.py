@@ -68,10 +68,10 @@ class SearchProvider(ABC):
 
     def prepare_vec_data(self, entity) -> str:
         """Prepare metadata for vector embedding.
-        
+
         Args:
             entity: The entity object containing metadata entries
-            
+
         Returns:
             str: Processed metadata string for vector embedding
         """
@@ -97,11 +97,11 @@ class SearchProvider(ABC):
 
     def process_ocr_result(self, value, max_length=4096):
         """Process OCR result data.
-        
+
         Args:
             value: OCR result data as string
             max_length: Maximum number of items to process
-            
+
         Returns:
             str: Processed OCR result
         """
@@ -125,6 +125,7 @@ class PostgreSQLSearchProvider(SearchProvider):
     """
     PostgreSQL implementation of SearchProvider.
     """
+
     def tokenize_text(self, text: str) -> str:
         """Tokenize text using jieba for both Chinese and English text."""
         if not text:
@@ -138,17 +139,17 @@ class PostgreSQLSearchProvider(SearchProvider):
         """Prepare data for full-text search with jieba tokenization."""
         # Process filepath: keep directory structure but normalize separators
         # Also extract the filename without extension for better searchability
-        filepath = entity.filepath.replace('\\', '/')  # normalize separators
+        filepath = entity.filepath.replace("\\", "/")  # normalize separators
         filename = os.path.basename(filepath)
         filename_without_ext = os.path.splitext(filename)[0]
         # Split filename by common separators (-, _, etc) to make parts searchable
-        filename_parts = filename_without_ext.replace('-', ' ').replace('_', ' ')
+        filename_parts = filename_without_ext.replace("-", " ").replace("_", " ")
         processed_filepath = f"{filepath} {filename_parts}"
-        
+
         # Tokenize tags
         tags = " ".join(entity.tag_names)
         tokenized_tags = self.tokenize_text(tags)
-        
+
         # Tokenize metadata
         metadata_entries = [
             f"{entry.key}: {self.process_ocr_result(entry.value) if entry.key == 'ocr_result' else entry.value}"
@@ -156,7 +157,7 @@ class PostgreSQLSearchProvider(SearchProvider):
         ]
         metadata = "\n".join(metadata_entries)
         tokenized_metadata = self.tokenize_text(metadata)
-        
+
         return processed_filepath, tokenized_tags, tokenized_metadata
 
     def update_entity_index(self, entity_id: int, db: Session):
@@ -169,7 +170,9 @@ class PostgreSQLSearchProvider(SearchProvider):
                 raise ValueError(f"Entity with id {entity_id} not found")
 
             # Update FTS index with tokenized data
-            processed_filepath, tokenized_tags, tokenized_metadata = self.prepare_fts_data(entity)
+            processed_filepath, tokenized_tags, tokenized_metadata = (
+                self.prepare_fts_data(entity)
+            )
 
             db.execute(
                 text(
@@ -239,7 +242,9 @@ class PostgreSQLSearchProvider(SearchProvider):
                     ),
                     {
                         "id": entity.id,
-                        "embedding": str(embeddings[0]),  # Convert to string for PostgreSQL vector type
+                        "embedding": str(
+                            embeddings[0]
+                        ),  # Convert to string for PostgreSQL vector type
                         "app_name": app_name,
                         "file_type_group": file_type_group,
                         "created_at_timestamp": created_at_timestamp,
@@ -276,9 +281,114 @@ class PostgreSQLSearchProvider(SearchProvider):
             if missing_ids:
                 raise ValueError(f"Entities not found: {missing_ids}")
 
-            # Update FTS index for all entities
+            # Check existing vector indices and their timestamps
+            existing_vec_indices = db.execute(
+                text(
+                    """
+                    SELECT rowid, created_at_timestamp
+                    FROM entities_vec_v2
+                    WHERE rowid = ANY(:entity_ids)
+                    """
+                ),
+                {"entity_ids": entity_ids},
+            ).fetchall()
+
+            # Create lookup of vector index timestamps
+            vec_timestamps = {row[0]: row[1] for row in existing_vec_indices}
+
+            # Separate entities that need indexing
+            needs_index = []
             for entity in entities:
-                processed_filepath, tokenized_tags, tokenized_metadata = self.prepare_fts_data(entity)
+                entity_last_scan = int(entity.last_scan_at.timestamp())
+                vec_timestamp = vec_timestamps.get(entity.id, 0)
+
+                # Entity needs full indexing if last_scan_at is
+                # more recent than the vector index timestamp
+                if entity_last_scan > vec_timestamp:
+                    needs_index.append(entity)
+
+            logfire.info(
+                f"Entities needing full indexing: {len(needs_index)}/{len(entity_ids)}"
+            )
+
+            # Update vector index only for entities that need it
+            if needs_index:
+                vec_metadata_list = [
+                    self.prepare_vec_data(entity) for entity in needs_index
+                ]
+                with logfire.span("get embedding in batch indexing"):
+                    embeddings = get_embeddings(vec_metadata_list)
+                    logfire.info(f"vec_metadata_list: {vec_metadata_list}")
+
+                # Prepare batch insert data for vector index
+                created_at_timestamp = int(datetime.now().timestamp())
+                insert_values = []
+                for entity, embedding in zip(needs_index, embeddings):
+                    if embedding:
+                        app_name = next(
+                            (
+                                entry.value
+                                for entry in entity.metadata_entries
+                                if entry.key == "active_app"
+                            ),
+                            "unknown",
+                        )
+                        file_type_group = entity.file_type_group or "unknown"
+                        file_created_at_timestamp = int(
+                            entity.file_created_at.timestamp()
+                        )
+                        file_created_at_date = entity.file_created_at.strftime(
+                            "%Y-%m-%d"
+                        )
+
+                        insert_values.append(
+                            {
+                                "id": entity.id,
+                                "embedding": str(
+                                    embedding
+                                ),  # Convert to string for PostgreSQL vector type
+                                "app_name": app_name,
+                                "file_type_group": file_type_group,
+                                "created_at_timestamp": created_at_timestamp,
+                                "file_created_at_timestamp": file_created_at_timestamp,
+                                "file_created_at_date": file_created_at_date,
+                                "library_id": entity.library_id,
+                            }
+                        )
+
+                # Batch insert/update vector index
+                if insert_values:
+                    db.execute(
+                        text(
+                            """
+                            INSERT INTO entities_vec_v2 (
+                                rowid, embedding, app_name, file_type_group,
+                                created_at_timestamp, file_created_at_timestamp,
+                                file_created_at_date, library_id
+                            )
+                            VALUES (
+                                :id, vector(:embedding), :app_name, :file_type_group,
+                                :created_at_timestamp, :file_created_at_timestamp,
+                                :file_created_at_date, :library_id
+                            )
+                            ON CONFLICT (rowid) DO UPDATE SET
+                                embedding = vector(:embedding),
+                                app_name = :app_name,
+                                file_type_group = :file_type_group,
+                                created_at_timestamp = :created_at_timestamp,
+                                file_created_at_timestamp = :file_created_at_timestamp,
+                                file_created_at_date = :file_created_at_date,
+                                library_id = :library_id
+                            """
+                        ),
+                        insert_values,
+                    )
+
+            # Update FTS index
+            for entity in needs_index:
+                processed_filepath, tokenized_tags, tokenized_metadata = (
+                    self.prepare_fts_data(entity)
+                )
 
                 db.execute(
                     text(
@@ -299,70 +409,6 @@ class PostgreSQLSearchProvider(SearchProvider):
                     },
                 )
 
-            # Update vector index for all entities
-            vec_metadata_list = [self.prepare_vec_data(entity) for entity in entities]
-            with logfire.span("get embedding in batch indexing"):
-                embeddings = get_embeddings(vec_metadata_list)
-                logfire.info(f"vec_metadata_list: {vec_metadata_list}")
-
-            # Prepare batch insert data for vector index
-            created_at_timestamp = int(datetime.now().timestamp())
-            insert_values = []
-            for entity, embedding in zip(entities, embeddings):
-                if embedding:
-                    app_name = next(
-                        (
-                            entry.value
-                            for entry in entity.metadata_entries
-                            if entry.key == "active_app"
-                        ),
-                        "unknown",
-                    )
-                    file_type_group = entity.file_type_group or "unknown"
-                    file_created_at_timestamp = int(entity.file_created_at.timestamp())
-                    file_created_at_date = entity.file_created_at.strftime("%Y-%m-%d")
-
-                    insert_values.append(
-                        {
-                            "id": entity.id,
-                            "embedding": str(embedding),  # Convert to string for PostgreSQL vector type
-                            "app_name": app_name,
-                            "file_type_group": file_type_group,
-                            "created_at_timestamp": created_at_timestamp,
-                            "file_created_at_timestamp": file_created_at_timestamp,
-                            "file_created_at_date": file_created_at_date,
-                            "library_id": entity.library_id,
-                        }
-                    )
-
-            # Batch insert/update vector index
-            if insert_values:
-                db.execute(
-                    text(
-                        """
-                        INSERT INTO entities_vec_v2 (
-                            rowid, embedding, app_name, file_type_group,
-                            created_at_timestamp, file_created_at_timestamp,
-                            file_created_at_date, library_id
-                        )
-                        VALUES (
-                            :id, vector(:embedding), :app_name, :file_type_group,
-                            :created_at_timestamp, :file_created_at_timestamp,
-                            :file_created_at_date, :library_id
-                        )
-                        ON CONFLICT (rowid) DO UPDATE SET
-                            embedding = vector(:embedding),
-                            app_name = :app_name,
-                            file_type_group = :file_type_group,
-                            created_at_timestamp = :created_at_timestamp,
-                            file_created_at_timestamp = :file_created_at_timestamp,
-                            file_created_at_date = :file_created_at_date,
-                            library_id = :library_id
-                        """
-                    ),
-                    insert_values,
-                )
-
             db.commit()
 
         except Exception as e:
@@ -380,68 +426,70 @@ class PostgreSQLSearchProvider(SearchProvider):
         end: Optional[int] = None,
         app_names: Optional[List[str]] = None,
     ) -> List[int]:
-        start_time = time.time()
-
-        # Combine full-text search with trigram similarity for prefix matching
-        sql_query = """
-        WITH ranked_results AS (
-            SELECT 
-                e.id,
-                GREATEST(
-                    ts_rank_cd(f.search_vector, websearch_to_tsquery('simple', :query)),
-                    word_similarity(:query, f.search_text)
-                ) as rank
+        base_sql = """
+        WITH search_results AS (
+            SELECT e.id,
+                ts_rank_cd(f.search_vector, websearch_to_tsquery('simple', :query)) as exact_rank,
+                ts_rank_cd(f.search_vector, to_tsquery('simple', :prefix_query)) as prefix_rank
             FROM entities_fts f
             JOIN entities e ON e.id = f.id
             WHERE (
                 f.search_vector @@ websearch_to_tsquery('simple', :query)
-                OR 
-                f.search_text ILIKE :like_query
+                OR f.search_vector @@ to_tsquery('simple', :prefix_query)
             )
             AND e.file_type_group = 'image'
         """
 
-        # Pass the raw query and prepare LIKE pattern for prefix matching
-        params = {
-            "query": query,
-            "like_query": f"%{query}%",
-            "limit": limit
-        }
-
+        where_clauses = []
         if library_ids:
-            sql_query += """ 
-            AND e.library_id = ANY(ARRAY[{}])
-            """.format(",".join(str(id) for id in library_ids))
+            where_clauses.append("e.library_id = ANY(:library_ids)")
 
         if start is not None and end is not None:
-            sql_query += " AND EXTRACT(EPOCH FROM e.file_created_at) BETWEEN :start AND :end"
+            where_clauses.append(
+                "EXTRACT(EPOCH FROM e.file_created_at) BETWEEN :start AND :end"
+            )
+
+        if app_names:
+            where_clauses.append(
+                """
+                EXISTS (
+                    SELECT 1 FROM metadata_entries me 
+                    WHERE me.entity_id = e.id 
+                    AND me.key = 'active_app' 
+                    AND me.value = ANY(:app_names)
+                )
+            """
+            )
+
+        if where_clauses:
+            base_sql += " AND " + " AND ".join(where_clauses)
+
+        base_sql += ")\nSELECT id FROM search_results ORDER BY GREATEST(exact_rank, prefix_rank) DESC LIMIT :limit"
+
+        # 处理前缀搜索
+        prefix_terms = " | ".join(f"{term}:*" for term in query.split())
+
+        params = {"query": query, "prefix_query": prefix_terms, "limit": limit}
+
+        if library_ids:
+            params["library_ids"] = library_ids
+
+        if start is not None and end is not None:
             params["start"] = start
             params["end"] = end
 
         if app_names:
-            sql_query += """
-            AND EXISTS (
-                SELECT 1 FROM metadata_entries me 
-                WHERE me.entity_id = e.id 
-                AND me.key = 'active_app' 
-                AND me.value = ANY(ARRAY[{}])
-            )
-            """.format(",".join(f"'{name}'" for name in app_names))
+            params["app_names"] = app_names
 
-        # Close the CTE and order by rank
-        sql_query += """
+        logfire.info(
+            "full text search {query=} {prefix_query=} {limit=}",
+            query=query,
+            prefix_query=prefix_terms,
+            limit=limit,
         )
-        SELECT id FROM ranked_results 
-        ORDER BY rank DESC 
-        LIMIT :limit
-        """
 
-        sql = text(sql_query)
+        sql = text(base_sql)
         result = db.execute(sql, params).fetchall()
-
-        execution_time = time.time() - start_time
-        logger.info(f"Full-text search execution time: {execution_time:.4f} seconds")
-
         return [row[0] for row in result]
 
     def vector_search(
@@ -461,8 +509,10 @@ class PostgreSQLSearchProvider(SearchProvider):
         """
 
         params = {
-            "embedding": str(embeddings),  # Convert to string for PostgreSQL vector type
-            "limit": limit
+            "embedding": str(
+                embeddings
+            ),  # Convert to string for PostgreSQL vector type
+            "limit": limit,
         }
 
         if library_ids:
@@ -514,13 +564,13 @@ class PostgreSQLSearchProvider(SearchProvider):
         end: Optional[int] = None,
         app_names: Optional[List[str]] = None,
     ) -> List[int]:
-        with logfire.span("full_text_search"):
+        with logfire.span("full_text_search {query=}", query=query):
             fts_results = self.full_text_search(
                 query, db, limit, library_ids, start, end, app_names
             )
         logger.info(f"Full-text search obtained {len(fts_results)} results")
 
-        with logfire.span("vector_search"):
+        with logfire.span("vector_search {query=}", query=query):
             embeddings = get_embeddings([query])
             if embeddings and embeddings[0]:
                 vec_results = self.vector_search(
@@ -530,7 +580,7 @@ class PostgreSQLSearchProvider(SearchProvider):
             else:
                 vec_results = []
 
-        with logfire.span("reciprocal_rank_fusion"):
+        with logfire.span("reciprocal_rank_fusion {query=}", query=query):
             combined_results = self.reciprocal_rank_fusion(fts_results, vec_results)
 
         sorted_ids = [id for id, _ in combined_results][:limit]
@@ -549,8 +599,8 @@ class PostgreSQLSearchProvider(SearchProvider):
         app_names: Optional[List[str]] = None,
     ) -> dict:
         """Get statistics for search results including date range and app name counts."""
-        MIN_SAMPLE_SIZE = 2048
-        MAX_SAMPLE_SIZE = 4096
+        MIN_SAMPLE_SIZE = 1024
+        MAX_SAMPLE_SIZE = 2048
 
         with logfire.span(
             "full_text_search in stats {query=} {limit=}",
@@ -779,7 +829,7 @@ class SqliteSearchProvider(SearchProvider):
                 if entity_last_scan > vec_timestamp:
                     needs_index.append(entity)
 
-            logger.info(
+            logfire.info(
                 f"Entities needing full indexing: {len(needs_index)}/{len(entity_ids)}"
             )
 
