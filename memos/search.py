@@ -429,14 +429,10 @@ class PostgreSQLSearchProvider(SearchProvider):
         base_sql = """
         WITH search_results AS (
             SELECT e.id,
-                ts_rank_cd(f.search_vector, websearch_to_tsquery('simple', :query)) as exact_rank,
-                ts_rank_cd(f.search_vector, to_tsquery('simple', :prefix_query)) as prefix_rank
+                ts_rank_cd(f.search_vector, websearch_to_tsquery('simple', :query)) as rank
             FROM entities_fts f
             JOIN entities e ON e.id = f.id
-            WHERE (
-                f.search_vector @@ websearch_to_tsquery('simple', :query)
-                OR f.search_vector @@ to_tsquery('simple', :prefix_query)
-            )
+            WHERE f.search_vector @@ websearch_to_tsquery('simple', :query)
             AND e.file_type_group = 'image'
         """
 
@@ -464,12 +460,9 @@ class PostgreSQLSearchProvider(SearchProvider):
         if where_clauses:
             base_sql += " AND " + " AND ".join(where_clauses)
 
-        base_sql += ")\nSELECT id FROM search_results ORDER BY GREATEST(exact_rank, prefix_rank) DESC LIMIT :limit"
+        base_sql += ")\nSELECT id FROM search_results ORDER BY rank DESC LIMIT :limit"
 
-        # 处理前缀搜索
-        prefix_terms = " | ".join(f"{term}:*" for term in query.split())
-
-        params = {"query": query, "prefix_query": prefix_terms, "limit": limit}
+        params = {"query": query, "limit": limit}
 
         if library_ids:
             params["library_ids"] = library_ids
@@ -482,9 +475,8 @@ class PostgreSQLSearchProvider(SearchProvider):
             params["app_names"] = app_names
 
         logfire.info(
-            "full text search {query=} {prefix_query=} {limit=}",
+            "full text search {query=} {limit=}",
             query=query,
-            prefix_query=prefix_terms,
             limit=limit,
         )
 
