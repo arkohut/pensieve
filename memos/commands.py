@@ -664,5 +664,135 @@ def version():
     )
 
 
+@app.command("migrate")
+def migrate_sqlite_to_pg(
+    sqlite_url: str = typer.Option(..., "--sqlite-url", help="SQLite database URL (e.g., sqlite:///path/to/db.sqlite)"),
+    pg_url: str = typer.Option(..., "--pg-url", help="PostgreSQL database URL (e.g., postgresql://user:pass@localhost/dbname)"),
+    batch_size: int = typer.Option(1000, "--batch-size", "-bs", help="Number of records to migrate in each batch"),
+):
+    """Migrate data from SQLite to PostgreSQL (excluding FTS and vector tables)"""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy import func
+    from sqlalchemy.sql import text
+    from .models import (
+        LibraryModel, FolderModel, EntityModel, TagModel, 
+        EntityTagModel, EntityMetadataModel, PluginModel,
+        LibraryPluginModel, EntityPluginStatusModel
+    )
+
+    # Reorder tables to handle foreign key dependencies
+    TABLES_TO_MIGRATE = [
+        # Base tables (no foreign key dependencies)
+        LibraryModel,
+        PluginModel,
+        TagModel,
+        
+        # Tables with single foreign key dependencies
+        LibraryPluginModel,  # depends on libraries and plugins
+        FolderModel,         # depends on libraries
+        EntityModel,         # depends on libraries and folders
+        
+        # Tables with multiple foreign key dependencies
+        EntityTagModel,      # depends on entities and tags
+        EntityMetadataModel, # depends on entities
+        EntityPluginStatusModel, # depends on entities and plugins
+    ]
+
+    def copy_instance(obj):
+        """Create a copy of an object without SQLAlchemy state"""
+        mapper = obj.__mapper__
+        new_instance = obj.__class__()
+        
+        for column in mapper.columns:
+            setattr(new_instance, column.key, getattr(obj, column.key))
+        
+        return new_instance
+
+    def update_sequence(session, table):
+        """Update PostgreSQL sequence after data migration"""
+        table_name = table.__tablename__
+        seq_name = f"{table_name}_id_seq"
+        
+        # Get the maximum ID from the table
+        max_id = session.query(func.max(table.id)).scalar() or 0
+        
+        # Set the sequence to the next value after max_id
+        session.execute(text(f"SELECT setval('{seq_name}', {max_id}, true)"))
+        session.commit()
+
+    try:
+        # Create database connections
+        sqlite_engine = create_engine(sqlite_url)
+        pg_engine = create_engine(pg_url)
+        
+        SQLiteSession = sessionmaker(bind=sqlite_engine)
+        PGSession = sessionmaker(bind=pg_engine)
+        
+        sqlite_session = SQLiteSession()
+        pg_session = PGSession()
+
+        # Clean up existing data in PostgreSQL
+        typer.echo("Cleaning up existing data in PostgreSQL...")
+        for model in reversed(TABLES_TO_MIGRATE):
+            typer.echo(f"Deleting data from {model.__tablename__}...")
+            pg_session.query(model).delete()
+        pg_session.commit()
+        typer.echo("Cleanup completed.")
+
+        # Migrate each table
+        for model in TABLES_TO_MIGRATE:
+            typer.echo(f"Migrating {model.__tablename__}...")
+            
+            # Get total count
+            total_count = sqlite_session.query(model).count()
+            if total_count == 0:
+                typer.echo(f"No data found in {model.__tablename__}, skipping...")
+                continue
+
+            # Process in batches
+            processed = 0
+            with typer.progressbar(
+                length=total_count,
+                label=f"Migrating {model.__tablename__}"
+            ) as progress:
+                while processed < total_count:
+                    # Get batch of records from source
+                    batch = (
+                        sqlite_session.query(model)
+                        .offset(processed)
+                        .limit(batch_size)
+                        .all()
+                    )
+                    
+                    # Copy and insert records
+                    for record in batch:
+                        new_record = copy_instance(record)
+                        pg_session.add(new_record)
+                    
+                    # Commit batch
+                    pg_session.commit()
+                    
+                    # Update progress
+                    processed += len(batch)
+                    progress.update(len(batch))
+
+            # Update sequence after migrating each table
+            update_sequence(pg_session, model)
+            
+            typer.echo(f"Successfully migrated {processed} records from {model.__tablename__}")
+
+        typer.echo("Migration completed successfully!")
+        
+    except Exception as e:
+        pg_session.rollback()
+        typer.echo(f"Error during migration: {str(e)}", err=True)
+        raise typer.Exit(code=1)
+    
+    finally:
+        sqlite_session.close()
+        pg_session.close()
+
+
 if __name__ == "__main__":
     app()
