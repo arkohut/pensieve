@@ -24,7 +24,10 @@ import psutil
 import signal
 from tabulate import tabulate
 
-from memos import __version__
+try:
+    from memos import __version__
+except ImportError:
+    __version__ = "Unknown"
 
 
 app = typer.Typer(context_settings={"help_option_names": ["-h", "--help"]})
