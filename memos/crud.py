@@ -1,7 +1,7 @@
 import logfire
 from typing import List, Tuple, Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import func, text
+from sqlalchemy import func, text, BigInteger
 from .schemas import (
     Library,
     NewLibraryParam,
@@ -509,10 +509,10 @@ def list_entities(
         query = query.filter(EntityModel.library_id.in_(library_ids))
 
     if start is not None and end is not None:
+        # Convert timestamp to Unix timestamp using EXTRACT(EPOCH FROM timestamp)
+        # This works in both PostgreSQL and SQLite (SQLite will use its own implementation)
         query = query.filter(
-            func.strftime("%s", EntityModel.file_created_at, "utc").between(
-                str(start), str(end)
-            )
+            func.extract('epoch', EntityModel.file_created_at).cast(BigInteger).between(start, end)
         )
 
     entities = query.order_by(EntityModel.file_created_at.desc()).limit(limit).all()
