@@ -51,8 +51,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-postgresql = ["psycopg2-binary"]
-jieba = ["jieba"]
+postgresql = [
+    "psycopg2-binary",
+    "jieba",
+]
 
 [project.urls]
 Homepage = "https://github.com/arkohut/pensieve"
