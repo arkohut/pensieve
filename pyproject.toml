@@ -48,12 +48,12 @@ dependencies = [
     "alembic",
     "logfire[sqlalchemy]",
     "logfire[fastapi]",
+    "jieba",
 ]
 
 [project.optional-dependencies]
 postgresql = [
     "psycopg2-binary",
-    "jieba",
 ]
 
 [project.urls]
