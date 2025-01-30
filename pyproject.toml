@@ -50,6 +50,10 @@ dependencies = [
     "logfire[fastapi]",
 ]
 
+[project.optional-dependencies]
+postgresql = ["psycopg2-binary"]
+jieba = ["jieba"]
+
 [project.urls]
 Homepage = "https://github.com/arkohut/pensieve"
 

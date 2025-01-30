@@ -11,20 +11,19 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
-from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from typing import List, Annotated
 from pathlib import Path
-import asyncio
 import json
 import cv2
 from PIL import Image
 import logging
 
-from .config import get_database_path, settings
+from .config import settings
 from memos.plugins.vlm import main as vlm_main
 from memos.plugins.ocr import main as ocr_main
 from . import crud
+from .search import create_search_provider
 from .schemas import (
     Library,
     Folder,
@@ -52,7 +51,7 @@ from .schemas import (
 )
 from .read_metadata import read_metadata
 from .logging_config import LOGGING_CONFIG
-from .models import load_extension
+from .databases.initializers import create_db_initializer
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -66,18 +65,15 @@ mimetypes.add_type("application/javascript", ".js")
 
 app = FastAPI()
 
-logfire.configure(send_to_logfire='if-token-present')
+logfire.configure(send_to_logfire="if-token-present")
 logfire.instrument_fastapi(app, excluded_urls=["/files"])
 
-engine = create_engine(
-    f"sqlite:///{get_database_path()}",
-    pool_size=10,
-    max_overflow=20,
-    pool_timeout=60,
-    pool_recycle=3600,
-    connect_args={"timeout": 60},
-)
-event.listen(engine, "connect", load_extension)
+# Create database engine and initializer
+engine, initializer = create_db_initializer(settings)
+
+# Initialize search provider based on database URL
+search_provider = create_search_provider(settings.database_url)
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 logfire.instrument_sqlalchemy(engine=engine)
@@ -161,7 +157,7 @@ def get_library_by_id(library_id: int, db: Session = Depends(get_db)):
     if library is None:
         return JSONResponse(
             content={"detail": "Library not found"},
-            status_code=status.HTTP_404_NOT_FOUND
+            status_code=status.HTTP_404_NOT_FOUND,
         )
     return library
 
@@ -189,9 +185,9 @@ def new_folders(
 
 
 async def trigger_webhooks(
-    library: Library, 
-    entity: Entity, 
-    request: Request, 
+    library: Library,
+    entity: Entity,
+    request: Request,
     plugins: List[int] = None,
     db: Session = Depends(get_db),
 ):
@@ -199,12 +195,12 @@ async def trigger_webhooks(
     async with httpx.AsyncClient() as client:
         tasks = []
         pending_plugins = crud.get_pending_plugins(entity.id, library.id, db)
-        
+
         for plugin in library.plugins:
             # Skip if specific plugins are requested and this one isn't in the list
             if plugins is not None and plugin.id not in plugins:
                 continue
-                
+
             # Skip if entity has already been processed by this plugin
             if plugin.id not in pending_plugins:
                 continue
@@ -269,7 +265,7 @@ async def new_entity(
 
     if update_index:
         with logfire.span("update entity index {entity_id=}", entity_id=entity.id):
-            crud.update_entity_index(entity.id, db)
+            search_provider.update_entity_index(entity.id, db)
 
     return entity
 
@@ -318,8 +314,8 @@ def get_entity_by_filepath(
     entity = crud.get_entity_by_filepath(filepath, db)
     if entity is None or entity.library_id != library_id:
         return JSONResponse(
-            content={"detail": "Entity not found"}, 
-            status_code=status.HTTP_404_NOT_FOUND
+            content={"detail": "Entity not found"},
+            status_code=status.HTTP_404_NOT_FOUND,
         )
     return entity
 
@@ -340,10 +336,10 @@ def get_entities_by_filepaths(
 def get_entity_by_id(entity_id: int, db: Session = Depends(get_db)):
     entity = crud.get_entity_by_id(entity_id, db)
     if entity is None:
-            return JSONResponse(
-                content={"detail": "Entity not found"},
-                status_code=status.HTTP_404_NOT_FOUND
-            )
+        return JSONResponse(
+            content={"detail": "Entity not found"},
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
     return entity
 
 
@@ -359,7 +355,7 @@ def get_entity_by_id_in_library(
     if entity is None or entity.library_id != library_id:
         return JSONResponse(
             content={"detail": "Entity not found"},
-            status_code=status.HTTP_404_NOT_FOUND
+            status_code=status.HTTP_404_NOT_FOUND,
         )
     return entity
 
@@ -394,7 +390,7 @@ async def update_entity(
         await trigger_webhooks(library, entity, request, plugins, db)
 
     if update_index:
-        crud.update_entity_index(entity.id, db)
+        search_provider.update_entity_index(entity.id, db)
 
     return entity
 
@@ -432,7 +428,7 @@ def update_index(entity_id: int, db: Session = Depends(get_db)):
             detail="Entity not found",
         )
 
-    crud.update_entity_index(entity.id, db)
+    search_provider.update_entity_index(entity.id, db)
 
 
 @app.post(
@@ -445,7 +441,7 @@ async def batch_update_index(request: BatchIndexRequest, db: Session = Depends(g
     Batch update the FTS and vector indexes for multiple entities.
     """
     try:
-        crud.batch_update_entity_indices(request.entity_ids, db)
+        search_provider.batch_update_entity_indices(request.entity_ids, db)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
@@ -665,8 +661,7 @@ async def get_file(file_path: str):
         return FileResponse(full_path)
     else:
         return JSONResponse(
-            content={"detail": "File not found"},
-            status_code=status.HTTP_404_NOT_FOUND
+            content={"detail": "File not found"}, status_code=status.HTTP_404_NOT_FOUND
         )
 
 
@@ -682,8 +677,9 @@ async def search_entities_v2(
     db: Session = Depends(get_db),
 ):
     library_ids = [int(id) for id in library_ids.split(",")] if library_ids else None
-    # Parse tags parameter
-    app_name_list = [app_name.strip() for app_name in app_names.split(",")] if app_names else None
+    app_name_list = (
+        [app_name.strip() for app_name in app_names.split(",")] if app_names else None
+    )
 
     # Use settings.facet if facet parameter is not provided
     use_facet = settings.facet if facet is None else facet
@@ -696,8 +692,8 @@ async def search_entities_v2(
             )
             stats = {}
         else:
-            # Use hybrid_search when q is not empty
-            entities, stats = crud.hybrid_search(
+            # Use search provider for both search and stats
+            entity_ids = search_provider.hybrid_search(
                 query=q,
                 db=db,
                 limit=limit,
@@ -705,7 +701,19 @@ async def search_entities_v2(
                 start=start,
                 end=end,
                 app_names=app_name_list,
-                use_facet=use_facet,
+            )
+            entities = crud.find_entities_by_ids(entity_ids, db)
+            stats = (
+                search_provider.get_search_stats(
+                    query=q,
+                    db=db,
+                    library_ids=library_ids,
+                    start=start,
+                    end=end,
+                    app_names=app_name_list,
+                )
+                if use_facet
+                else {}
             )
 
         # Convert Entity list to SearchHit list
@@ -765,16 +773,18 @@ async def search_entities_v2(
                     )
                 )
 
-        facet_counts = [
-            Facet(
-                field_name="app_names",
-                counts=app_name_facet_counts,
-                sampled=False,
-                stats=FacetStats(total_values=len(app_name_facet_counts)),
-            )
-        ] if app_name_facet_counts else []
-
-        logging.info(app_name_list)
+        facet_counts = (
+            [
+                Facet(
+                    field_name="app_names",
+                    counts=app_name_facet_counts,
+                    sampled=False,
+                    stats=FacetStats(total_values=len(app_name_facet_counts)),
+                )
+            ]
+            if app_name_facet_counts
+            else []
+        )
 
         # Build SearchResult
         search_result = SearchResult(
@@ -784,7 +794,11 @@ async def search_entities_v2(
             out_of=len(hits),
             page=1,
             request_params=RequestParams(
-                collection_name="entities", first_q=q, per_page=limit, q=q, app_names=app_name_list
+                collection_name="entities",
+                first_q=q,
+                per_page=limit,
+                q=q,
+                app_names=app_name_list,
             ),
             search_cutoff=False,
             search_time_ms=0,
@@ -846,7 +860,7 @@ def get_entity_context(
 
 
 def run_server():
-    logging.info("Database path: %s", get_database_path())
+    logging.info("Database path: %s", settings.database_url)
     logging.info("VLM plugin enabled: %s", settings.vlm)
     logging.info("OCR plugin enabled: %s", settings.ocr)
 

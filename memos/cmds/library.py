@@ -383,7 +383,7 @@ def reindex(
 ):
     print(f"Reindexing library {library_id}")
 
-    from memos.models import recreate_fts_and_vec_tables
+    from memos.databases.initializers import recreate_fts_and_vec_tables
 
     # Get the library
     response = httpx.get(f"{BASE_URL}/libraries/{library_id}")
@@ -404,7 +404,7 @@ def reindex(
 
     if force:
         print("Force flag is set. Recreating FTS and vector tables...")
-        if not recreate_fts_and_vec_tables():
+        if not recreate_fts_and_vec_tables(settings):
             return
         print("FTS and vector tables have been recreated.")
 

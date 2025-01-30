@@ -1,7 +1,7 @@
 from pathlib import Path
 from alembic.config import Config
 from alembic import command
-from .config import get_database_path
+from .config import settings
 
 
 def run_migrations():
@@ -13,7 +13,7 @@ def run_migrations():
     # Create an Alembic configuration
     alembic_cfg = Config(str(migrations_dir / "alembic.ini"))
     alembic_cfg.set_main_option("script_location", str(alembic_dir))
-    alembic_cfg.set_main_option("sqlalchemy.url", f"sqlite:///{get_database_path()}")
+    alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
 
     # Run the migration
     command.upgrade(alembic_cfg, "head")
