@@ -6,9 +6,9 @@ Create Date: ${create_date}
 
 """
 from typing import Sequence, Union
-
 from alembic import op
 import sqlalchemy as sa
+from urllib.parse import urlparse
 ${imports if imports else ""}
 
 # revision identifiers, used by Alembic.
@@ -17,6 +17,10 @@ down_revision: Union[str, None] = ${repr(down_revision)}
 branch_labels: Union[str, Sequence[str], None] = ${repr(branch_labels)}
 depends_on: Union[str, Sequence[str], None] = ${repr(depends_on)}
 
+def get_db_type():
+    config = op.get_context().config
+    url = config.get_main_option("sqlalchemy.url")
+    return urlparse(url).scheme
 
 def upgrade() -> None:
     ${upgrades if upgrades else "pass"}
