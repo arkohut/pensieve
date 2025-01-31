@@ -714,6 +714,10 @@ def migrate_sqlite_to_pg(
 
     def update_sequence(session, table):
         """Update PostgreSQL sequence after data migration"""
+        # Skip sequence update for tables without id column
+        if not hasattr(table, 'id'):
+            return
+        
         table_name = table.__tablename__
         seq_name = f"{table_name}_id_seq"
         
