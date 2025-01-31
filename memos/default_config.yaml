@@ -4,7 +4,7 @@ base_dir: ~/.memos
 # Can be either:
 # 1. A file path for SQLite (relative to base_dir): database.db
 # 2. SQLite URL: sqlite:///absolute/path/to/database.db
-# 3. PostgreSQL URL: postgresql://user:password@localhost:5432/dbname
+# 3. PostgreSQL URL: postgresql://postgres:mysecretpassword@localhost:5432/postgres
 database_path: database.db
 
 default_library: screenshots
