@@ -674,7 +674,13 @@ def migrate_sqlite_to_pg(
     batch_size: int = typer.Option(1000, "--batch-size", "-bs", help="Number of records to migrate in each batch"),
 ):
     """Migrate data from SQLite to PostgreSQL (excluding FTS and vector tables)"""
-    from sqlalchemy import create_engine
+    # Ask for user confirmation
+    typer.echo("WARNING: This will completely erase all data in the PostgreSQL database.")
+    if not typer.confirm("Do you want to continue?"):
+        typer.echo("Migration cancelled.")
+        raise typer.Exit(code=0)
+
+    from sqlalchemy import create_engine, MetaData
     from sqlalchemy.orm import sessionmaker
     from sqlalchemy import func
     from sqlalchemy.sql import text
@@ -683,6 +689,8 @@ def migrate_sqlite_to_pg(
         EntityTagModel, EntityMetadataModel, PluginModel,
         LibraryPluginModel, EntityPluginStatusModel
     )
+    from .databases.initializers import init_database
+    from .migrations import run_migrations
 
     # Reorder tables to handle foreign key dependencies
     TABLES_TO_MIGRATE = [
@@ -733,19 +741,30 @@ def migrate_sqlite_to_pg(
         sqlite_engine = create_engine(sqlite_url)
         pg_engine = create_engine(pg_url)
         
+        # Drop all existing tables in PostgreSQL
+        typer.echo("Dropping existing tables in PostgreSQL...")
+        metadata = MetaData()
+        metadata.reflect(bind=pg_engine)
+        metadata.drop_all(bind=pg_engine)
+        
+        # Initialize PostgreSQL database from scratch
+        typer.echo("Initializing PostgreSQL database...")
+        settings.database_url = pg_url
+        db_success = init_database(settings)
+        if not db_success:
+            typer.echo("Failed to initialize PostgreSQL database.")
+            raise typer.Exit(code=1)
+        
+        # Run migrations
+        typer.echo("Running migrations...")
+        run_migrations()
+        
+        # Create sessions after initialization
         SQLiteSession = sessionmaker(bind=sqlite_engine)
         PGSession = sessionmaker(bind=pg_engine)
         
         sqlite_session = SQLiteSession()
         pg_session = PGSession()
-
-        # Clean up existing data in PostgreSQL
-        typer.echo("Cleaning up existing data in PostgreSQL...")
-        for model in reversed(TABLES_TO_MIGRATE):
-            typer.echo(f"Deleting data from {model.__tablename__}...")
-            pg_session.query(model).delete()
-        pg_session.commit()
-        typer.echo("Cleanup completed.")
 
         # Migrate each table
         for model in TABLES_TO_MIGRATE:
@@ -797,8 +816,11 @@ def migrate_sqlite_to_pg(
         raise typer.Exit(code=1)
     
     finally:
-        sqlite_session.close()
-        pg_session.close()
+        try:
+            sqlite_session.close()
+            pg_session.close()
+        except:
+            pass
 
 
 if __name__ == "__main__":
