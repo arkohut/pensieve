@@ -53,11 +53,23 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
   }
 
   ::selection {
     background-color: #b3d4fc; /* Light blue background */
     color: #000000; /* Black text */
+  }
+}
+
+@layer utilities {
+  .bg-gradient {
+    @apply bg-gray-50;
+    background-image: linear-gradient(to bottom, rgb(249, 250, 251), rgb(243, 244, 246));
+  }
+
+  :global(.dark) .bg-gradient {
+    @apply bg-gray-900;
+    background-image: linear-gradient(to bottom, rgb(31, 41, 55), rgb(17, 24, 39));
   }
 }
