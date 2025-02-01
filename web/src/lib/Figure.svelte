@@ -139,17 +139,17 @@
 	<div
 		class="relative mx-auto border w-11/12 max-w-[95vw] h-[95vh] shadow-lg rounded-md bg-white group"
 	>
-		<div class="absolute inset-0 p-10">
+		<div class="absolute inset-0 px-10 py-4">
 			<!-- Button container -->
 			<div class="group absolute inset-x-0 h-full">
 				<button
-					class="absolute p-2 left-2 top-1/2 transform -translate-y-1/2 rounded-full hover:bg-gray-100 bg-white/80 opacity-0 group-hover:opacity-100 flex z-[51] transition-all duration-200"
+					class="absolute p-2 left-2 top-1/2 transform -translate-y-1/2 rounded-full hover:bg-gray-100 bg-white/80 border opacity-0 group-hover:opacity-100 flex z-[51] transition-all duration-200"
 					on:click={onPrevious}
 				>
 					<ChevronLeft size={24} class="text-indigo-600" />
 				</button>
 				<button
-					class="absolute p-2 right-2 top-1/2 transform -translate-y-1/2 rounded-full hover:bg-gray-100 bg-white/80 opacity-0 group-hover:opacity-100 flex z-[51] transition-all duration-200"
+					class="absolute p-2 right-2 top-1/2 transform -translate-y-1/2 rounded-full hover:bg-gray-100 bg-white/80 border opacity-0 group-hover:opacity-100 flex z-[51] transition-all duration-200"
 					on:click={onNext}
 				>
 					<ChevronRight size={24} class="text-indigo-600" />
@@ -159,7 +159,7 @@
 			<div class="flex flex-col md:flex-row h-full relative">
 				<!-- Image container -->
 				<div class="flex-none {showDetails ? 'w-full md:w-1/2' : 'w-full'} flex flex-col h-full">
-					<div class="mb-4 relative z-[52]">
+					<div class="mb-2 relative z-[52]">
 						<div class="flex justify-between items-center">
 							<div class="flex-1" />
 							<div class="flex items-center text-lg leading-tight font-medium text-black {showDetails ? 'w-full' : 'w-4/5'}">
@@ -168,6 +168,12 @@
 										<div class="flex items-center space-x-2 min-w-0">
 											<LucideIcon name={translateAppName(app_name) || 'Image'} size={24} />
 											<p class="truncate">{title}</p>
+											{#if !showDetails}
+											<span class="inline-flex items-center text-sm text-gray-500 font-mono pl-4">
+												<FileClock size={16} class="mr-1 text-gray-500" />
+												{new Date(created_at).toLocaleString()}
+											</span>
+											{/if}
 										</div>
 									</div>
 									<button
@@ -229,24 +235,15 @@
 						</div>
 					{/if}
 
-					<div class="relative flex-1 overflow-hidden flex items-center justify-center">
+					<div class="relative flex-1 overflow-hidden flex items-center justify-center  {showDetails ? "mr-2" : ""}">
 						<a href={video} target="_blank" rel="noopener noreferrer" class="block w-full h-full flex items-center justify-center">
 							<img
-								class="w-full h-full object-contain rounded-lg drop-shadow-md"
+								class="w-full object-contain rounded-lg drop-shadow-md"
 								src={image}
 								alt={title}
 							/>
 						</a>
 					</div>
-
-					{#if !showDetails}
-						<div class="mt-4 text-center">
-							<span class="inline-flex items-center text-sm text-gray-500 font-mono">
-								<FileClock size={16} class="mr-1 text-indigo-600" />
-								{new Date(created_at).toLocaleString()}
-							</span>
-						</div>
-					{/if}
 				</div>
 				<!-- Description container -->
 				{#if showDetails}
