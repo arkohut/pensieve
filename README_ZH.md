@@ -96,6 +96,132 @@ memos start
 
 ![mac permission](docs/images/mac-security-permission.jpg)
 
+## 🚀 使用 PostgreSQL 数据库
+
+从 `v0.25.4` 版本开始，Pensieve 开始完整支持使用 PostgreSQL 作为后端数据库。相比 SQLite，PostgreSQL 在数据规模较大时依然可以获取非常好的检索性能。
+
+如果你的截图数据规模较大，或者对检索响应速度有较高要求，强烈建议使用 PostgreSQL 作为后端数据库。
+
+### 1. 使用 Docker 启动 PostgreSQL
+
+由于 Pensieve 使用了向量检索功能，因此需要使用带有 pgvector 扩展的 PostgreSQL。我们推荐使用官方的 pgvector 镜像：
+
+在 Linux/macOS 下：
+
+```sh
+docker run -d \
+    --name pensieve-pgvector \
+    --restart always \
+    -p 5432:5432 \
+    -e POSTGRES_PASSWORD=mysecretpassword \
+    -v pensieve-pgdata:/var/lib/postgresql/data \
+    pgvector/pgvector:pg17
+```
+
+在 Windows PowerShell 下：
+
+```powershell
+docker run -d `
+    --name pensieve-pgvector `
+    --restart always `
+    -p 5432:5432 `
+    -e POSTGRES_PASSWORD=mysecretpassword `
+    -v pensieve-pgdata:/var/lib/postgresql/data `
+    pgvector/pgvector:pg17
+```
+
+在 Windows 传统命令提示符下：
+
+```cmd
+docker run -d ^
+    --name pensieve-pgvector ^
+    --restart always ^
+    -p 5432:5432 ^
+    -e POSTGRES_PASSWORD=mysecretpassword ^
+    -v pensieve-pgdata:/var/lib/postgresql/data ^
+    pgvector/pgvector:pg17
+```
+
+这个命令会：
+
+- 创建一个名为 `pensieve-pgvector` 的容器
+- 设置 PostgreSQL 的密码为 `mysecretpassword`
+- 将容器的 5432 端口映射到主机的 5432 端口
+- 使用支持向量检索的 PostgreSQL 17 版本
+- 创建一个名为 `pensieve-pgdata` 的数据卷来持久化存储数据
+- 设置容器在 Docker 重启后自动启动
+
+> 注意：如果你使用的是 Windows，需要先确保 Docker Desktop 已经安装并运行。你可以从 [Docker 官网](https://www.docker.com/products/docker-desktop/) 下载并安装 Docker Desktop。
+
+### 2. 配置 Pensieve 使用 PostgreSQL
+
+修改 `~/.memos/config.yaml` 文件中的数据库配置：
+
+```yaml
+# 将原来的 SQLite 配置：
+database_path: database.db
+
+# 改为 PostgreSQL 配置：
+database_path: postgresql://postgres:mysecretpassword@localhost:5432/postgres
+```
+
+配置说明：
+
+- `postgres:mysecretpassword`：数据库用户名和密码
+- `localhost:5432`：PostgreSQL 服务器地址和端口
+- `postgres`：数据库名称
+
+### 3. 从 SQLite 迁移到 PostgreSQL
+
+如果你之前使用的是 SQLite，想要迁移到 PostgreSQL，Pensieve 提供了专门的迁移命令：
+
+```sh
+# 停止 Pensieve 服务
+memos stop
+
+# 执行迁移
+memos migrate \
+  --sqlite-url "sqlite:///absolute/path/to/your/database.db" \
+  --pg-url "postgresql://postgres:mysecretpassword@localhost:5432/postgres"
+
+# 修改配置文件指向 PostgreSQL
+# 编辑 ~/.memos/config.yaml，更新 database_path
+
+# 重新启动服务
+memos start
+```
+
+注意事项：
+
+1. 迁移前请确保 PostgreSQL 服务正常运行
+2. 迁移过程会完全清空目标 PostgreSQL 数据库，请确保数据库中没有重要数据
+3. 迁移不会影响原有的 SQLite 数据库
+4. 迁移过程可能需要一些时间，取决于数据量的大小
+5. 迁移完成后，你可以选择备份并删除原来的 SQLite 数据库文件
+
+下面分别是 Mac 和 Windows 的迁移命令：
+
+```sh
+# Mac
+memos migrate \
+  --sqlite-url "sqlite:///~/memos/database.db" \
+  --pg-url "postgresql://postgres:mysecretpassword@localhost:5432/postgres"
+```
+
+```powershell
+# Windows PowerShell
+memos migrate `
+  --sqlite-url "sqlite:///$env:USERPROFILE/.memos/database.db" `
+  --pg-url "postgresql://postgres:mysecretpassword@localhost:5432/postgres"
+```
+
+```cmd
+# Windows Command Line
+memos migrate ^
+  --sqlite-url "sqlite:///%USERPROFILE%/.memos/database.db" ^
+  --pg-url "postgresql://postgres:mysecretpassword@localhost:5432/postgres"
+```
+
 ## 使用指南
 
 ### 使用合适的 embedding 模型
