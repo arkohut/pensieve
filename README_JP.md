@@ -26,6 +26,12 @@ Pensieveはプライバシーに焦点を当てたパッシブレコーディン
 - 💻 MacとWindowsをサポート（Linuxのサポートは開発中）
 - 🔌 プラグインを通じて機能を拡張可能
 
+## 📰 最新ニュース
+
+- **PostgreSQLサポート**: バージョン `v0.25.4` から、PensieveはバックエンドデータベースとしてPostgreSQLの完全なサポートを開始しました。この強化により、大規模なデータ量でも優れた検索性能が得られます。スクリーンショットデータが多い場合や、高速な検索が必要な場合は、PostgreSQLの使用を強くお勧めします。
+
+  PostgreSQLのセットアップに関する詳細は、[PostgreSQLデータベースの使用](#-postgresqlデータベースの使用)セクションを参照してください。
+
 ## クイックスタート
 
 ![memos-installation](docs/images/memos-installation.gif)

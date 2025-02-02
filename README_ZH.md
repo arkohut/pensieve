@@ -27,6 +27,12 @@ Pensieve 是一个专注于隐私的被动记录项目。它可以自动记录�
 - 💻 支持 Mac 和 Windows 系统（Linux 支持正在开发中）
 - 🔌 支持通过插件扩展出更多数据处理能力
 
+## 📰 最新动态
+
+- **PostgreSQL 支持**: 从 `v0.25.4` 版本开始，Pensieve 现在完全支持使用 PostgreSQL 作为后端数据库。此增强功能允许在大数据量的情况下提高检索性能。如果您的截图数据量大或需要高速检索，我们强烈建议使用 PostgreSQL。
+
+  有关设置 PostgreSQL 的更多详细信息，请参阅[使用 PostgreSQL 数据库](#-使用-postgresql-数据库)部分。
+
 ## 快速开始
 
 ![memos-installation](docs/images/memos-installation.gif)

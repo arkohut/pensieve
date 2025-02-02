@@ -26,6 +26,12 @@ This project draws heavily from two other projects: one called [Rewind](https://
 - 💻 Supports Mac and Windows (Linux support is in development)
 - 🔌 Extensible functionality through plugins
 
+## 📰 Latest News
+
+- **PostgreSQL Support**: Starting from version `v0.25.4`, Pensieve now fully supports using PostgreSQL as the backend database. This enhancement allows for improved retrieval performance, especially with large data volumes. If you have extensive screenshot data or require high-speed retrieval, we strongly recommend using PostgreSQL.
+
+  For more details on setting up PostgreSQL, please refer to the [Using PostgreSQL Database](#-using-postgresql-database) section.
+
 ## Quick Start
 
 ![memos-installation](docs/images/memos-installation.gif)
@@ -353,7 +359,7 @@ This command will scan and index all recorded screenshots. Note that depending o
 
 Pensieve dynamically adjusts the image processing interval based on the speed of screenshot generation and the speed of processing individual images. In environments without NVIDIA GPUs, it may be challenging to ensure that image processing keeps up with the rate of screenshot generation. To address this, Pensieve processes images on a sampled basis.
 
-To prevent excessive system load, Pensieve’s default sampling strategy is intentionally conservative. However, this conservative approach might limit the performance of devices with higher computational capacity. To provide more flexibility, additional control options have been introduced in `~/.memos/config.yaml`, allowing users to configure the system for either more conservative or more aggressive processing strategies.
+To prevent excessive system load, Pensieve's default sampling strategy is intentionally conservative. However, this conservative approach might limit the performance of devices with higher computational capacity. To provide more flexibility, additional control options have been introduced in `~/.memos/config.yaml`, allowing users to configure the system for either more conservative or more aggressive processing strategies.
 
 ```yaml
 watch:
