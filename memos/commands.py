@@ -720,9 +720,20 @@ def migrate_sqlite_to_pg(
         
         return new_instance
 
+    def reset_sequence(session, table):
+        """Reset PostgreSQL sequence before inserting data"""
+        if not hasattr(table, 'id'):
+            return
+        
+        table_name = table.__tablename__
+        seq_name = f"{table_name}_id_seq"
+        
+        # Reset sequence to 1
+        session.execute(text(f"ALTER SEQUENCE {seq_name} RESTART WITH 1"))
+        session.commit()
+
     def update_sequence(session, table):
         """Update PostgreSQL sequence after data migration"""
-        # Skip sequence update for tables without id column
         if not hasattr(table, 'id'):
             return
         
@@ -749,67 +760,94 @@ def migrate_sqlite_to_pg(
         
         # Initialize PostgreSQL database from scratch
         typer.echo("Initializing PostgreSQL database...")
-        settings.database_url = pg_url
-        db_success = init_database(settings)
-        if not db_success:
-            typer.echo("Failed to initialize PostgreSQL database.")
-            raise typer.Exit(code=1)
+        # Temporarily modify settings.database_path instead of database_url
+        original_database_path = settings.database_path
+        settings.database_path = pg_url
         
-        # Run migrations
-        typer.echo("Running migrations...")
-        run_migrations()
-        
-        # Create sessions after initialization
-        SQLiteSession = sessionmaker(bind=sqlite_engine)
-        PGSession = sessionmaker(bind=pg_engine)
-        
-        sqlite_session = SQLiteSession()
-        pg_session = PGSession()
-
-        # Migrate each table
-        for model in TABLES_TO_MIGRATE:
-            typer.echo(f"Migrating {model.__tablename__}...")
+        try:
+            db_success = init_database(settings)
+            if not db_success:
+                typer.echo("Failed to initialize PostgreSQL database.")
+                raise typer.Exit(code=1)
             
-            # Get total count
-            total_count = sqlite_session.query(model).count()
-            if total_count == 0:
-                typer.echo(f"No data found in {model.__tablename__}, skipping...")
-                continue
-
-            # Process in batches
-            processed = 0
-            with typer.progressbar(
-                length=total_count,
-                label=f"Migrating {model.__tablename__}"
-            ) as progress:
-                while processed < total_count:
-                    # Get batch of records from source
-                    batch = (
-                        sqlite_session.query(model)
-                        .offset(processed)
-                        .limit(batch_size)
-                        .all()
-                    )
-                    
-                    # Copy and insert records
-                    for record in batch:
-                        new_record = copy_instance(record)
-                        pg_session.add(new_record)
-                    
-                    # Commit batch
-                    pg_session.commit()
-                    
-                    # Update progress
-                    processed += len(batch)
-                    progress.update(len(batch))
-
-            # Update sequence after migrating each table
-            update_sequence(pg_session, model)
+            # Run migrations
+            typer.echo("Running migrations...")
+            run_migrations()
             
-            typer.echo(f"Successfully migrated {processed} records from {model.__tablename__}")
+            # Create sessions after initialization
+            SQLiteSession = sessionmaker(bind=sqlite_engine)
+            PGSession = sessionmaker(bind=pg_engine)
+            
+            sqlite_session = SQLiteSession()
+            pg_session = PGSession()
 
-        typer.echo("Migration completed successfully!")
-        
+
+            # Clear any default data created during initialization
+            typer.echo("Clearing initialization data...")
+            for model in reversed(TABLES_TO_MIGRATE):
+                pg_session.query(model).delete()
+            pg_session.commit()
+
+            # Find the longest table name for alignment
+            max_name_length = max(len(model.__tablename__) for model in TABLES_TO_MIGRATE)
+
+            # Migrate each table
+            for model in TABLES_TO_MIGRATE:
+                table_name = model.__tablename__
+                typer.echo(f"Migrating {table_name:<{max_name_length}}...")
+                
+                # Reset sequence before migration
+                reset_sequence(pg_session, model)
+                
+                # Get total count
+                total_count = sqlite_session.query(model).count()
+                if total_count == 0:
+                    typer.echo(f"No data found in {table_name:<{max_name_length}}, skipping...")
+                    continue
+
+                # Process in batches
+                processed = 0
+                with typer.progressbar(
+                    length=total_count,
+                    label=f"Migrating {table_name:<{max_name_length}}"
+                ) as progress:
+                    while processed < total_count:
+                        # Get batch of records from source
+                        batch = (
+                            sqlite_session.query(model)
+                            .offset(processed)
+                            .limit(batch_size)
+                            .all()
+                        )
+                        
+                        try:
+                            # Copy and insert records
+                            for record in batch:
+                                new_record = copy_instance(record)
+                                pg_session.add(new_record)
+                            
+                            # Commit batch
+                            pg_session.commit()
+                        except Exception as e:
+                            pg_session.rollback()
+                            typer.echo(f"Error migrating batch in {table_name}: {str(e)}")
+                            raise
+                        
+                        # Update progress
+                        processed += len(batch)
+                        progress.update(len(batch))
+
+                # Update sequence after migrating each table
+                update_sequence(pg_session, model)
+                
+                typer.echo(f"Successfully migrated {processed} records from {table_name:<{max_name_length}}")
+
+            typer.echo("Migration completed successfully!")
+            
+        finally:
+            # Restore original database path
+            settings.database_path = original_database_path
+
     except Exception as e:
         pg_session.rollback()
         typer.echo(f"Error during migration: {str(e)}", err=True)
