@@ -93,6 +93,132 @@ memos start
 
 Macでは、Pensieveはスクリーンレコーディングの権限が必要です。プログラムが起動すると、Macはスクリーンレコーディングの権限を求めるプロンプトを表示します。許可してください。
 
+## 🚀 PostgreSQLデータベースの使用
+
+バージョン `v0.25.4` から、PensieveはバックエンドデータベースとしてPostgreSQLの完全なサポートを開始しました。SQLiteと比較して、PostgreSQLは大規模なデータ量でも優れた検索性能を維持できます。
+
+スクリーンショットデータが大きい場合や、高速な検索応答速度が必要な場合は、バックエンドデータベースとしてPostgreSQLを使用することを強くお勧めします。
+
+### 1. DockerでPostgreSQLを起動
+
+Pensieveはベクトル検索機能を使用するため、pgvector拡張機能を備えたPostgreSQLが必要です。公式のpgvectorイメージを使用することをお勧めします：
+
+Linux/macOSの場合：
+
+```sh
+docker run -d \
+    --name pensieve-pgvector \
+    --restart always \
+    -p 5432:5432 \
+    -e POSTGRES_PASSWORD=mysecretpassword \
+    -v pensieve-pgdata:/var/lib/postgresql/data \
+    pgvector/pgvector:pg17
+```
+
+Windows PowerShellの場合：
+
+```powershell
+docker run -d `
+    --name pensieve-pgvector `
+    --restart always `
+    -p 5432:5432 `
+    -e POSTGRES_PASSWORD=mysecretpassword `
+    -v pensieve-pgdata:/var/lib/postgresql/data `
+    pgvector/pgvector:pg17
+```
+
+Windowsコマンドプロンプトの場合：
+
+```cmd
+docker run -d ^
+    --name pensieve-pgvector ^
+    --restart always ^
+    -p 5432:5432 ^
+    -e POSTGRES_PASSWORD=mysecretpassword ^
+    -v pensieve-pgdata:/var/lib/postgresql/data ^
+    pgvector/pgvector:pg17
+```
+
+このコマンドは次のことを行います：
+
+- `pensieve-pgvector`という名前のコンテナを作成
+- PostgreSQLのパスワードを`mysecretpassword`に設定
+- コンテナのポート5432をホストのポート5432にマッピング
+- ベクトル検索サポートを備えたPostgreSQLバージョン17を使用
+- 永続的なデータストレージのために`pensieve-pgdata`という名前のデータボリュームを作成
+- Docker再起動後にコンテナを自動的に起動するように設定
+
+> 注意：Windowsを使用している場合は、Docker Desktopがインストールされて実行されていることを確認してください。Docker Desktopは[Dockerのウェブサイト](https://www.docker.com/products/docker-desktop/)からダウンロードしてインストールできます。
+
+### 2. PensieveをPostgreSQLで使用するように設定
+
+`~/.memos/config.yaml`ファイルのデータベース設定を変更します：
+
+```yaml
+# 元のSQLite設定を変更：
+database_path: database.db
+
+# PostgreSQL設定に変更：
+database_path: postgresql://postgres:mysecretpassword@localhost:5432/postgres
+```
+
+設定の説明：
+
+- `postgres:mysecretpassword`：データベースのユーザー名とパスワード
+- `localhost:5432`：PostgreSQLサーバーのアドレスとポート
+- `postgres`：データベース名
+
+### 3. SQLiteからPostgreSQLへの移行
+
+以前にSQLiteを使用していて、PostgreSQLに移行したい場合、Pensieveは専用の移行コマンドを提供します：
+
+```sh
+# Pensieveサービスを停止
+memos stop
+
+# 移行を実行
+memos migrate \
+  --sqlite-url "sqlite:///absolute/path/to/your/database.db" \
+  --pg-url "postgresql://postgres:mysecretpassword@localhost:5432/postgres"
+
+# 設定ファイルをPostgreSQLに指すように変更
+# ~/.memos/config.yamlを編集してdatabase_pathを更新
+
+# サービスを再起動
+memos start
+```
+
+注意事項：
+
+1. 移行前にPostgreSQLサービスが実行されていることを確認
+2. 移行プロセスはターゲットPostgreSQLデータベースを完全にクリアします。重要なデータがないことを確認
+3. 移行は元のSQLiteデータベースに影響を与えません
+4. データサイズに応じて移行プロセスには時間がかかる場合があります
+5. 移行後、元のSQLiteデータベースファイルをバックアップして削除することができます
+
+以下はMacとWindowsの移行コマンドです：
+
+```sh
+# Mac
+memos migrate \
+  --sqlite-url "sqlite:///~/memos/database.db" \
+  --pg-url "postgresql://postgres:mysecretpassword@localhost:5432/postgres"
+```
+
+```powershell
+# Windows PowerShell
+memos migrate `
+  --sqlite-url "sqlite:///$env:USERPROFILE/.memos/database.db" `
+  --pg-url "postgresql://postgres:mysecretpassword@localhost:5432/postgres"
+```
+
+```cmd
+# Windowsコマンドライン
+memos migrate ^
+  --sqlite-url "sqlite:///%USERPROFILE%/.memos/database.db" ^
+  --pg-url "postgresql://postgres:mysecretpassword@localhost:5432/postgres"
+```
+
 ## ユーザーガイド
 
 ### 適切な埋め込みモデルの使用

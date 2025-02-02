@@ -93,6 +93,132 @@ Open your browser and visit `http://localhost:8839`
 
 On Mac, Pensieve needs screen recording permission. When the program starts, Mac will prompt for screen recording permission - please allow it to proceed.
 
+## 🚀 Using PostgreSQL Database
+
+Starting from version `v0.25.4`, Pensieve fully supports using PostgreSQL as the backend database. Compared to SQLite, PostgreSQL can maintain excellent retrieval performance even with large data volumes.
+
+If your screenshot data is large or you require high retrieval response speed, it is strongly recommended to use PostgreSQL as the backend database.
+
+### 1. Start PostgreSQL with Docker
+
+Since Pensieve uses vector search functionality, it requires PostgreSQL with the pgvector extension. We recommend using the official pgvector image:
+
+On Linux/macOS:
+
+```sh
+docker run -d \
+    --name pensieve-pgvector \
+    --restart always \
+    -p 5432:5432 \
+    -e POSTGRES_PASSWORD=mysecretpassword \
+    -v pensieve-pgdata:/var/lib/postgresql/data \
+    pgvector/pgvector:pg17
+```
+
+On Windows PowerShell:
+
+```powershell
+docker run -d `
+    --name pensieve-pgvector `
+    --restart always `
+    -p 5432:5432 `
+    -e POSTGRES_PASSWORD=mysecretpassword `
+    -v pensieve-pgdata:/var/lib/postgresql/data `
+    pgvector/pgvector:pg17
+```
+
+On Windows Command Prompt:
+
+```cmd
+docker run -d ^
+    --name pensieve-pgvector ^
+    --restart always ^
+    -p 5432:5432 ^
+    -e POSTGRES_PASSWORD=mysecretpassword ^
+    -v pensieve-pgdata:/var/lib/postgresql/data ^
+    pgvector/pgvector:pg17
+```
+
+This command will:
+
+- Create a container named `pensieve-pgvector`
+- Set the PostgreSQL password to `mysecretpassword`
+- Map the container's port 5432 to the host's port 5432
+- Use PostgreSQL version 17 with vector search support
+- Create a data volume named `pensieve-pgdata` for persistent data storage
+- Set the container to start automatically after Docker restarts
+
+> Note: If you are using Windows, make sure Docker Desktop is installed and running. You can download and install Docker Desktop from the [Docker website](https://www.docker.com/products/docker-desktop/).
+
+### 2. Configure Pensieve to Use PostgreSQL
+
+Modify the database configuration in the `~/.memos/config.yaml` file:
+
+```yaml
+# Change the original SQLite configuration:
+database_path: database.db
+
+# To PostgreSQL configuration:
+database_path: postgresql://postgres:mysecretpassword@localhost:5432/postgres
+```
+
+Configuration explanation:
+
+- `postgres:mysecretpassword`: Database username and password
+- `localhost:5432`: PostgreSQL server address and port
+- `postgres`: Database name
+
+### 3. Migrate from SQLite to PostgreSQL
+
+If you previously used SQLite and want to migrate to PostgreSQL, Pensieve provides a dedicated migration command:
+
+```sh
+# Stop the Pensieve service
+memos stop
+
+# Execute the migration
+memos migrate \
+  --sqlite-url "sqlite:///absolute/path/to/your/database.db" \
+  --pg-url "postgresql://postgres:mysecretpassword@localhost:5432/postgres"
+
+# Modify the configuration file to point to PostgreSQL
+# Edit ~/.memos/config.yaml to update database_path
+
+# Restart the service
+memos start
+```
+
+Notes:
+
+1. Ensure the PostgreSQL service is running before migration
+2. The migration process will completely clear the target PostgreSQL database, ensure there is no important data
+3. The migration will not affect the original SQLite database
+4. The migration process may take some time depending on the data size
+5. After migration, you can choose to backup and delete the original SQLite database file
+
+Below are the migration commands for Mac and Windows:
+
+```sh
+# Mac
+memos migrate \
+  --sqlite-url "sqlite:///~/memos/database.db" \
+  --pg-url "postgresql://postgres:mysecretpassword@localhost:5432/postgres"
+```
+
+```powershell
+# Windows PowerShell
+memos migrate `
+  --sqlite-url "sqlite:///$env:USERPROFILE/.memos/database.db" `
+  --pg-url "postgresql://postgres:mysecretpassword@localhost:5432/postgres"
+```
+
+```cmd
+# Windows Command Line
+memos migrate ^
+  --sqlite-url "sqlite:///%USERPROFILE%/.memos/database.db" ^
+  --pg-url "postgresql://postgres:mysecretpassword@localhost:5432/postgres"
+```
+
 ## User Guide
 
 ### Using the Appropriate Embedding Model
