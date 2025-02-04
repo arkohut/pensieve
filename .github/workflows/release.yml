@@ -36,15 +36,20 @@ jobs:
         # Create and build pensiev package
         python create_pensiev_toml.py
         cp pyproject_pensiev.toml pyproject.toml
-        python -m build --outdir dist_pensiev
+        mkdir pensiev_dist
+        python -m build --outdir pensiev_dist
         # Restore original pyproject.toml
         git checkout pyproject.toml
-    - uses: actions/upload-artifact@v4
+    - name: Upload memos dist
+      uses: actions/upload-artifact@v4
       with:
-        name: dist
-        path: |
-          dist
-          dist_pensiev
+        name: memos-dist
+        path: dist/*
+    - name: Upload pensiev dist
+      uses: actions/upload-artifact@v4
+      with:
+        name: pensiev-dist
+        path: pensiev_dist/*
 
   release:
     needs: build
@@ -79,12 +84,12 @@ jobs:
     steps:
     - uses: actions/download-artifact@v4
       with:
-        name: dist
+        name: memos-dist
         path: dist
     - name: Publish memos package to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
-        packages-dir: dist/
+        packages-dir: dist
 
   pypi-pensiev:
     needs: release
@@ -98,9 +103,9 @@ jobs:
     steps:
     - uses: actions/download-artifact@v4
       with:
-        name: dist
+        name: pensiev-dist
         path: dist
     - name: Publish pensiev package to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
-        packages-dir: dist_pensiev/
+        packages-dir: dist
