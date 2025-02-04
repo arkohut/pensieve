@@ -29,13 +29,17 @@ jobs:
         cd web
         npm install
         npm run build
-    - name: Build Python package
+    - name: Build Python packages
       run: |
         python -m build
+        cp pyproject_pensiev.toml pyproject.toml
+        python -m build --outdir dist_pensiev
     - uses: actions/upload-artifact@v4
       with:
         name: dist
-        path: dist
+        path: |
+          dist
+          dist_pensiev
 
   release:
     needs: build
@@ -57,19 +61,41 @@ jobs:
           draft: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  pypi:
+
+  pypi-memos:
     needs: release
-    name: Upload release to PyPI
+    name: Upload memos to PyPI
     runs-on: ubuntu-latest
     environment:
       name: pypi
       url: https://pypi.org/p/memos
     permissions:
-      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
+      id-token: write
     steps:
     - uses: actions/download-artifact@v4
       with:
         name: dist
         path: dist
-    - name: Publish package distributions to PyPI
+    - name: Publish memos package to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        packages-dir: dist/
+
+  pypi-pensiev:
+    needs: release
+    name: Upload pensiev to PyPI
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pensiev
+    permissions:
+      id-token: write
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: dist
+        path: dist
+    - name: Publish pensiev package to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        packages-dir: dist_pensiev/
