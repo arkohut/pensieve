@@ -23,7 +23,7 @@ jobs:
         node-version: '20'
     - name: Install dependencies
       run: |
-        pip install build
+        pip install build tomli tomli-w
     - name: Build web assets
       run: |
         cd web
@@ -31,9 +31,14 @@ jobs:
         npm run build
     - name: Build Python packages
       run: |
+        # Build original memos package
         python -m build
+        # Create and build pensiev package
+        python create_pensiev_toml.py
         cp pyproject_pensiev.toml pyproject.toml
         python -m build --outdir dist_pensiev
+        # Restore original pyproject.toml
+        git checkout pyproject.toml
     - uses: actions/upload-artifact@v4
       with:
         name: dist
