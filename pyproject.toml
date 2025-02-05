@@ -61,6 +61,7 @@ Homepage = "https://github.com/arkohut/pensieve"
 
 [project.scripts]
 memos = "memos.commands:app"
+pen = "memos.commands:app"
 
 [tool.setuptools.packages.find]
 include = ["memos*"]
