@@ -8,7 +8,6 @@ def create_pensiev_toml():
     
     # Modify the project name and script name
     data['project']['name'] = 'pensiev'
-    data['project']['scripts'] = {'pen': 'memos.commands:app'}
     
     # Write the modified data to the new file
     with open('pyproject_pensiev.toml', 'wb') as f:
