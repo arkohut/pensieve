@@ -91,21 +91,21 @@ jobs:
       with:
         packages-dir: dist
 
-  pypi-pensiev:
-    needs: release
-    name: Upload pensiev to PyPI
-    runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/pensiev
-    permissions:
-      id-token: write
-    steps:
-    - uses: actions/download-artifact@v4
-      with:
-        name: pensiev-dist
-        path: dist
-    - name: Publish pensiev package to PyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        packages-dir: dist
+  # pypi-pensiev:
+  #   needs: release
+  #   name: Upload pensiev to PyPI
+  #   runs-on: ubuntu-latest
+  #   environment:
+  #     name: pypi
+  #     url: https://pypi.org/p/pensiev
+  #   permissions:
+  #     id-token: write
+  #   steps:
+  #   - uses: actions/download-artifact@v4
+  #     with:
+  #       name: pensiev-dist
+  #       path: dist
+  #   - name: Publish pensiev package to PyPI
+  #     uses: pypa/gh-action-pypi-publish@release/v1
+  #     with:
+  #       packages-dir: dist
