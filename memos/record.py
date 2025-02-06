@@ -113,7 +113,12 @@ def take_screenshot_macos(
 ):
     screenshots = []
     result = subprocess.check_output(["system_profiler", "SPDisplaysDataType", "-json"])
-    displays_info = json.loads(result)["SPDisplaysDataType"][0]["spdisplays_ndrvs"]
+    displays_data = json.loads(result)["SPDisplaysDataType"]
+    displays_info = next((item["spdisplays_ndrvs"] for item in displays_data if "spdisplays_ndrvs" in item), None)
+    if displays_info is None:
+        logging.error("Unable to find display information")
+        return
+
     screen_names = {}
 
     for display_index, display_info in enumerate(displays_info):
