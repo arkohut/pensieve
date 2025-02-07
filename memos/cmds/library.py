@@ -693,6 +693,13 @@ def is_on_battery():
 
 
 class LibraryFileHandler(FileSystemEventHandler):
+    # Constants for file tracking
+    MAX_SKIPPED_FILES = 10000
+    MAX_PROCESSED_FILES = 10000
+    MAX_RETRIES = 3
+    BATTERY_CHECK_INTERVAL = 60  # seconds
+    BUFFER_TIME = 2  # seconds
+
     def __init__(
         self,
         library_id,
@@ -706,7 +713,7 @@ class LibraryFileHandler(FileSystemEventHandler):
         self.include_files = include_files
         self.inode_pattern = re.compile(r"\._.+")
         self.pending_files = defaultdict(lambda: {"timestamp": 0, "last_size": 0})
-        self.buffer_time = 2
+        self.buffer_time = self.BUFFER_TIME
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
         self.lock = threading.Lock()
 
@@ -724,12 +731,19 @@ class LibraryFileHandler(FileSystemEventHandler):
         self.logger = logger
 
         self.last_battery_check = 0
-        self.battery_check_interval = 60  # Check battery status every 60 seconds
+        self.battery_check_interval = self.BATTERY_CHECK_INTERVAL
 
         # State tracking
         self.state = "busy"
         self.last_activity_time = time.time()
         self.idle_timeout = settings.watch.idle_timeout
+
+        # Skipped files tracking
+        self.skipped_files = deque(maxlen=self.MAX_SKIPPED_FILES)
+        self.processed_files = set()  # Track processed files to avoid duplicates
+        self.failed_retries = defaultdict(int)  # Track retry attempts for failed files
+        self.max_retries = self.MAX_RETRIES
+        self.is_processing_skipped = False
 
     def handle_event(self, event):
         if not event.is_directory and self.is_valid_file(event.src_path):
@@ -738,6 +752,8 @@ class LibraryFileHandler(FileSystemEventHandler):
                 file_info = self.pending_files[event.src_path]
                 self.last_activity_time = current_time
                 self.state = "busy"
+                # Stop processing skipped files when new files come in
+                self.is_processing_skipped = False
 
                 if current_time - file_info["timestamp"] > self.buffer_time:
                     file_info["timestamp"] = current_time
@@ -755,11 +771,67 @@ class LibraryFileHandler(FileSystemEventHandler):
             if (current_time - self.last_activity_time) > self.idle_timeout:
                 if self.state != "idle":
                     self.state = "idle"
-                    self.logger.info(f"State changed to idle (no activity for {self.idle_timeout} seconds)")
+                    self.logger.info(
+                        f"State changed to idle (no activity for {self.idle_timeout} seconds)"
+                    )
+                    # Start processing skipped files when entering idle state
+                    if len(self.skipped_files) > 0:
+                        self.process_skipped_files()
             else:
                 if self.state != "busy":
                     self.state = "busy"
                     self.logger.info("State changed to busy")
+
+    def process_skipped_files(self):
+        """Process skipped files in reverse chronological order"""
+        if self.is_processing_skipped:
+            return
+
+        self.is_processing_skipped = True
+        self.logger.info(f"Starting to process {len(self.skipped_files)} skipped files")
+
+        def process_files():
+            while self.is_processing_skipped and len(self.skipped_files) > 0:
+                with self.lock:
+                    if self.state != "idle":
+                        self.logger.info(
+                            "Stopping skipped file processing as system is no longer idle"
+                        )
+                        self.is_processing_skipped = False
+                        return
+
+                    filepath = self.skipped_files.pop()
+                    
+                    # Skip if file doesn't exist or has already been processed
+                    if not os.path.exists(filepath) or filepath in self.processed_files:
+                        continue
+
+                self.logger.info(f"Processing skipped file: {filepath}")
+                try:
+                    sync(self.library_id, filepath, without_webhooks=False)
+                    with self.lock:
+                        self.file_synced += 1
+                        self.processed_files.add(filepath)
+                        self.failed_retries.pop(filepath, None)  # Clear retry count on success
+                except Exception as e:
+                    self.logger.error(f"Error processing skipped file {filepath}: {e}")
+                    with self.lock:
+                        retry_count = self.failed_retries[filepath] + 1
+                        if retry_count < self.max_retries:
+                            self.failed_retries[filepath] = retry_count
+                            self.skipped_files.appendleft(filepath)  # Add to front for faster retry
+                            self.logger.info(f"Will retry file {filepath} (attempt {retry_count}/{self.max_retries})")
+                        else:
+                            self.logger.warning(f"Giving up on file {filepath} after {self.max_retries} attempts")
+                            self.failed_retries.pop(filepath, None)
+
+                # Periodically clean up processed_files set to prevent unbounded growth
+                if len(self.processed_files) > self.MAX_PROCESSED_FILES:
+                    with self.lock:
+                        self.processed_files.clear()
+
+        # Start processing in a separate thread
+        self.executor.submit(process_files)
 
     def process_pending_files(self):
         current_time = time.time()
@@ -782,8 +854,11 @@ class LibraryFileHandler(FileSystemEventHandler):
                         )
                         print(f"Picked file for processing with plugins: {path}")
                     else:
-                        files_to_process_without_plugins.append(path)
-                        self.file_skipped += 1
+                        # Only add to skipped files if not already processed
+                        if path not in self.processed_files:
+                            self.skipped_files.append(path)
+                            files_to_process_without_plugins.append(path)
+                            self.file_skipped += 1
                 del self.pending_files[path]
 
         # Process files with plugins - these count as submitted
@@ -800,7 +875,8 @@ class LibraryFileHandler(FileSystemEventHandler):
                 f"File count: {self.file_count}, "
                 f"Files submitted: {self.file_submitted}, "
                 f"Files synced: {self.file_synced}, "
-                f"Files skipped: {self.file_skipped}, "
+                f"Files skipped: {self.file_skipped} ({len(self.skipped_files)} pending), "
+                f"Failed retries: {len(self.failed_retries)}, "
                 f"Current state: {self.state}"
             )
 
