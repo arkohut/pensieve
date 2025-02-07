@@ -774,9 +774,14 @@ class LibraryFileHandler(FileSystemEventHandler):
                     self.logger.info(
                         f"State changed to idle (no activity for {self.idle_timeout} seconds)"
                     )
-                    # Start processing skipped files when entering idle state
+                    # Start processing skipped files when entering idle state and not on battery
                     if len(self.skipped_files) > 0:
-                        self.process_skipped_files()
+                        if not is_on_battery():
+                            self.process_skipped_files()
+                        else:
+                            self.logger.info(
+                                f"Skipping processing of {len(self.skipped_files)} files while on battery"
+                            )
             else:
                 if self.state != "busy":
                     self.state = "busy"
@@ -785,6 +790,10 @@ class LibraryFileHandler(FileSystemEventHandler):
     def process_skipped_files(self):
         """Process skipped files in reverse chronological order"""
         if self.is_processing_skipped:
+            return
+
+        if is_on_battery():
+            self.logger.info(f"Not processing {len(self.skipped_files)} skipped files while on battery")
             return
 
         self.is_processing_skipped = True
@@ -796,6 +805,14 @@ class LibraryFileHandler(FileSystemEventHandler):
                     if self.state != "idle":
                         self.logger.info(
                             "Stopping skipped file processing as system is no longer idle"
+                        )
+                        self.is_processing_skipped = False
+                        return
+
+                    # Check battery status periodically
+                    if is_on_battery():
+                        self.logger.info(
+                            "Stopping skipped file processing as system switched to battery"
                         )
                         self.is_processing_skipped = False
                         return
