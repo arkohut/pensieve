@@ -726,11 +726,18 @@ class LibraryFileHandler(FileSystemEventHandler):
         self.last_battery_check = 0
         self.battery_check_interval = 60  # Check battery status every 60 seconds
 
+        # State tracking
+        self.state = "busy"
+        self.last_activity_time = time.time()
+        self.idle_timeout = settings.watch.idle_timeout
+
     def handle_event(self, event):
         if not event.is_directory and self.is_valid_file(event.src_path):
             current_time = time.time()
             with self.lock:
                 file_info = self.pending_files[event.src_path]
+                self.last_activity_time = current_time
+                self.state = "busy"
 
                 if current_time - file_info["timestamp"] > self.buffer_time:
                     file_info["timestamp"] = current_time
@@ -740,6 +747,19 @@ class LibraryFileHandler(FileSystemEventHandler):
 
             return True
         return False
+
+    def check_state(self):
+        """Check and update the current state based on activity"""
+        current_time = time.time()
+        with self.lock:
+            if (current_time - self.last_activity_time) > self.idle_timeout:
+                if self.state != "idle":
+                    self.state = "idle"
+                    self.logger.info(f"State changed to idle (no activity for {self.idle_timeout} seconds)")
+            else:
+                if self.state != "busy":
+                    self.state = "busy"
+                    self.logger.info("State changed to busy")
 
     def process_pending_files(self):
         current_time = time.time()
@@ -780,9 +800,11 @@ class LibraryFileHandler(FileSystemEventHandler):
                 f"File count: {self.file_count}, "
                 f"Files submitted: {self.file_submitted}, "
                 f"Files synced: {self.file_synced}, "
-                f"Files skipped: {self.file_skipped}"
+                f"Files skipped: {self.file_skipped}, "
+                f"Current state: {self.state}"
             )
 
+        self.check_state()
         self.update_processing_interval()
 
     def process_file(self, path, no_plugins):
