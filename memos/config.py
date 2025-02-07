@@ -8,10 +8,11 @@ from pydantic_settings import (
     SettingsConfigDict,
     YamlConfigSettingsSource,
 )
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel, SecretStr, field_validator, ValidationError
 import yaml
 from collections import OrderedDict
 import typer
+from datetime import datetime
 
 
 class VLMSettings(BaseModel):
@@ -50,6 +51,39 @@ class WatchSettings(BaseModel):
     sparsity_factor: float = 3.0
     processing_interval: int = 12
     idle_timeout: int = 30  # seconds before marking state as idle
+    idle_process_interval: List[str] = ["00:00", "07:00"]  # time interval for processing skipped files
+
+    @field_validator("idle_process_interval")
+    @classmethod
+    def validate_idle_process_interval(cls, v):
+        if not isinstance(v, list) or len(v) != 2:
+            raise ValueError("idle_process_interval must be a list of exactly 2 time strings")
+
+        try:
+            start_time = datetime.strptime(v[0], "%H:%M").time()
+            end_time = datetime.strptime(v[1], "%H:%M").time()
+        except ValueError as e:
+            raise ValueError(f"Invalid time format in idle_process_interval. Must be HH:MM format: {str(e)}")
+
+        # Convert times to minutes since midnight for easier comparison
+        start_minutes = start_time.hour * 60 + start_time.minute
+        end_minutes = end_time.hour * 60 + end_time.minute
+
+        # If end time is less than start time, it means the interval crosses midnight
+        # For example: ["23:00", "07:00"] is valid
+        # But ["07:00", "02:00"] is not valid as it's ambiguous
+        if end_minutes < start_minutes:
+            # For crossing midnight, we only allow the start time to be after 12:00 (noon)
+            # This helps avoid ambiguous intervals
+            if start_time.hour < 12:
+                raise ValueError(
+                    "For intervals crossing midnight, start time must be after 12:00 "
+                    "to avoid ambiguity (e.g. '23:00-07:00' is valid, but '07:00-02:00' is not)"
+                )
+        elif end_minutes == start_minutes:
+            raise ValueError("Start time and end time cannot be the same")
+
+        return v
 
 
 class Settings(BaseSettings):

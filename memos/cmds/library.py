@@ -737,6 +737,8 @@ class LibraryFileHandler(FileSystemEventHandler):
         self.state = "busy"
         self.last_activity_time = time.time()
         self.idle_timeout = settings.watch.idle_timeout
+        self.idle_process_start = datetime.strptime(settings.watch.idle_process_interval[0], "%H:%M").time()
+        self.idle_process_end = datetime.strptime(settings.watch.idle_process_interval[1], "%H:%M").time()
 
         # Skipped files tracking
         self.skipped_files = deque(maxlen=self.MAX_SKIPPED_FILES)
@@ -744,6 +746,16 @@ class LibraryFileHandler(FileSystemEventHandler):
         self.failed_retries = defaultdict(int)  # Track retry attempts for failed files
         self.max_retries = self.MAX_RETRIES
         self.is_processing_skipped = False
+
+    def is_within_process_interval(self) -> bool:
+        """Check if current time is within the idle process interval"""
+        current_time = datetime.now().time()
+        
+        # If end time is less than start time, it means the interval crosses midnight
+        if self.idle_process_end < self.idle_process_start:
+            return current_time >= self.idle_process_start or current_time <= self.idle_process_end
+        
+        return self.idle_process_start <= current_time <= self.idle_process_end
 
     def handle_event(self, event):
         if not event.is_directory and self.is_valid_file(event.src_path):
@@ -774,13 +786,18 @@ class LibraryFileHandler(FileSystemEventHandler):
                     self.logger.info(
                         f"State changed to idle (no activity for {self.idle_timeout} seconds)"
                     )
-                    # Start processing skipped files when entering idle state and not on battery
+                    # Start processing skipped files when entering idle state, not on battery, and within time interval
                     if len(self.skipped_files) > 0:
-                        if not is_on_battery():
+                        if not is_on_battery() and self.is_within_process_interval():
                             self.process_skipped_files()
                         else:
+                            reasons = []
+                            if is_on_battery():
+                                reasons.append("on battery")
+                            if not self.is_within_process_interval():
+                                reasons.append(f"outside processing hours {settings.watch.idle_process_interval[0]}-{settings.watch.idle_process_interval[1]}")
                             self.logger.info(
-                                f"Skipping processing of {len(self.skipped_files)} files while on battery"
+                                f"Skipping processing of {len(self.skipped_files)} files ({', '.join(reasons)})"
                             )
             else:
                 if self.state != "busy":
@@ -796,6 +813,12 @@ class LibraryFileHandler(FileSystemEventHandler):
             self.logger.info(f"Not processing {len(self.skipped_files)} skipped files while on battery")
             return
 
+        if not self.is_within_process_interval():
+            self.logger.info(
+                f"Not processing {len(self.skipped_files)} skipped files outside of hours {settings.watch.idle_process_interval[0]}-{settings.watch.idle_process_interval[1]}"
+            )
+            return
+
         self.is_processing_skipped = True
         self.logger.info(f"Starting to process {len(self.skipped_files)} skipped files")
 
@@ -809,10 +832,11 @@ class LibraryFileHandler(FileSystemEventHandler):
                         self.is_processing_skipped = False
                         return
 
-                    # Check battery status periodically
-                    if is_on_battery():
+                    # Check battery status and time interval periodically
+                    if is_on_battery() or not self.is_within_process_interval():
+                        reason = "switched to battery" if is_on_battery() else "outside of processing hours"
                         self.logger.info(
-                            "Stopping skipped file processing as system switched to battery"
+                            f"Stopping skipped file processing as system is {reason}"
                         )
                         self.is_processing_skipped = False
                         return
