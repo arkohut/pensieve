@@ -49,6 +49,7 @@ class WatchSettings(BaseModel):
     rate_window_size: int = 10
     sparsity_factor: float = 3.0
     processing_interval: int = 12
+    idle_timeout: int = 30  # seconds before marking state as idle
 
 
 class Settings(BaseSettings):
