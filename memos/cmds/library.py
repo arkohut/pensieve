@@ -207,7 +207,7 @@ async def loop_files(library, folder, folder_path, force, plugins, batch_size):
 
         # 3. Check for deleted files
         deleted_file_count = await check_deleted_files(
-            client, library.get('id'), folder, folder_path, scanned_files
+            client, library.get("id"), folder, folder_path, scanned_files
         )
 
         return added_file_count, updated_file_count, deleted_file_count
@@ -692,7 +692,6 @@ def is_on_battery():
         return False  # If unable to detect battery status, assume not on battery
 
 
-# Modify the LibraryFileHandler class
 class LibraryFileHandler(FileSystemEventHandler):
     def __init__(
         self,
@@ -749,22 +748,23 @@ class LibraryFileHandler(FileSystemEventHandler):
         processed_in_current_loop = 0
         with self.lock:
             for path, file_info in list(self.pending_files.items()):
-                if current_time - file_info["timestamp"] > self.buffer_time:
-                    processed_in_current_loop += 1
-                    if os.path.exists(path) and os.path.getsize(path) > 0:
-                        self.file_count += 1
-                        if self.file_count % self.processing_interval == 0:
-                            files_to_process_with_plugins.append(path)
-                            print(
-                                f"file_count % processing_interval: {self.file_count} % {self.processing_interval} == 0"
-                            )
-                            print(f"Picked file for processing with plugins: {path}")
-                        else:
-                            files_to_process_without_plugins.append(path)
-                            self.file_skipped += 1
-                        del self.pending_files[path]
-                    elif not os.path.exists(path):
-                        del self.pending_files[path]
+                if current_time - file_info["timestamp"] <= self.buffer_time:
+                    continue
+
+                processed_in_current_loop += 1
+
+                if os.path.exists(path) and os.path.getsize(path) > 0:
+                    self.file_count += 1
+                    if self.file_count % self.processing_interval == 0:
+                        files_to_process_with_plugins.append(path)
+                        print(
+                            f"file_count % processing_interval: {self.file_count} % {self.processing_interval} == 0"
+                        )
+                        print(f"Picked file for processing with plugins: {path}")
+                    else:
+                        files_to_process_without_plugins.append(path)
+                        self.file_skipped += 1
+                del self.pending_files[path]
 
         # Process files with plugins - these count as submitted
         for path in files_to_process_with_plugins:
@@ -777,7 +777,10 @@ class LibraryFileHandler(FileSystemEventHandler):
 
         if processed_in_current_loop > 0:
             self.logger.info(
-                f"File count: {self.file_count}, Files submitted: {self.file_submitted}, Files synced: {self.file_synced}, Files skipped: {self.file_skipped}"
+                f"File count: {self.file_count}, "
+                f"Files submitted: {self.file_submitted}, "
+                f"Files synced: {self.file_synced}, "
+                f"Files skipped: {self.file_skipped}"
             )
 
         self.update_processing_interval()
@@ -841,7 +844,10 @@ class LibraryFileHandler(FileSystemEventHandler):
                     old_processing_interval = self.processing_interval
                     self.processing_interval = new_processing_interval
                     self.logger.info(
-                        f"Processing interval: {old_processing_interval} -> {self.processing_interval}, Changes: {changes_per_second:.2f}it/s, Processing: {processing_per_second:.2f}it/s, Rate (changes/processing): {rate:.2f}"
+                        f"Processing interval: {old_processing_interval} -> {self.processing_interval}, "
+                        f"Changes: {changes_per_second:.2f}it/s, "
+                        f"Processing: {processing_per_second:.2f}it/s, "
+                        f"Rate (changes/processing): {rate:.2f}"
                     )
 
     def is_valid_file(self, path):
@@ -1091,9 +1097,13 @@ async def process_file_batches(
     updated_file_count = 0
     batching = 50
 
-    library_id = library.get('id')
-    library_plugins = [plugin.get('id') for plugin in library.get('plugins', [])]
-    target_plugins = library_plugins if plugins is None else [plugin for plugin in library_plugins if plugin in plugins]
+    library_id = library.get("id")
+    library_plugins = [plugin.get("id") for plugin in library.get("plugins", [])]
+    target_plugins = (
+        library_plugins
+        if plugins is None
+        else [plugin for plugin in library_plugins if plugin in plugins]
+    )
 
     with tqdm(total=len(candidate_files), desc="Processing files", leave=True) as pbar:
         for i in range(0, len(candidate_files), batching):
@@ -1158,18 +1168,34 @@ async def process_file_batches(
                         new_entity["tags"] = list(merged_tags)
 
                         # Check if the entity needs to be processed by any plugins
-                        processed_plugins = {plugin_status.get("plugin_id") for plugin_status in existing_entity.get("plugin_status", [])}
-                        has_unprocessed_plugins = any(plugin_id not in processed_plugins for plugin_id in target_plugins)
+                        processed_plugins = {
+                            plugin_status.get("plugin_id")
+                            for plugin_status in existing_entity.get(
+                                "plugin_status", []
+                            )
+                        }
+                        has_unprocessed_plugins = any(
+                            plugin_id not in processed_plugins
+                            for plugin_id in target_plugins
+                        )
 
                         # Only update if there are actual changes or the entity needs to be processed by any plugins
-                        if has_unprocessed_plugins or has_entity_changes(new_entity, existing_entity):
+                        if has_unprocessed_plugins or has_entity_changes(
+                            new_entity, existing_entity
+                        ):
                             tasks.append(
                                 update_entity(
-                                    client, semaphore, plugins, new_entity, existing_entity
+                                    client,
+                                    semaphore,
+                                    plugins,
+                                    new_entity,
+                                    existing_entity,
                                 )
                             )
                         else:
-                            pbar.write(f"Skipping file: {file_path} #{existing_entity.get('id')}")
+                            pbar.write(
+                                f"Skipping file: {file_path} #{existing_entity.get('id')}"
+                            )
                             pbar.update(1)
                             continue
                 else:
