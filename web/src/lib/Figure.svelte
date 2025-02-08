@@ -238,7 +238,7 @@
 					<div class="relative flex-1 overflow-hidden flex items-center justify-center  {showDetails ? "mr-2" : ""}">
 						<a href={video} target="_blank" rel="noopener noreferrer" class="block w-full h-full flex items-center justify-center">
 							<img
-								class="w-full object-contain rounded-lg drop-shadow-md"
+								class="h-full object-contain rounded-lg drop-shadow-md"
 								src={image}
 								alt={title}
 							/>
