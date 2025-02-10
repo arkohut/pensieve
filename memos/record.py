@@ -12,6 +12,7 @@ import ctypes
 from mss import mss
 from pathlib import Path
 from memos.config import settings
+import datetime
 
 # Import platform-specific modules
 if platform.system() == "Windows":
@@ -116,6 +117,12 @@ def take_screenshot_macos(
     displays_info = json.loads(result)["SPDisplaysDataType"][0]["spdisplays_ndrvs"]
     screen_names = {}
 
+    # Convert local time to UTC for metadata
+    local_dt = datetime.datetime.strptime(timestamp, "%Y%m%d-%H%M%S")
+    utc_offset = -time.timezone  # Get UTC offset in seconds
+    utc_dt = local_dt - datetime.timedelta(seconds=utc_offset)
+    utc_timestamp = utc_dt.strftime("%Y%m%d-%H%M%S")
+
     for display_index, display_info in enumerate(displays_info):
         base_screen_name = display_info["_name"].replace(" ", "_").lower()
         if base_screen_name in screen_names:
@@ -153,7 +160,7 @@ def take_screenshot_macos(
             screen_sequences[screen_name] = screen_sequences.get(screen_name, 0) + 1
 
             metadata = {
-                "timestamp": timestamp,
+                "timestamp": utc_timestamp,  # Use UTC timestamp in metadata
                 "active_app": app_name,
                 "active_window": window_title,
                 "screen_name": screen_name,
@@ -162,7 +169,7 @@ def take_screenshot_macos(
 
             # Save as WebP with metadata included
             webp_filename = os.path.join(
-                base_dir, date, f"screenshot-{timestamp}-of-{screen_name}.webp"
+                base_dir, date, f"screenshot-{timestamp}-of-{screen_name}.webp"  # Keep local time in filename
             )
             img.save(webp_filename, format="WebP", quality=85)
             write_image_metadata(webp_filename, metadata)
@@ -184,6 +191,12 @@ def take_screenshot_windows(
     app_name,
     window_title,
 ):
+    # Convert local time to UTC for metadata
+    local_dt = datetime.datetime.strptime(timestamp, "%Y%m%d-%H%M%S")
+    utc_offset = -time.timezone  # Get UTC offset in seconds
+    utc_dt = local_dt - datetime.timedelta(seconds=utc_offset)
+    utc_timestamp = utc_dt.strftime("%Y%m%d-%H%M%S")
+
     with mss() as sct:
         for i, monitor in enumerate(
             sct.monitors[1:], 1
@@ -217,7 +230,7 @@ def take_screenshot_windows(
             )
 
             metadata = {
-                "timestamp": timestamp,
+                "timestamp": utc_timestamp,  # Use UTC timestamp in metadata
                 "active_app": app_name,
                 "active_window": window_title,
                 "screen_name": safe_monitor_name,
