@@ -8,7 +8,7 @@ import asyncio
 import logging
 import logging.config
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Tuple, Dict, Any, Optional, Set
 from functools import lru_cache
@@ -53,7 +53,7 @@ class FileStatus(Enum):
 def format_timestamp(timestamp):
     if isinstance(timestamp, str):
         return timestamp
-    return datetime.fromtimestamp(timestamp).replace(tzinfo=None).isoformat()
+    return datetime.fromtimestamp(timestamp, tz=timezone.utc).replace(tzinfo=None).isoformat()
 
 
 def init_file_detector():
