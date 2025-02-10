@@ -27,16 +27,10 @@ from .models import (
     EntityTagModel,
     EntityPluginStatusModel,
 )
-from collections import defaultdict
-from .embedding import get_embeddings
 import logging
-from sqlite_vec import serialize_float32
-import time
-import json
-from sqlalchemy.sql import text, bindparam
-from datetime import datetime
-from sqlalchemy.orm import joinedload, selectinload
-from .search import create_search_provider
+from sqlalchemy.sql import text
+from sqlalchemy.orm import joinedload
+from sqlalchemy.sql import or_
 
 logger = logging.getLogger(__name__)
 
@@ -170,21 +164,93 @@ def get_entities_of_folder(
     limit: int = 10,
     offset: int = 0,
     path_prefix: str | None = None,
+    unprocessed_only: bool = False,
+    order_by: str = "last_scan_at:desc",
 ) -> Tuple[List[Entity], int]:
+    # Define allowed columns for ordering
+    ALLOWED_ORDER_COLUMNS = {
+        "last_scan_at",
+        "file_created_at",
+        "file_last_modified_at",
+        "filename",
+        "filepath",
+        "id",
+    }
+
     # First get the entity IDs with limit and offset
-    id_query = (
-        db.query(EntityModel.id)
-        .filter(
-            EntityModel.folder_id == folder_id,
-            EntityModel.library_id == library_id,
-        )
-        .order_by(EntityModel.file_last_modified_at.asc())
+    base_query = db.query(EntityModel.id).filter(
+        EntityModel.folder_id == folder_id,
+        EntityModel.library_id == library_id,
     )
 
     # Add path_prefix filter if provided
     if path_prefix:
-        id_query = id_query.filter(EntityModel.filepath.like(f"{path_prefix}%"))
+        base_query = base_query.filter(EntityModel.filepath.like(f"{path_prefix}%"))
 
+    # Add unprocessed filter if requested
+    if unprocessed_only:
+        # Get all plugins for the library
+        library_plugins = (
+            db.query(PluginModel.id)
+            .join(LibraryPluginModel)
+            .filter(LibraryPluginModel.library_id == library_id)
+            .all()
+        )
+        library_plugin_ids = [p.id for p in library_plugins]
+
+        if library_plugin_ids:
+            # Count plugins that have processed each entity
+            plugin_count_subquery = (
+                db.query(
+                    EntityPluginStatusModel.entity_id,
+                    func.count(EntityPluginStatusModel.plugin_id).label("plugin_count"),
+                )
+                .filter(EntityPluginStatusModel.plugin_id.in_(library_plugin_ids))
+                .group_by(EntityPluginStatusModel.entity_id)
+                .subquery()
+            )
+
+            # Join with the plugin count subquery and filter entities that haven't been processed by all plugins
+            base_query = base_query.outerjoin(
+                plugin_count_subquery,
+                EntityModel.id == plugin_count_subquery.c.entity_id,
+            ).filter(
+                or_(
+                    plugin_count_subquery.c.plugin_count.is_(
+                        None
+                    ),  # No plugins have processed
+                    plugin_count_subquery.c.plugin_count
+                    < len(library_plugin_ids),  # Not all plugins have processed
+                )
+            )
+
+    # Determine the order by field and direction
+    try:
+        order_field, order_direction = order_by.split(":")
+    except ValueError:
+        raise ValueError(
+            f"Invalid order_by format: {order_by}. Expected format: 'column:direction' where direction is 'asc' or 'desc'"
+        )
+
+    if order_field not in ALLOWED_ORDER_COLUMNS:
+        raise ValueError(
+            f"Invalid order column: {order_field}. Allowed columns: {', '.join(sorted(ALLOWED_ORDER_COLUMNS))}"
+        )
+
+    if order_direction.lower() not in ["asc", "desc"]:
+        raise ValueError(
+            f"Invalid order direction: {order_direction}. Must be either 'asc' or 'desc'"
+        )
+
+    order_column = getattr(EntityModel, order_field)
+    order_column = (
+        order_column.desc() if order_direction.lower() == "desc" else order_column.asc()
+    )
+
+    # Order by the specified field and direction
+    id_query = base_query.order_by(order_column)
+
+    # Get total count and paginated results
     total_count = id_query.count()
     entity_ids = id_query.limit(limit).offset(offset).all()
     entity_ids = [id[0] for id in entity_ids]
@@ -195,10 +261,10 @@ def get_entities_of_folder(
         .options(
             joinedload(EntityModel.metadata_entries),
             joinedload(EntityModel.tags),
-            joinedload(EntityModel.plugin_status)
+            joinedload(EntityModel.plugin_status),
         )
         .filter(EntityModel.id.in_(entity_ids))
-        .order_by(EntityModel.file_last_modified_at.asc())
+        .order_by(order_column)  # Keep consistent with the ID query
         .all()
     )
 
@@ -512,7 +578,9 @@ def list_entities(
         # Convert timestamp to Unix timestamp using EXTRACT(EPOCH FROM timestamp)
         # This works in both PostgreSQL and SQLite (SQLite will use its own implementation)
         query = query.filter(
-            func.extract('epoch', EntityModel.file_created_at).cast(BigInteger).between(start, end)
+            func.extract("epoch", EntityModel.file_created_at)
+            .cast(BigInteger)
+            .between(start, end)
         )
 
     entities = query.order_by(EntityModel.file_created_at.desc()).limit(limit).all()

@@ -60,6 +60,11 @@ watch:
   # but will be adjusted automatically based on the processing rate
   # 1 means process the first file at the beginning
   processing_interval: 12
+  # number of seconds without new files before marking state as idle
+  idle_timeout: 300
+  # time interval for processing skipped files (HH:MM format)
+  # only process skipped files during this interval when system is idle
+  idle_process_interval: ["00:00", "07:00"]
 
 # A watch config like this means process every file with plugins at the beginning
 # but if the processing rate is slower than file generated, the processing interval 

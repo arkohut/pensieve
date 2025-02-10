@@ -281,6 +281,8 @@ def list_entities_in_folder(
     limit: Annotated[int, Query(ge=1, le=400)] = 10,
     offset: int = 0,
     path_prefix: str | None = None,
+    unprocessed_only: bool = False,
+    order_by: str = Query("last_scan_at:desc", pattern="^[a-zA-Z_]+:(asc|desc)$"),
     db: Session = Depends(get_db),
 ):
     library = crud.get_library_by_id(library_id, db)
@@ -295,12 +297,23 @@ def list_entities_in_folder(
             detail="Folder not found in the specified library",
         )
 
-    entities, total_count = crud.get_entities_of_folder(
-        library_id, folder_id, db, limit, offset, path_prefix
-    )
-    return JSONResponse(
-        content=jsonable_encoder(entities), headers={"X-Total-Count": str(total_count)}
-    )
+    try:
+        entities, total_count = crud.get_entities_of_folder(
+            library_id,
+            folder_id,
+            db,
+            limit,
+            offset,
+            path_prefix,
+            unprocessed_only,
+            order_by,
+        )
+        return JSONResponse(
+            content=jsonable_encoder(entities),
+            headers={"X-Total-Count": str(total_count)},
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @app.get(
