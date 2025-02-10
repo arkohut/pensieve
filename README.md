@@ -390,6 +390,45 @@ watch:
 
 Remember to do `memos stop && memos start` to make the new config work.
 
+### Idle Processing Strategy
+
+Pensieve implements an intelligent idle processing strategy to handle skipped files during system idle time. This helps ensure all screenshots are eventually processed while minimizing impact on system performance during active use.
+
+#### Idle Detection and Processing
+
+- The system enters idle state after 5 minutes of no new screenshot activity
+- During idle state, Pensieve will attempt to process previously skipped files if:
+  - The system is not running on battery power
+  - The current time falls within the configured processing window
+  - There are skipped files pending processing
+
+#### Configuration
+
+The idle processing behavior can be customized in `~/.memos/config.yaml`:
+
+```yaml
+watch:
+  # seconds before marking state as idle
+  idle_timeout: 300
+  # time interval for processing skipped files
+  # format: ["HH:MM", "HH:MM"]
+  idle_process_interval: ["00:00", "07:00"]
+```
+
+- `idle_timeout`: How long (in seconds) the system should wait without activity before entering idle state
+- `idle_process_interval`: The time window during which skipped files can be processed
+  - Format is ["HH:MM", "HH:MM"] in 24-hour time
+  - The interval can cross midnight (e.g., ["23:00", "07:00"] is valid)
+  - For intervals crossing midnight, start time must be after 12:00 to avoid ambiguity
+
+This strategy ensures that:
+
+1. System resources are primarily available for active use during working hours
+2. Background processing occurs during off-hours
+3. Battery life is preserved by avoiding processing while on battery power
+
+Remember to do `memos stop && memos start` to make any configuration changes take effect.
+
 ## Privacy and Security
 
 During the development of Pensieve, I closely followed the progress of similar products, especially [Rewind](https://www.rewind.ai/) and [Windows Recall](https://support.microsoft.com/en-us/windows/retrace-your-steps-with-recall-aa03f8a0-a78b-4b3e-b0a1-2eb8ac48701c). I greatly appreciate their product philosophy, but they do not do enough in terms of privacy protection, which is a concern for many users (or potential users). Recording the screen of a personal computer may expose extremely sensitive private data, such as bank accounts, passwords, chat records, etc. Therefore, ensuring that data storage and processing are completely controlled by the user to prevent data leakage is particularly important.
