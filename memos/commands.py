@@ -141,8 +141,9 @@ def get_or_create_default_library():
             return None
         default_library = response.json()
 
-    for plugin in settings.default_plugins:
-        bind(default_library["id"], plugin)
+        # Bind default plugins only when initializing the default library
+        for plugin in settings.default_plugins:
+            bind(default_library["id"], plugin)
 
     # Check if the library is empty
     if not default_library["folders"]:
