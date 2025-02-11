@@ -28,6 +28,7 @@ This project draws heavily from two other projects: one called [Rewind](https://
 
 ## 📰 Latest News
 
+- **Intelligent Idle Processing Strategy**: Starting from version `v0.26.0`, Pensieve introduces an intelligent idle processing strategy that automatically processes pending files during system idle time. This feature maximizes screenshot processing while minimizing performance impact during active system use. For more details, please refer to the [Idle Processing Strategy](#idle-processing-strategy) section.
 - **PostgreSQL Support**: Starting from version `v0.25.4`, Pensieve now fully supports using PostgreSQL as the backend database. This enhancement allows for improved retrieval performance, especially with large data volumes. If you have extensive screenshot data or require high-speed retrieval, we strongly recommend using PostgreSQL.
 
   For more details on setting up PostgreSQL, please refer to the [Using PostgreSQL Database](#-using-postgresql-database) section.
