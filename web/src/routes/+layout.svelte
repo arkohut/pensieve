@@ -1,14 +1,11 @@
 <script lang="ts">
 	import '../i18n';
 	import '../app.css';
-	import { Toaster } from '$lib/components/ui/sonner';
 </script>
 
 <svelte:head>
 	<title>Pensieve</title>
 </svelte:head>
-
-<Toaster />
 
 <div class="min-h-screen bg-gradient">
 	<div class="min-h-screen">
