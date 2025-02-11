@@ -7,8 +7,9 @@ from sqlalchemy import (
     ForeignKey,
     func,
     Index,
+    TypeDecorator,
 )
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import relationship, DeclarativeBase, Mapped, mapped_column, Session
 from typing import List
 from .schemas import MetadataSource, MetadataType, FolderType
@@ -78,17 +79,35 @@ class EntityPluginStatusModel(RawBase):
     )
 
 
+# Custom DateTime type to ensure UTC time storage
+class UTCDateTime(TypeDecorator):
+    impl = DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is not None:
+            if value.tzinfo is None:
+                value = value.replace(tzinfo=timezone.utc)
+            return value.astimezone(timezone.utc)
+        return value
+
+    def process_result_value(self, value, dialect):
+        if value is not None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+
+
 class EntityModel(Base):
     __tablename__ = "entities"
     filepath: Mapped[str] = mapped_column(String, nullable=False)
     filename: Mapped[str] = mapped_column(String, nullable=False)
     size: Mapped[int] = mapped_column(Integer, nullable=False)
-    file_created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    file_last_modified_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    file_created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    file_last_modified_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
     file_type: Mapped[str] = mapped_column(String, nullable=False)
     file_type_group: Mapped[str] = mapped_column(String, nullable=False)
     last_scan_at: Mapped[datetime | None] = mapped_column(
-        DateTime, server_default=func.now(), onupdate=func.now(), nullable=True
+        UTCDateTime, server_default=func.now(), onupdate=func.now(), nullable=True
     )
     library_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("libraries.id"), nullable=False
@@ -97,14 +116,10 @@ class EntityModel(Base):
         Integer, ForeignKey("folders.id"), nullable=False
     )
     folder: Mapped["FolderModel"] = relationship(
-        "FolderModel", 
-        back_populates="entities",
-        lazy="select"
+        "FolderModel", back_populates="entities", lazy="select"
     )
     metadata_entries: Mapped[List["EntityMetadataModel"]] = relationship(
-        "EntityMetadataModel", 
-        lazy="select",
-        cascade="all, delete-orphan"
+        "EntityMetadataModel", lazy="select", cascade="all, delete-orphan"
     )
     tags: Mapped[List["TagModel"]] = relationship(
         "TagModel",
@@ -114,9 +129,7 @@ class EntityModel(Base):
         overlaps="entities",
     )
     plugin_status: Mapped[List["EntityPluginStatusModel"]] = relationship(
-        "EntityPluginStatusModel", 
-        cascade="all, delete-orphan",
-        lazy="select"
+        "EntityPluginStatusModel", cascade="all, delete-orphan", lazy="select"
     )
 
     # 添加索引

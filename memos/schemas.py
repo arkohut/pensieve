@@ -7,7 +7,7 @@ from pydantic import (
     model_validator,
 )
 from typing import List, Optional, Any, Dict
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 
@@ -177,7 +177,21 @@ class Entity(BaseModel):
     metadata_entries: List[EntityMetadata] = []
     plugin_status: List[EntityPluginStatus] = []
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={
+            datetime: lambda dt: dt.isoformat(),
+        }
+    )
+
+    @classmethod
+    def model_validate(cls, obj, *, strict=False, from_attributes=False):
+        if isinstance(obj, dict):
+            for field in ['file_created_at', 'file_last_modified_at', 'last_scan_at']:
+                if field in obj and obj[field] is not None:
+                    if obj[field].tzinfo is None:
+                        obj[field] = obj[field].replace(tzinfo=timezone.utc)
+        return super().model_validate(obj, strict=strict, from_attributes=from_attributes)
 
     def get_metadata_by_key(self, key: str) -> Optional[EntityMetadata]:
         """
