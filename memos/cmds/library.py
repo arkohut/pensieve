@@ -53,7 +53,11 @@ class FileStatus(Enum):
 def format_timestamp(timestamp):
     if isinstance(timestamp, str):
         return timestamp
-    return datetime.fromtimestamp(timestamp, tz=timezone.utc).replace(tzinfo=None).isoformat()
+    return (
+        datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        .replace(tzinfo=None)
+        .isoformat()
+    )
 
 
 def init_file_detector():
@@ -752,6 +756,9 @@ class LibraryFileHandler(FileSystemEventHandler):
         self.max_retries = self.MAX_RETRIES
         self.is_processing_skipped = False
 
+        # Track the last processing window state
+        self.last_in_process_window = self.is_within_process_interval()
+
     def is_within_process_interval(self) -> bool:
         """Check if current time is within the idle process interval"""
         current_time = datetime.now().time()
@@ -788,26 +795,45 @@ class LibraryFileHandler(FileSystemEventHandler):
         """Check and update the current state based on activity"""
         current_time = time.time()
         with self.lock:
-            if (current_time - self.last_activity_time) > self.idle_timeout:
+            is_idle = (current_time - self.last_activity_time) > self.idle_timeout
+            current_in_process_window = self.is_within_process_interval()
+
+            # Check if we've entered a new processing window
+            window_state_changed = (
+                current_in_process_window != self.last_in_process_window
+            )
+            self.last_in_process_window = current_in_process_window
+
+            if is_idle:
                 if self.state != "idle":
                     self.state = "idle"
                     self.logger.info(
                         f"State changed to idle (no activity for {self.idle_timeout} seconds)"
                     )
                     # Start processing unprocessed files when entering idle state
-                    if not is_on_battery() and self.is_within_process_interval():
+                    if not is_on_battery() and current_in_process_window:
                         self.process_unprocessed_files()
                     else:
                         reasons = []
                         if is_on_battery():
                             reasons.append("on battery")
-                        if not self.is_within_process_interval():
+                        if not current_in_process_window:
                             reasons.append(
                                 f"outside processing hours {settings.watch.idle_process_interval[0]}-{settings.watch.idle_process_interval[1]}"
                             )
                         self.logger.info(
                             f"Not processing unprocessed files ({', '.join(reasons)})"
                         )
+                elif (
+                    window_state_changed
+                    and current_in_process_window
+                    and not is_on_battery()
+                ):
+                    # We're already idle and just entered the processing window
+                    self.logger.info(
+                        "Entered processing window while idle, starting to process files"
+                    )
+                    self.process_unprocessed_files()
             else:
                 if self.state != "busy":
                     self.state = "busy"
