@@ -347,7 +347,7 @@ def get_entities_by_filepaths(
 
 @app.get("/entities/{entity_id}", response_model=Entity, tags=["entity"])
 def get_entity_by_id(entity_id: int, db: Session = Depends(get_db)):
-    entity = crud.get_entity_by_id(entity_id, db)
+    entity = crud.get_entity_by_id(entity_id, db, include_relationships=True)
     if entity is None:
         return JSONResponse(
             content={"detail": "Entity not found"},
@@ -364,7 +364,7 @@ def get_entity_by_id(entity_id: int, db: Session = Depends(get_db)):
 def get_entity_by_id_in_library(
     library_id: int, entity_id: int, db: Session = Depends(get_db)
 ):
-    entity = crud.get_entity_by_id(entity_id, db)
+    entity = crud.get_entity_by_id(entity_id, db, include_relationships=True)
     if entity is None or entity.library_id != library_id:
         return JSONResponse(
             content={"detail": "Entity not found"},

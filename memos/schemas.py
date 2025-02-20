@@ -177,6 +177,11 @@ class Entity(BaseModel):
     metadata_entries: List[EntityMetadata] = []
     plugin_status: List[EntityPluginStatus] = []
 
+    @property
+    def tag_names(self) -> List[str]:
+        """Get list of tag names from the tags relationship"""
+        return [tag.name for tag in self.tags]
+
     model_config = ConfigDict(
         from_attributes=True,
         json_encoders={
