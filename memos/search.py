@@ -165,7 +165,7 @@ class PostgreSQLSearchProvider(SearchProvider):
         try:
             from .crud import get_entity_by_id
 
-            entity = get_entity_by_id(entity_id, db)
+            entity = get_entity_by_id(entity_id, db, include_relationships=True)
             if not entity:
                 raise ValueError(f"Entity with id {entity_id} not found")
 
@@ -693,7 +693,7 @@ class SqliteSearchProvider(SearchProvider):
         try:
             from .crud import get_entity_by_id
 
-            entity = get_entity_by_id(entity_id, db)
+            entity = get_entity_by_id(entity_id, db, include_relationships=True)
             if not entity:
                 raise ValueError(f"Entity with id {entity_id} not found")
 
