@@ -73,6 +73,7 @@ engine, initializer = create_db_initializer(settings)
 
 # Initialize search provider based on database URL
 search_provider = create_search_provider(settings.database_url)
+app.state.search_provider = search_provider
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -249,6 +250,7 @@ async def new_entity(
     plugins: Annotated[List[int] | None, Query()] = None,
     trigger_webhooks_flag: bool = True,
     update_index: bool = False,
+    search_provider=Depends(lambda: app.state.search_provider),
 ):
     library = crud.get_library_by_id(library_id, db)
     if library is None:
@@ -382,6 +384,7 @@ async def update_entity(
     trigger_webhooks_flag: bool = False,
     plugins: Annotated[List[int] | None, Query()] = None,
     update_index: bool = False,
+    search_provider=Depends(lambda: app.state.search_provider),
 ):
     with logfire.span("fetch entity {entity_id=}", entity_id=entity_id):
         entity = crud.get_entity_by_id(entity_id, db)
@@ -430,7 +433,11 @@ def update_entity_last_scan_at(entity_id: int, db: Session = Depends(get_db)):
     status_code=status.HTTP_204_NO_CONTENT,
     tags=["entity"],
 )
-def update_index(entity_id: int, db: Session = Depends(get_db)):
+def update_index(
+    entity_id: int,
+    db: Session = Depends(get_db),
+    search_provider=Depends(lambda: app.state.search_provider),
+):
     """
     Update the FTS and vector indexes for an entity.
     """
@@ -449,7 +456,11 @@ def update_index(entity_id: int, db: Session = Depends(get_db)):
     status_code=status.HTTP_204_NO_CONTENT,
     tags=["entity"],
 )
-async def batch_update_index(request: BatchIndexRequest, db: Session = Depends(get_db)):
+async def batch_update_index(
+    request: BatchIndexRequest,
+    db: Session = Depends(get_db),
+    search_provider=Depends(lambda: app.state.search_provider),
+):
     """
     Batch update the FTS and vector indexes for multiple entities.
     """
@@ -688,6 +699,7 @@ async def search_entities_v2(
     app_names: str = Query(None, description="Comma-separated list of app names"),
     facet: bool = Query(None, description="Include facet in the search results"),
     db: Session = Depends(get_db),
+    search_provider=Depends(lambda: app.state.search_provider),
 ):
     library_ids = [int(id) for id in library_ids.split(",")] if library_ids else None
     app_name_list = (
