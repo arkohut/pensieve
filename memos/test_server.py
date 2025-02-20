@@ -27,20 +27,60 @@ from memos.schemas import (
 from memos.models import Base
 from memos.databases.initializers import SQLiteInitializer
 from memos.config import settings
+from memos.search import create_search_provider
 
+
+# Create a test settings object by copying the original settings
+test_settings = deepcopy(settings)
+test_settings.database_path = "sqlite:///:memory:"
 
 # Use SQLite for testing by default
 test_engine = create_engine(
-    "sqlite:///:memory:",
+    test_settings.database_url,
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
 
 # Initialize SQLite with the test engine
-test_initializer = SQLiteInitializer(test_engine, settings)
+test_initializer = SQLiteInitializer(test_engine, test_settings)
 test_initializer.init_extensions()
 
+# Create and override the search provider with test database URL
+test_search_provider = create_search_provider(test_settings.database_url)
+app.state.search_provider = test_search_provider  # Store in app state
+
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+
+
+def override_get_db():
+    try:
+        db = TestingSessionLocal()
+        yield db
+    finally:
+        db.close()
+
+
+app.dependency_overrides[get_db] = override_get_db
+
+
+# Setup a fixture for the FastAPI test client
+@pytest.fixture
+def client():
+    # Create all base tables
+    Base.metadata.create_all(bind=test_engine)
+
+    # Create FTS and Vec tables for SQLite
+    test_initializer.init_specific_features()
+
+    with TestClient(app) as client:
+        yield client
+
+    # Clean up database
+    Base.metadata.drop_all(bind=test_engine)
+    with test_engine.connect() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS entities_fts"))
+        conn.execute(text("DROP TABLE IF EXISTS entities_vec_v2"))
+        conn.commit()
 
 
 def load_fixture(filename):
@@ -93,37 +133,6 @@ def setup_library_with_entity(client):
     assert index_response.status_code == 204
 
     return library_id, folder_id, entity_id
-
-
-def override_get_db():
-    try:
-        db = TestingSessionLocal()
-        yield db
-    finally:
-        db.close()
-
-
-app.dependency_overrides[get_db] = override_get_db
-
-
-# Setup a fixture for the FastAPI test client
-@pytest.fixture
-def client():
-    # Create all base tables
-    Base.metadata.create_all(bind=test_engine)
-
-    # Create FTS and Vec tables for SQLite
-    test_initializer.init_specific_features()
-
-    with TestClient(app) as client:
-        yield client
-
-    # Clean up database
-    Base.metadata.drop_all(bind=test_engine)
-    with test_engine.connect() as conn:
-        conn.execute(text("DROP TABLE IF EXISTS entities_fts"))
-        conn.execute(text("DROP TABLE IF EXISTS entities_vec_v2"))
-        conn.commit()
 
 
 # Test the new_library endpoint
