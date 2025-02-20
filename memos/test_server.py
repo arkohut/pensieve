@@ -2,6 +2,7 @@ import json
 import os
 import pytest
 from datetime import datetime
+from copy import deepcopy
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event, text
@@ -691,10 +692,10 @@ def test_update_entity_tags(client):
 
     # Check the response data
     updated_entity_data = update_response.json()
+    print("\nResponse data:", json.dumps(updated_entity_data, indent=2))
     assert "tags" in updated_entity_data
-    assert sorted([t["name"] for t in updated_entity_data["tags"]]) == sorted(
-        tags, key=str
-    )
+    received_tags = sorted([t["name"] for t in updated_entity_data["tags"]])
+    assert received_tags == sorted(tags)
 
 
 def test_patch_entity_metadata_entries(client):
