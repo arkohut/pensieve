@@ -185,7 +185,7 @@ class Entity(BaseModel):
     model_config = ConfigDict(
         from_attributes=True,
         json_encoders={
-            datetime: lambda dt: dt.isoformat(),
+            datetime: lambda dt: dt.replace(tzinfo=None).isoformat(),
         }
     )
 
