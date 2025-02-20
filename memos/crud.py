@@ -153,8 +153,31 @@ def create_entity(
     return Entity(**db_entity.__dict__)
 
 
-def get_entity_by_id(entity_id: int, db: Session) -> Entity | None:
-    return db.query(EntityModel).filter(EntityModel.id == entity_id).first()
+def _load_entity_with_relationships(db: Session, entity_id: int) -> EntityModel:
+    """Helper function to load entity with all relationships"""
+    return (
+        db.query(EntityModel)
+        .options(
+            joinedload(EntityModel.metadata_entries),
+            joinedload(EntityModel.tags),
+            joinedload(EntityModel.plugin_status),
+        )
+        .filter(EntityModel.id == entity_id)
+        .first()
+    )
+
+
+def get_entity_by_id(entity_id: int, db: Session, include_relationships: bool = False) -> Entity | None:
+    """Get entity by ID with optional relationships"""
+    if include_relationships:
+        db_entity = _load_entity_with_relationships(db, entity_id)
+    else:
+        db_entity = db.query(EntityModel).filter(EntityModel.id == entity_id).first()
+    
+    if db_entity is None:
+        return None
+        
+    return Entity(**db_entity.__dict__)
 
 
 def get_entities_of_folder(
@@ -400,9 +423,8 @@ def update_entity(
             db_entity.metadata_entries.append(entity_metadata)
 
     db.commit()
-    db.refresh(db_entity)
 
-    return Entity(**db_entity.__dict__)
+    return get_entity_by_id(entity_id, db, include_relationships=True)
 
 
 def touch_entity(entity_id: int, db: Session) -> bool:
@@ -421,7 +443,7 @@ def update_entity_tags(
     tags: List[str],
     db: Session,
 ) -> Entity:
-    db_entity = get_entity_by_id(entity_id, db)
+    db_entity = db.query(EntityModel).filter(EntityModel.id == entity_id).first()
     if not db_entity:
         raise ValueError(f"Entity with id {entity_id} not found")
 
@@ -446,13 +468,12 @@ def update_entity_tags(
     db_entity.last_scan_at = func.now()
 
     db.commit()
-    db.refresh(db_entity)
 
-    return Entity(**db_entity.__dict__)
+    return get_entity_by_id(entity_id, db, include_relationships=True)
 
 
 def add_new_tags(entity_id: int, tags: List[str], db: Session) -> Entity:
-    db_entity = get_entity_by_id(entity_id, db)
+    db_entity = db.query(EntityModel).filter(EntityModel.id == entity_id).first()
     if not db_entity:
         raise ValueError(f"Entity with id {entity_id} not found")
 
@@ -477,9 +498,8 @@ def add_new_tags(entity_id: int, tags: List[str], db: Session) -> Entity:
     db_entity.last_scan_at = func.now()
 
     db.commit()
-    db.refresh(db_entity)
 
-    return Entity(**db_entity.__dict__)
+    return get_entity_by_id(entity_id, db, include_relationships=True)
 
 
 def update_entity_metadata_entries(
@@ -487,7 +507,7 @@ def update_entity_metadata_entries(
     updated_metadata: List[EntityMetadataParam],
     db: Session,
 ) -> Entity:
-    db_entity = get_entity_by_id(entity_id, db)
+    db_entity = db.query(EntityModel).filter(EntityModel.id == entity_id).first()
 
     existing_metadata_entries = (
         db.query(EntityMetadataModel)
@@ -532,9 +552,8 @@ def update_entity_metadata_entries(
     db_entity.last_scan_at = func.now()
 
     db.commit()
-    db.refresh(db_entity)
 
-    return Entity(**db_entity.__dict__)
+    return get_entity_by_id(entity_id, db, include_relationships=True)
 
 
 def get_plugin_by_id(plugin_id: int, db: Session) -> Plugin | None:
