@@ -103,6 +103,12 @@ memos start
 
 ## 🚀 使用 PostgreSQL 数据库
 
+要在 Pensieve 中使用 PostgreSQL，您需要安装支持 PostgreSQL 的软件包：
+
+```sh
+pip install memos[postgresql]
+```
+
 从 `v0.25.4` 版本开始，Pensieve 开始完整支持使用 PostgreSQL 作为后端数据库。相比 SQLite，PostgreSQL 在数据规模较大时依然可以获取非常好的检索性能。
 
 如果你的截图数据规模较大，或者对检索响应速度有较高要求，强烈建议使用 PostgreSQL 作为后端数据库。

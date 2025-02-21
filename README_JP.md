@@ -100,6 +100,12 @@ Macでは、Pensieveはスクリーンレコーディングの権限が必要で
 
 ## 🚀 PostgreSQLデータベースの使用
 
+PostgreSQLをPensieveで使用するには、PostgreSQLサポート付きのパッケージをインストールする必要があります：
+
+```sh
+pip install memos[postgresql]
+```
+
 バージョン `v0.25.4` から、PensieveはバックエンドデータベースとしてPostgreSQLの完全なサポートを開始しました。SQLiteと比較して、PostgreSQLは大規模なデータ量でも優れた検索性能を維持できます。
 
 スクリーンショットデータが大きい場合や、高速な検索応答速度が必要な場合は、バックエンドデータベースとしてPostgreSQLを使用することを強くお勧めします。
