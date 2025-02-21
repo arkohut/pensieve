@@ -102,6 +102,12 @@ On Mac, Pensieve needs screen recording permission. When the program starts, Mac
 
 ## 🚀 Using PostgreSQL Database
 
+To use PostgreSQL with Pensieve, you need to install the package with PostgreSQL support:
+
+```sh
+pip install memos[postgresql]
+```
+
 Starting from version `v0.25.4`, Pensieve fully supports using PostgreSQL as the backend database. Compared to SQLite, PostgreSQL can maintain excellent retrieval performance even with large data volumes.
 
 If your screenshot data is large or you require high retrieval response speed, it is strongly recommended to use PostgreSQL as the backend database.
