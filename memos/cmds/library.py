@@ -561,11 +561,16 @@ def sync(
     file_stat = file_path.stat()
     file_type, file_type_group = get_file_type(file_path)
 
+    # 比较st_mtime和st_ctime，使用较早的时间作为file_created_at
+    created_at_timestamp = file_stat.st_ctime
+    if file_stat.st_mtime < file_stat.st_ctime:
+        created_at_timestamp = file_stat.st_mtime
+
     new_entity = {
         "filename": file_path.name,
         "filepath": str(file_path),
         "size": file_stat.st_size,
-        "file_created_at": format_timestamp(file_stat.st_ctime),
+        "file_created_at": format_timestamp(created_at_timestamp),
         "file_last_modified_at": format_timestamp(file_stat.st_mtime),
         "file_type": file_type,
         "file_type_group": file_type_group,
@@ -1218,11 +1223,16 @@ async def prepare_entity(file_path: str, folder_id: int) -> Dict[str, Any]:
     file_stat = file_path.stat()
     file_type, file_type_group = get_file_type(file_path)
 
+    # 比较st_mtime和st_ctime，使用较早的时间作为file_created_at
+    created_at_timestamp = file_stat.st_ctime
+    if file_stat.st_mtime < file_stat.st_ctime:
+        created_at_timestamp = file_stat.st_mtime
+
     new_entity = {
         "filename": file_path.name,
         "filepath": str(file_path),
         "size": file_stat.st_size,
-        "file_created_at": format_timestamp(file_stat.st_ctime),
+        "file_created_at": format_timestamp(created_at_timestamp),
         "file_last_modified_at": format_timestamp(file_stat.st_mtime),
         "file_type": file_type,
         "file_type_group": file_type_group,
