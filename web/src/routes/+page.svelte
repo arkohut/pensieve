@@ -399,7 +399,7 @@
 								<figure class="px-4 pt-4 mb-4 relative">
 									<img
 										class="w-full h-48 object-cover"
-										src={`${apiEndpoint}/files/${hit.document.filepath.replace(/^\/+/, '')}`}
+										src={`${apiEndpoint}/thumbnails/${hit.document.filepath.replace(/^\/+/, '')}`}
 										alt=""
 									/>
 									{#if getAppName(hit.document) !== "unknown"}
