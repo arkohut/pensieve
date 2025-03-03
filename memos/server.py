@@ -2,6 +2,8 @@ import os
 import httpx
 import uvicorn
 import mimetypes
+import time
+import threading
 
 import logfire
 
@@ -24,6 +26,7 @@ from memos.plugins.vlm import main as vlm_main
 from memos.plugins.ocr import main as ocr_main
 from . import crud
 from .search import create_search_provider
+from .read_metadata import read_metadata
 from .schemas import (
     Library,
     Folder,
@@ -49,7 +52,6 @@ from .schemas import (
     Facet,
     FacetStats,
 )
-from .read_metadata import read_metadata
 from .logging_config import LOGGING_CONFIG
 from .databases.initializers import create_db_initializer
 
@@ -611,7 +613,7 @@ def delete_library_plugin(
 
 
 def is_image(file_path: Path) -> bool:
-    return file_path.suffix.lower() in [".png", ".jpg", ".jpeg"]
+    return file_path.suffix.lower() in [".png", ".jpg", ".jpeg", ".webp"]
 
 
 def get_thumbnail_info(metadata: dict) -> tuple:
@@ -635,6 +637,81 @@ def extract_video_frame(video_path: Path, frame_number: int) -> Image.Image:
 
     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     return Image.fromarray(frame_rgb)
+
+
+def generate_thumbnail(image_path: Path, size: tuple = (400, 400)) -> Path:
+    """Generate a thumbnail for an image and cache it in /tmp"""
+    try:
+        # Create a unique thumbnail filename based on original path and size
+        # Include file modification time in the filename to handle updated images
+        mtime = int(image_path.stat().st_mtime)
+        thumb_filename = (
+            f"thumb_{image_path.name}_{size[0]}x{size[1]}_{mtime}{image_path.suffix}"
+        )
+        thumb_path = Path("/tmp") / thumb_filename
+
+        # If thumbnail already exists, return it
+        if thumb_path.exists():
+            return thumb_path
+
+        # Generate the thumbnail
+        img = Image.open(image_path)
+
+        # Use LANCZOS resampling for better quality
+        img.thumbnail(size, Image.LANCZOS)
+
+        # Save the thumbnail with optimized settings
+        thumb_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Use appropriate quality/optimization settings based on image format
+        if image_path.suffix.lower() in [".jpg", ".jpeg"]:
+            img.save(thumb_path, quality=85, optimize=True)
+        elif image_path.suffix.lower() == ".png":
+            img.save(thumb_path, optimize=True)
+        elif image_path.suffix.lower() == ".webp":
+            img.save(thumb_path, format="WEBP", quality=85)
+        else:
+            img.save(thumb_path)
+
+        return thumb_path
+    except Exception as e:
+        logging.error(f"Error generating thumbnail for {image_path}: {e}")
+        return None
+
+
+def cleanup_thumbnails(max_age_days=365):
+    """Clean up thumbnails older than max_age_days"""
+    try:
+        thumbnail_dir = Path("/tmp")
+        current_time = time.time()
+        max_age_seconds = max_age_days * 24 * 60 * 60
+
+        # Find and remove old thumbnail files
+        count = 0
+        for file_path in thumbnail_dir.glob("thumb_*"):
+            if file_path.is_file():
+                file_age = current_time - file_path.stat().st_mtime
+                if file_age > max_age_seconds:
+                    file_path.unlink()
+                    count += 1
+
+        logging.info(f"Cleaned up {count} old thumbnail files")
+    except Exception as e:
+        logging.error(f"Error cleaning up thumbnails: {e}")
+
+
+def schedule_thumbnail_cleanup(interval_hours=24):
+    """Schedule periodic thumbnail cleanup"""
+
+    def cleanup_task():
+        while True:
+            time.sleep(interval_hours * 60 * 60)
+            cleanup_thumbnails()
+
+    # Start the cleanup thread
+    cleanup_thread = threading.Thread(target=cleanup_task, daemon=True)
+    cleanup_thread.start()
+    logging.info(f"Scheduled thumbnail cleanup every {interval_hours} hours")
 
 
 @app.get("/files/video/{file_path:path}", tags=["files"])
@@ -687,6 +764,36 @@ async def get_file(file_path: str):
         return JSONResponse(
             content={"detail": "File not found"}, status_code=status.HTTP_404_NOT_FOUND
         )
+
+
+@app.get("/thumbnails/{file_path:path}", tags=["files"])
+async def get_thumbnail(file_path: str, width: int = 200, height: int = 200):
+    """Dedicated endpoint for thumbnails to make it easier for clients"""
+    full_path = Path("/") / file_path.strip("/")
+
+    # Check if the file exists and is a file
+    if not full_path.is_file():
+        return JSONResponse(
+            content={"detail": "File not found"}, status_code=status.HTTP_404_NOT_FOUND
+        )
+
+    # Only generate thumbnails for images
+    if not is_image(full_path):
+        return JSONResponse(
+            content={"detail": "Thumbnails only supported for images"},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Generate the thumbnail
+    thumb_path = generate_thumbnail(full_path, (width, height))
+    if thumb_path:
+        return FileResponse(
+            thumb_path,
+            headers={"Content-Disposition": f"inline; filename=thumb_{full_path.name}"},
+        )
+    else:
+        # Fallback to original file if thumbnail generation fails
+        return FileResponse(full_path)
 
 
 @app.get("/search", response_model=SearchResult, tags=["search"])
@@ -885,6 +992,12 @@ def get_entity_context(
 
 
 def run_server():
+    # Clean up old thumbnails on startup
+    cleanup_thumbnails()
+
+    # Schedule periodic thumbnail cleanup
+    schedule_thumbnail_cleanup()
+
     logging.info("Database path: %s", settings.database_url)
     logging.info("VLM plugin enabled: %s", settings.vlm)
     logging.info("OCR plugin enabled: %s", settings.ocr)
