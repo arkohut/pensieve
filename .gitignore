@@ -1,6 +1,7 @@
 .envrc
 dist/
 memos.egg-info/
+pensiev.egg-info/
 build/
 *.pyc
 .eggs/
