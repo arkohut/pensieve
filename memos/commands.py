@@ -302,9 +302,13 @@ def watch_default_library(
 
     from .cmds.library import watch
 
-    default_library = get_or_create_default_library()
-    if not default_library:
-        return
+    # Add retry logic for getting default library
+    while True:
+        default_library = get_or_create_default_library()
+        if default_library:
+            break
+        typer.echo("Failed to get or create default library. Retrying in 5 seconds...")
+        time.sleep(5)
 
     watch(
         default_library["id"],
