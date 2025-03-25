@@ -4,6 +4,11 @@ import uvicorn
 import mimetypes
 import time
 import threading
+import signal
+import psutil
+import platform
+import subprocess
+import sys
 
 import logfire
 
@@ -21,7 +26,7 @@ import cv2
 from PIL import Image
 import logging
 
-from .config import settings
+from .config import settings, Settings, load_config, save_config, categorize_settings_by_restart, apply_config_updates, restart_processes
 from memos.plugins.vlm import main as vlm_main
 from memos.plugins.ocr import main as ocr_main
 from . import crud
@@ -990,6 +995,60 @@ def get_entity_context(
     # Return the context object
     return EntityContext(prev=prev_entities, next=next_entities)
 
+
+@app.get("/api/config", tags=["config"])
+async def get_config():
+    """Get the current configuration"""
+    config = load_config()
+    # Convert to dict and handle SecretStr fields
+    config_dict = config.model_dump()
+    
+    # Format SecretStr fields as masked values
+    for section_name, section in config_dict.items():
+        if isinstance(section, dict):
+            for key, value in section.items():
+                if hasattr(value, "get_secret_value"):
+                    section[key] = "********"
+    
+    return config_dict
+
+@app.put("/api/config", tags=["config"])
+async def update_config(config_updates: dict):
+    """Update the configuration"""
+    try:
+        # Load current config
+        current_config = load_config()
+        current_dict = current_config.model_dump()
+        
+        # Track which components need restart
+        needs_restart = {"serve": False, "watch": False, "record": False}
+        
+        # Apply updates
+        updated_config, restart_info = apply_config_updates(current_dict, config_updates)
+        
+        # Update needs_restart based on changes
+        for component, required in restart_info.items():
+            if required:
+                needs_restart[component] = True
+        
+        # Save the updated config
+        save_config(updated_config)
+        
+        # Handle restarts
+        restart_processes(needs_restart)
+        
+        return {"success": True, "restart_required": needs_restart}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to update config: {str(e)}")
+
+@app.post("/api/config/restart", tags=["config"])
+async def restart_services(components: dict = {"serve": True, "watch": True, "record": True}):
+    """Restart specified components"""
+    try:
+        restart_processes(components)
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to restart services: {str(e)}")
 
 def run_server():
     # Clean up old thumbnails on startup

@@ -13,6 +13,13 @@ import yaml
 from collections import OrderedDict
 import typer
 from datetime import datetime
+import sys
+import psutil
+import signal
+import time
+import platform
+import subprocess
+import logging
 
 
 class VLMSettings(BaseModel):
@@ -258,3 +265,177 @@ def display_config():
                 typer.echo(formatted_value)
             else:
                 typer.echo(f"{key}: {formatted_value}")
+
+
+def load_config() -> Settings:
+    """Load configuration from the config file"""
+    return Settings()
+
+def save_config(config_dict: dict):
+    """Save configuration to the config file"""
+    # Get the path to the config file
+    config_path = Path.home() / ".memos" / "config.yaml"
+    
+    # Convert SecretStr values appropriately
+    for section_name, section in config_dict.items():
+        if isinstance(section, dict):
+            for key, value in section.items():
+                if isinstance(value, str) and value == "********":
+                    # Skip masked password fields - keep the original value
+                    section_obj = getattr(settings, section_name, None)
+                    if section_obj and hasattr(section_obj, key):
+                        original_value = getattr(section_obj, key)
+                        section[key] = original_value
+    
+    # Write to file
+    with open(config_path, "w") as f:
+        yaml.dump(config_dict, f, sort_keys=False, default_flow_style=False)
+
+def categorize_settings_by_restart():
+    """Categorize which settings require restart of which components
+    
+    Returns a dictionary mapping setting paths to affected components.
+    Example: {"database_path": ["serve"], "record_interval": ["record"]}
+    """
+    return {
+        # 影响所有服务的核心配置
+        "base_dir": ["serve", "watch", "record"],  # 基础目录变更影响所有服务
+        "screenshots_dir": ["serve", "record", "watch"],     # 截图目录变更影响记录和监控服务
+        
+        # 仅影响服务器的配置
+        "database_path": ["serve"],     # 数据库路径变更
+        "server_host": ["serve"],       # 服务器主机变更
+        "server_port": ["serve"],       # 服务器端口变更
+        "auth_username": ["serve"],     # 认证信息变更
+        "auth_password": ["serve"],
+        "facet": ["serve"],            # 搜索 facet 功能变更
+        
+        # 仅影响记录服务的配置
+        "record_interval": ["record"],  # 记录间隔变更
+        
+        # 仅影响监控服务的配置
+        "watch.rate_window_size": ["watch"],
+        "watch.sparsity_factor": ["watch"],
+        "watch.processing_interval": ["watch"],
+        "watch.idle_timeout": ["watch"],
+        "watch.idle_process_interval": ["watch"],
+        
+        # 插件相关配置
+        "vlm": ["serve"],
+        "ocr": ["serve"],
+        "embedding": ["serve"],
+        "default_plugins": ["serve"],
+    }
+
+def apply_config_updates(current_config: dict, updates: dict):
+    """Apply updates to the configuration
+    
+    Returns the updated config dict and a dict indicating which components need restart
+    """
+    restart_required = {"serve": False, "watch": False, "record": False}
+    restart_map = categorize_settings_by_restart()
+    
+    # Helper function to apply updates recursively
+    def apply_updates_recursive(current, updates, path=""):
+        for key, value in updates.items():
+            current_path = f"{path}.{key}" if path else key
+            
+            # Check if this setting requires restart
+            if current_path in restart_map:
+                for component in restart_map[current_path]:
+                    restart_required[component] = True
+            
+            # If this is a nested dict, recursively update
+            if isinstance(value, dict) and key in current and isinstance(current[key], dict):
+                apply_updates_recursive(current[key], value, current_path)
+            else:
+                # Check for masked password values
+                if isinstance(value, str) and value == "********":
+                    # Skip - keep original value
+                    continue
+                
+                # Direct update
+                current[key] = value
+    
+    # Apply updates
+    apply_updates_recursive(current_config, updates)
+    
+    return current_config, restart_required
+
+def restart_processes(components: dict):
+    """Restart the specified components
+    
+    Args:
+        components: Dict with keys "serve", "watch", "record" and boolean values
+    """
+    # Get the current script's path to run as the same user
+    script_path = sys.executable
+    
+    # If serve needs to be restarted, we need a special approach
+    # Create a separate process that will:
+    # 1. Wait for the current serve process to terminate
+    # 2. Start a new serve process
+    if components.get("serve", False):
+        try:
+            # Create a detached process that will handle the restart
+            restart_cmd = [
+                str(script_path),
+                "-c",
+                (
+                    "import time, subprocess, sys, os, signal; "
+                    f"time.sleep(2); "  # Wait for original process to exit
+                    f"subprocess.Popen(['{script_path}', '-m', 'memos.commands', 'serve'], "
+                    f"shell=True, creationflags=subprocess.CREATE_NEW_CONSOLE)"
+                )
+            ]
+            
+            # Start the launcher process detached from this process
+            subprocess.Popen(
+                restart_cmd,
+                shell=True,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
+            )
+            
+            logging.info("Created detached process to restart serve service")
+        except Exception as e:
+            logging.error(f"Failed to create restart process: {e}")
+    
+    # Get a list of PIDs to kill (for all services including serve)
+    pids_to_kill = []
+    for service, should_restart in components.items():
+        if not should_restart:
+            continue
+            
+        # Find processes matching this service
+        processes = [
+            p for p in psutil.process_iter(["pid", "name", "cmdline"])
+            if "python" in p.info["name"].lower()
+            and p.info["cmdline"] is not None
+            and "memos.commands" in p.info["cmdline"]
+            and service in p.info["cmdline"]
+        ]
+        
+        for process in processes:
+            pids_to_kill.append(process.info["pid"])
+    
+    # Start non-serve services first, before killing anything
+    for service, should_restart in components.items():
+        if should_restart and service != "serve":
+            try:
+                subprocess.Popen(
+                    [str(script_path), "-m", "memos.commands", service],
+                    shell=True,
+                    creationflags=subprocess.CREATE_NEW_CONSOLE
+                )
+            except Exception as e:
+                logging.error(f"Failed to start {service} service: {e}")
+    
+    # Now kill all processes that need to be restarted
+    # For serve, this will terminate the current process, but the launcher
+    # process we created earlier will start a new one
+    for pid in pids_to_kill:
+        try:
+            os.kill(pid, signal.SIGTERM)
+            logging.info(f"Terminated process {pid}")
+        except Exception as e:
+            logging.error(f"Error terminating process {pid}: {e}")
