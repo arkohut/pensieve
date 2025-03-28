@@ -118,7 +118,7 @@ def get_or_create_default_library():
     """
     from .cmds.plugin import bind
 
-    response = httpx.get(f"{BASE_URL}/libraries")
+    response = httpx.get(f"{BASE_URL}/api/libraries")
     if response.status_code != 200:
         print(f"Failed to retrieve libraries: {response.status_code} - {response.text}")
         return None
@@ -131,7 +131,7 @@ def get_or_create_default_library():
     if not default_library:
         # Create the default library if it doesn't exist
         response = httpx.post(
-            f"{BASE_URL}/libraries",
+            f"{BASE_URL}/api/libraries",
             json={"name": settings.default_library, "folders": []},
         )
         if response.status_code != 200:
@@ -156,7 +156,7 @@ def get_or_create_default_library():
             ).isoformat(),
         }
         response = httpx.post(
-            f"{BASE_URL}/libraries/{default_library['id']}/folders",
+            f"{BASE_URL}/api/libraries/{default_library['id']}/folders",
             json={"folders": [folder]},
         )
         if response.status_code != 200:

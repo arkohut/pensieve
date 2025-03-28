@@ -93,7 +93,7 @@ def setup_library_with_entity(client):
     # Create a new library
     new_library = NewLibraryParam(name="Test Library for Metadata")
     library_response = client.post(
-        "/libraries", json=new_library.model_dump(mode="json")
+        "/api/libraries", json=new_library.model_dump(mode="json")
     )
     assert library_response.status_code == 200
     library_id = library_response.json()["id"]
@@ -107,7 +107,7 @@ def setup_library_with_entity(client):
         ]
     )
     folder_response = client.post(
-        f"/libraries/{library_id}/folders", json=new_folder.model_dump(mode="json")
+        f"/api/libraries/{library_id}/folders", json=new_folder.model_dump(mode="json")
     )
     assert folder_response.status_code == 200
     folder_id = folder_response.json()["folders"][0]["id"]
@@ -124,13 +124,13 @@ def setup_library_with_entity(client):
         folder_id=folder_id,
     )
     entity_response = client.post(
-        f"/libraries/{library_id}/entities", json=new_entity.model_dump(mode="json")
+        f"/api/libraries/{library_id}/entities", json=new_entity.model_dump(mode="json")
     )
     assert entity_response.status_code == 200
     entity_id = entity_response.json()["id"]
 
     # Update the entity's index
-    index_response = client.post(f"/entities/{entity_id}/index")
+    index_response = client.post(f"/api/entities/{entity_id}/index")
     assert index_response.status_code == 204
 
     return library_id, folder_id, entity_id
@@ -140,7 +140,7 @@ def setup_library_with_entity(client):
 def test_new_library(client):
     library_param = NewLibraryParam(name="Test Library")
     # Make a POST request to the /libraries endpoint
-    response = client.post("/libraries", json=library_param.model_dump())
+    response = client.post("/api/libraries", json=library_param.model_dump())
     # Check that the response is successful
     assert response.status_code == 200
     # Check the response data
@@ -152,7 +152,7 @@ def test_new_library(client):
     }
 
     # Test for duplicate library name
-    duplicate_response = client.post("/libraries", json=library_param.model_dump())
+    duplicate_response = client.post("/api/libraries", json=library_param.model_dump())
     # Check that the response indicates a failure due to duplicate name
     assert duplicate_response.status_code == 400
     assert duplicate_response.json() == {
@@ -170,10 +170,10 @@ def test_list_libraries(client):
             )
         ],
     )
-    client.post("/libraries", json=new_library.model_dump(mode="json"))
+    client.post("/api/libraries", json=new_library.model_dump(mode="json"))
 
     # Make a GET request to the /libraries endpoint
-    response = client.get("/libraries")
+    response = client.get("/api/libraries")
 
     # Check that the response is successful
     assert response.status_code == 200
@@ -213,7 +213,7 @@ def test_new_entity(client):
         ],
     )
     library_response = client.post(
-        "/libraries", json=new_library.model_dump(mode="json")
+        "/api/libraries", json=new_library.model_dump(mode="json")
     )
     library_id = library_response.json()["id"]
     folder_id = library_response.json()["folders"][0]["id"]
@@ -230,7 +230,7 @@ def test_new_entity(client):
         folder_id=folder_id,
     )
     entity_response = client.post(
-        f"/libraries/{library_id}/entities", json=new_entity.model_dump(mode="json")
+        f"/api/libraries/{library_id}/entities", json=new_entity.model_dump(mode="json")
     )
 
     # Check that the response is successful
@@ -249,7 +249,7 @@ def test_new_entity(client):
 
     # Test for library not found
     invalid_entity_response = client.post(
-        "/libraries/9999/entities", json=new_entity.model_dump(mode="json")
+        "/api/libraries/9999/entities", json=new_entity.model_dump(mode="json")
     )
     assert invalid_entity_response.status_code == 404
     assert invalid_entity_response.json() == {"detail": "Library not found"}
@@ -266,7 +266,7 @@ def test_update_entity(client):
         file_type_group="text",
     )
     update_response = client.put(
-        f"/entities/{entity_id}",
+        f"/api/entities/{entity_id}",
         json=updated_entity.model_dump(mode="json"),
     )
 
@@ -284,7 +284,7 @@ def test_update_entity(client):
 
     # Test for entity not found
     invalid_update_response = client.put(
-        f"/entities/9999",
+        f"/api/entities/9999",
         json=updated_entity.model_dump(mode="json"),
     )
     assert invalid_update_response.status_code == 404
@@ -303,7 +303,7 @@ def test_get_entity_by_filepath(client):
         ],
     )
     library_response = client.post(
-        "/libraries", json=new_library.model_dump(mode="json")
+        "/api/libraries", json=new_library.model_dump(mode="json")
     )
     library_id = library_response.json()["id"]
 
@@ -318,12 +318,12 @@ def test_get_entity_by_filepath(client):
         folder_id=1,
     )
     entity_response = client.post(
-        f"/libraries/{library_id}/entities", json=new_entity.model_dump(mode="json")
+        f"/api/libraries/{library_id}/entities", json=new_entity.model_dump(mode="json")
     )
     entity_id = entity_response.json()["id"]
 
     get_response = client.get(
-        f"/libraries/{library_id}/entities/by-filepath",
+        f"/api/libraries/{library_id}/entities/by-filepath",
         params={"filepath": new_entity.filepath},
     )
 
@@ -341,7 +341,7 @@ def test_get_entity_by_filepath(client):
 
     # Test for entity not found
     invalid_get_response = client.get(
-        f"/libraries/{library_id}/entities/by-filepath",
+        f"/api/libraries/{library_id}/entities/by-filepath",
         params={"filepath": "nonexistent.txt"},
     )
     assert invalid_get_response.status_code == 404
@@ -349,7 +349,7 @@ def test_get_entity_by_filepath(client):
 
     # Test for library not found
     invalid_get_response = client.get(
-        f"/libraries/9999/entities/by-filepath",
+        f"/api/libraries/9999/entities/by-filepath",
         params={"filepath": new_entity.filepath},
     )
     assert invalid_get_response.status_code == 404
@@ -360,7 +360,7 @@ def test_list_entities_in_folder(client):
     # Setup data: Create a new library and folder
     new_library = NewLibraryParam(name="Library for List Entities Test", folders=[])
     library_response = client.post(
-        "/libraries", json=new_library.model_dump(mode="json")
+        "/api/libraries", json=new_library.model_dump(mode="json")
     )
     library_id = library_response.json()["id"]
 
@@ -372,7 +372,7 @@ def test_list_entities_in_folder(client):
         ]
     )
     folder_response = client.post(
-        f"/libraries/{library_id}/folders", json=new_folder.model_dump(mode="json")
+        f"/api/libraries/{library_id}/folders", json=new_folder.model_dump(mode="json")
     )
     folder_id = folder_response.json()["folders"][0]["id"]
 
@@ -388,12 +388,12 @@ def test_list_entities_in_folder(client):
         folder_id=folder_id,
     )
     entity_response = client.post(
-        f"/libraries/{library_id}/entities", json=new_entity.model_dump(mode="json")
+        f"/api/libraries/{library_id}/entities", json=new_entity.model_dump(mode="json")
     )
     entity_id = entity_response.json()["id"]
 
     # List entities in the folder
-    list_response = client.get(f"/libraries/{library_id}/folders/{folder_id}/entities")
+    list_response = client.get(f"/api/libraries/{library_id}/folders/{folder_id}/entities")
 
     # Check that the response is successful
     assert list_response.status_code == 200
@@ -409,14 +409,14 @@ def test_list_entities_in_folder(client):
     assert entities_data[0]["file_type_group"] == new_entity.file_type_group
 
     # Test for folder not found
-    invalid_list_response = client.get(f"/libraries/{library_id}/folders/9999/entities")
+    invalid_list_response = client.get(f"/api/libraries/{library_id}/folders/9999/entities")
     assert invalid_list_response.status_code == 404
     assert invalid_list_response.json() == {
         "detail": "Folder not found in the specified library"
     }
 
     # Test for library not found
-    invalid_list_response = client.get(f"/libraries/9999/folders/{folder_id}/entities")
+    invalid_list_response = client.get(f"/api/libraries/9999/folders/{folder_id}/entities")
     assert invalid_list_response.status_code == 404
     assert invalid_list_response.json() == {"detail": "Library not found"}
 
@@ -439,11 +439,11 @@ def test_remove_entity(client):
         assert vec_count == 1, "Entity was not automatically added to entities_vec_v2 table"
 
     # Delete the entity
-    delete_response = client.delete(f"/libraries/{library_id}/entities/{entity_id}")
+    delete_response = client.delete(f"/api/libraries/{library_id}/entities/{entity_id}")
     assert delete_response.status_code == 204
 
     # Verify the entity is deleted from the main table
-    get_response = client.get(f"/libraries/{library_id}/entities/{entity_id}")
+    get_response = client.get(f"/api/libraries/{library_id}/entities/{entity_id}")
     assert get_response.status_code == 404
     assert get_response.json() == {"detail": "Entity not found"}
 
@@ -464,7 +464,7 @@ def test_remove_entity(client):
         assert vec_count == 0, "Entity was not deleted from entities_vec_v2 table"
 
     # Test for entity not found in the specified library
-    invalid_delete_response = client.delete(f"/libraries/{library_id}/entities/9999")
+    invalid_delete_response = client.delete(f"/api/libraries/{library_id}/entities/9999")
     assert invalid_delete_response.status_code == 404
     assert invalid_delete_response.json() == {
         "detail": "Entity not found in the specified library"
@@ -480,7 +480,7 @@ def test_add_folder_to_library(client):
     # Create a new library
     new_library = NewLibraryParam(name="Test Library", folders=[])
     library_response = client.post(
-        "/libraries", json=new_library.model_dump(mode="json")
+        "/api/libraries", json=new_library.model_dump(mode="json")
     )
     library_id = library_response.json()["id"]
 
@@ -495,7 +495,7 @@ def test_add_folder_to_library(client):
         ]
     )
     folder_response = client.post(
-        f"/libraries/{library_id}/folders", json=new_folders.model_dump(mode="json")
+        f"/api/libraries/{library_id}/folders", json=new_folders.model_dump(mode="json")
     )
     assert folder_response.status_code == 200
     assert any(
@@ -504,7 +504,7 @@ def test_add_folder_to_library(client):
     )
 
     # Verify the folder is added
-    library_response = client.get(f"/libraries/{library_id}")
+    library_response = client.get(f"/api/libraries/{library_id}")
     assert library_response.status_code == 200
     library_data = library_response.json()
     folder_paths = [folder["path"] for folder in library_data["folders"]]
@@ -512,7 +512,7 @@ def test_add_folder_to_library(client):
 
     # Test for adding a folder that already exists
     duplicate_folder_response = client.post(
-        f"/libraries/{library_id}/folders", json=new_folders.model_dump(mode="json")
+        f"/api/libraries/{library_id}/folders", json=new_folders.model_dump(mode="json")
     )
     assert duplicate_folder_response.status_code == 400
     assert duplicate_folder_response.json() == {
@@ -521,7 +521,7 @@ def test_add_folder_to_library(client):
 
     # Test for adding a folder to a non-existent library
     invalid_folder_response = client.post(
-        f"/libraries/9999/folders", json=new_folders.model_dump(mode="json")
+        f"/api/libraries/9999/folders", json=new_folders.model_dump(mode="json")
     )
     assert invalid_folder_response.status_code == 404
     assert invalid_folder_response.json() == {"detail": "Library not found"}
@@ -535,7 +535,7 @@ def test_new_plugin(client):
     )
 
     # Make a POST request to the /plugins endpoint
-    response = client.post("/plugins", json=new_plugin.model_dump(mode="json"))
+    response = client.post("/api/plugins", json=new_plugin.model_dump(mode="json"))
 
     # Check that the response is successful
     assert response.status_code == 200
@@ -548,7 +548,7 @@ def test_new_plugin(client):
 
     # Test for duplicate plugin name
     duplicate_response = client.post(
-        "/plugins", json=new_plugin.model_dump(mode="json")
+        "/api/plugins", json=new_plugin.model_dump(mode="json")
     )
     # Check that the response indicates a failure due to duplicate name
     assert duplicate_response.status_code == 400
@@ -558,7 +558,7 @@ def test_new_plugin(client):
 
     # Test for another duplicate plugin name
     another_duplicate_response = client.post(
-        "/plugins", json=new_plugin.model_dump(mode="json")
+        "/api/plugins", json=new_plugin.model_dump(mode="json")
     )
     # Check that the response indicates a failure due to duplicate name
     assert another_duplicate_response.status_code == 400
@@ -575,7 +575,7 @@ def test_update_entity_with_tags(client):
 
     # Make a PUT request to the /libraries/{library_id}/entities/{entity_id} endpoint
     update_response = client.put(
-        f"/entities/{entity_id}",
+        f"/api/entities/{entity_id}",
         json=update_entity_param.model_dump(mode="json"),
     )
 
@@ -599,7 +599,7 @@ def test_patch_tags_to_entity(client):
 
     # Make a PUT request to add initial tags
     initial_update_response = client.put(
-        f"/entities/{entity_id}/tags",
+        f"/api/entities/{entity_id}/tags",
         json=update_entity_param.model_dump(mode="json"),
     )
 
@@ -617,7 +617,7 @@ def test_patch_tags_to_entity(client):
 
     # Make a PATCH request to add new tags
     patch_response = client.patch(
-        f"/entities/{entity_id}/tags",
+        f"/api/entities/{entity_id}/tags",
         json=patch_entity_param.model_dump(mode="json"),
     )
 
@@ -633,7 +633,7 @@ def test_patch_tags_to_entity(client):
     )
 
     # Verify that the tags were actually added by making a GET request
-    get_response = client.get(f"/libraries/{library_id}/entities/{entity_id}")
+    get_response = client.get(f"/api/libraries/{library_id}/entities/{entity_id}")
     assert get_response.status_code == 200
     get_entity_data = get_response.json()
     assert "tags" in get_entity_data
@@ -657,7 +657,7 @@ def test_add_metadata_entry_to_entity_success(client):
 
     # Make a PUT request to the /libraries/{library_id}/entities/{entity_id} endpoint
     update_response = client.put(
-        f"/entities/{entity_id}",
+        f"/api/entities/{entity_id}",
         json=update_entity_param.model_dump(mode="json"),
     )
 
@@ -683,7 +683,7 @@ def test_update_entity_tags(client):
 
     # Make a PUT request to the /libraries/{library_id}/entities/{entity_id} endpoint
     update_response = client.put(
-        f"/entities/{entity_id}",
+        f"/api/entities/{entity_id}",
         json=update_entity_param.model_dump(mode="json"),
     )
 
@@ -724,7 +724,7 @@ def test_patch_entity_metadata_entries(client):
 
     # Make a PUT request to the /libraries/{library_id}/entities/{entity_id} endpoint
     patch_response = client.put(
-        f"/entities/{entity_id}",
+        f"/api/entities/{entity_id}",
         json=update_entity_param.model_dump(mode="json"),
     )
 
@@ -764,7 +764,7 @@ def test_patch_entity_metadata_entries(client):
 
     # Make a PATCH request to the /libraries/{library_id}/entities/{entity_id}/metadata endpoint
     update_response = client.patch(
-        f"/entities/{entity_id}/metadata",
+        f"/api/entities/{entity_id}/metadata",
         json=update_entity_param.model_dump(mode="json"),
     )
 
@@ -796,7 +796,7 @@ def test_patch_entity_metadata_entries(client):
 
     # Make a PATCH request to the /libraries/{library_id}/entities/{entity_id}/metadata endpoint
     update_response = client.patch(
-        f"/entities/{entity_id}/metadata",
+        f"/api/entities/{entity_id}/metadata",
         json=update_entity_param.model_dump(mode="json"),
     )
 
