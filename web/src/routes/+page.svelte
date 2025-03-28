@@ -48,7 +48,7 @@
 	let selectedDates: Record<string, boolean> = {};
 
 	const apiEndpoint =
-		typeof PUBLIC_API_ENDPOINT !== 'undefined' ? PUBLIC_API_ENDPOINT : window.location.origin;
+		(typeof PUBLIC_API_ENDPOINT !== 'undefined' ? PUBLIC_API_ENDPOINT : window.location.origin) + '/api';
 
 	let facetCounts: Facet[] | null = null;
 

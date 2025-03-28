@@ -101,7 +101,7 @@ def display_libraries(libraries):
 
 @lib_app.command("ls")
 def ls():
-    response = httpx.get(f"{BASE_URL}/libraries")
+    response = httpx.get(f"{BASE_URL}/api/libraries")
     libraries = response.json()
     display_libraries(libraries)
 
@@ -121,7 +121,7 @@ def add(name: str, folders: List[str]):
         )
 
     response = httpx.post(
-        f"{BASE_URL}/libraries", json={"name": name, "folders": absolute_folders}
+        f"{BASE_URL}/api/libraries", json={"name": name, "folders": absolute_folders}
     )
     if 200 <= response.status_code < 300:
         print("Library created successfully")
@@ -144,7 +144,7 @@ def add_folder(library_id: int, folders: List[str]):
         )
 
     response = httpx.post(
-        f"{BASE_URL}/libraries/{library_id}/folders",
+        f"{BASE_URL}/api/libraries/{library_id}/folders",
         json={"folders": absolute_folders},
     )
     if 200 <= response.status_code < 300:
@@ -157,7 +157,7 @@ def add_folder(library_id: int, folders: List[str]):
 
 @lib_app.command("show")
 def show(library_id: int):
-    response = httpx.get(f"{BASE_URL}/libraries/{library_id}")
+    response = httpx.get(f"{BASE_URL}/api/libraries/{library_id}")
     if response.status_code == 200:
         library = response.json()
         display_libraries([library])
@@ -233,7 +233,7 @@ def scan(
         print("Error: You cannot specify both a path and folders at the same time.")
         return
 
-    response = httpx.get(f"{BASE_URL}/libraries/{library_id}")
+    response = httpx.get(f"{BASE_URL}/api/libraries/{library_id}")
     if response.status_code != 200:
         print(f"Failed to retrieve library: {response.status_code} - {response.text}")
         return
@@ -300,7 +300,7 @@ async def add_entity(
         for attempt in range(MAX_RETRIES):
             try:
                 post_response = await client.post(
-                    f"{BASE_URL}/libraries/{library_id}/entities",
+                    f"{BASE_URL}/api/libraries/{library_id}/entities",
                     json=new_entity,
                     params=(
                         {"plugins": plugins, "update_index": "true"}
@@ -341,7 +341,7 @@ async def update_entity(
         for attempt in range(MAX_RETRIES):
             try:
                 update_response = await client.put(
-                    f"{BASE_URL}/entities/{existing_entity['id']}",
+                    f"{BASE_URL}/api/entities/{existing_entity['id']}",
                     json=new_entity,
                     params={
                         "trigger_webhooks_flag": "true",
@@ -390,7 +390,7 @@ def reindex(
     from memos.databases.initializers import recreate_fts_and_vec_tables
 
     # Get the library
-    response = httpx.get(f"{BASE_URL}/libraries/{library_id}")
+    response = httpx.get(f"{BASE_URL}/api/libraries/{library_id}")
     if response.status_code != 200:
         print(f"Failed to get library: {response.status_code} - {response.text}")
         return
@@ -418,7 +418,7 @@ def reindex(
         # Get total entity count for all folders
         for folder in library_folders:
             response = client.get(
-                f"{BASE_URL}/libraries/{library_id}/folders/{folder['id']}/entities",
+                f"{BASE_URL}/api/libraries/{library_id}/folders/{folder['id']}/entities",
                 params={"limit": 1, "offset": 0},
             )
             if response.status_code == 200:
@@ -438,7 +438,7 @@ def reindex(
                 offset = 0
                 while True:
                     entities_response = client.get(
-                        f"{BASE_URL}/libraries/{library_id}/folders/{folder['id']}/entities",
+                        f"{BASE_URL}/api/libraries/{library_id}/folders/{folder['id']}/entities",
                         params={"limit": limit, "offset": offset},
                     )
                     if entities_response.status_code != 200:
@@ -463,7 +463,7 @@ def reindex(
                         batch_ids = entity_ids[i : i + batch_size]
                         if batch_ids:
                             batch_response = client.post(
-                                f"{BASE_URL}/entities/batch-index",
+                                f"{BASE_URL}/api/entities/batch-index",
                                 json={"entity_ids": batch_ids},
                                 timeout=60,
                             )
@@ -538,7 +538,7 @@ def sync(
     Sync a specific file with the library.
     """
     # 1. Get library by id and check if it exists
-    response = httpx.get(f"{BASE_URL}/libraries/{library_id}")
+    response = httpx.get(f"{BASE_URL}/api/libraries/{library_id}")
     if response.status_code != 200:
         typer.echo(f"Error: Library with id {library_id} not found.")
         raise typer.Exit(code=1)
@@ -554,7 +554,7 @@ def sync(
 
     # 2. Check if the file exists in the library
     response = httpx.get(
-        f"{BASE_URL}/libraries/{library_id}/entities/by-filepath",
+        f"{BASE_URL}/api/libraries/{library_id}/entities/by-filepath",
         params={"filepath": str(file_path)},
     )
 
@@ -635,7 +635,7 @@ def sync(
         # Only update if there are actual changes or force flag is set
         if force or has_entity_changes(new_entity, existing_entity):
             update_response = httpx.put(
-                f"{BASE_URL}/entities/{existing_entity['id']}",
+                f"{BASE_URL}/api/entities/{existing_entity['id']}",
                 json=new_entity,
                 params={
                     "trigger_webhooks_flag": str(not without_webhooks).lower(),
@@ -668,7 +668,7 @@ def sync(
             new_entity["folder_id"] = folder["id"]
 
             create_response = httpx.post(
-                f"{BASE_URL}/libraries/{library_id}/entities",
+                f"{BASE_URL}/api/libraries/{library_id}/entities",
                 json=new_entity,
                 params={
                     "trigger_webhooks_flag": str(not without_webhooks).lower(),
@@ -888,7 +888,7 @@ class LibraryFileHandler(FileSystemEventHandler):
                 try:
                     # Get library information to get folder IDs
                     library_response = httpx.get(
-                        f"{BASE_URL}/libraries/{self.library_id}"
+                        f"{BASE_URL}/api/libraries/{self.library_id}"
                     )
                     library_response.raise_for_status()
                     library = library_response.json()
@@ -898,7 +898,7 @@ class LibraryFileHandler(FileSystemEventHandler):
                     for folder in library["folders"]:
                         # Get unprocessed files from API for this folder
                         response = httpx.get(
-                            f"{BASE_URL}/libraries/{self.library_id}/folders/{folder['id']}/entities",
+                            f"{BASE_URL}/api/libraries/{self.library_id}/folders/{folder['id']}/entities",
                             params={"limit": 10, "unprocessed_only": True},
                         )
                         response.raise_for_status()
@@ -1135,7 +1135,7 @@ def watch(
     logger.info(f"Watching library {library_id} for changes...")
 
     # Get the library
-    response = httpx.get(f"{BASE_URL}/libraries/{library_id}")
+    response = httpx.get(f"{BASE_URL}/api/libraries/{library_id}")
     if response.status_code != 200:
         print(f"Error: Library with id {library_id} not found.")
         raise typer.Exit(code=1)
@@ -1335,7 +1335,7 @@ async def process_file_batches(
 
             # Get existing entities in the batch
             get_response = await client.post(
-                f"{BASE_URL}/libraries/{library_id}/entities/by-filepaths",
+                f"{BASE_URL}/api/libraries/{library_id}/entities/by-filepaths",
                 json=batch,
             )
 
@@ -1483,7 +1483,7 @@ async def check_deleted_files(
         while True:
             # Add path_prefix parameter to only get entities under the folder_path
             existing_files_response = await client.get(
-                f"{BASE_URL}/libraries/{library_id}/folders/{folder['id']}/entities",
+                f"{BASE_URL}/api/libraries/{library_id}/folders/{folder['id']}/entities",
                 params={
                     "limit": limit,
                     "offset": offset,
@@ -1521,7 +1521,7 @@ async def check_deleted_files(
                 ):
                     # File has been deleted
                     delete_response = await client.delete(
-                        f"{BASE_URL}/libraries/{library_id}/entities/{existing_file['id']}"
+                        f"{BASE_URL}/api/libraries/{library_id}/entities/{existing_file['id']}"
                     )
                     if 200 <= delete_response.status_code < 300:
                         pbar.write(

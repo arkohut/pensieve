@@ -4,11 +4,6 @@ import uvicorn
 import mimetypes
 import time
 import threading
-import signal
-import psutil
-import platform
-import subprocess
-import sys
 
 import logfire
 
@@ -26,7 +21,7 @@ import cv2
 from PIL import Image
 import logging
 
-from .config import settings, Settings, load_config, save_config, categorize_settings_by_restart, apply_config_updates, restart_processes
+from .config import settings, load_config, save_config, apply_config_updates, restart_processes
 from memos.plugins.vlm import main as vlm_main
 from memos.plugins.ocr import main as ocr_main
 from . import crud
@@ -94,6 +89,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Create API router with prefix
+api_router = FastAPI()
 
 current_dir = os.path.dirname(__file__)
 
@@ -101,6 +98,8 @@ app.mount(
     "/_app", StaticFiles(directory=os.path.join(current_dir, "static/_app"), html=True)
 )
 
+# Mount API router with prefix
+app.mount("/api", api_router)
 
 @app.get("/health")
 async def health():
@@ -121,6 +120,15 @@ async def favicon_ico():
 async def serve_spa():
     return FileResponse(os.path.join(current_dir, "static/app.html"))
 
+# Add catch-all route for SPA
+@app.get("/{full_path:path}")
+async def catch_all(full_path: str):
+    # Skip if the path starts with /api or /_app
+    if full_path.startswith(("api/", "_app/")):
+        raise HTTPException(status_code=404, detail="Not found")
+    
+    # For all other paths, serve the SPA
+    return FileResponse(os.path.join(current_dir, "static/app.html"))
 
 def get_db():
     db = SessionLocal()
@@ -129,8 +137,7 @@ def get_db():
     finally:
         db.close()
 
-
-@app.post("/libraries", response_model=Library, tags=["library"])
+@api_router.post("/libraries", response_model=Library, tags=["library"])
 def new_library(library_param: NewLibraryParam, db: Session = Depends(get_db)):
     # Check if a library with the same name (case insensitive) already exists
     existing_library = crud.get_library_by_name(library_param.name, db)
@@ -152,14 +159,12 @@ def new_library(library_param: NewLibraryParam, db: Session = Depends(get_db)):
     library = crud.create_library(library_param, db)
     return library
 
-
-@app.get("/libraries", response_model=List[Library], tags=["library"])
+@api_router.get("/libraries", response_model=List[Library], tags=["library"])
 def list_libraries(db: Session = Depends(get_db)):
     libraries = crud.get_libraries(db)
     return libraries
 
-
-@app.get("/libraries/{library_id}", response_model=Library, tags=["library"])
+@api_router.get("/libraries/{library_id}", response_model=Library, tags=["library"])
 def get_library_by_id(library_id: int, db: Session = Depends(get_db)):
     library = crud.get_library_by_id(library_id, db)
     if library is None:
@@ -169,8 +174,7 @@ def get_library_by_id(library_id: int, db: Session = Depends(get_db)):
         )
     return library
 
-
-@app.post("/libraries/{library_id}/folders", response_model=Library, tags=["library"])
+@api_router.post("/libraries/{library_id}/folders", response_model=Library, tags=["library"])
 def new_folders(
     library_id: int,
     folders: NewFoldersParam,
@@ -247,8 +251,7 @@ async def trigger_webhooks(
                     str(e),
                 )
 
-
-@app.post("/libraries/{library_id}/entities", response_model=Entity, tags=["entity"])
+@api_router.post("/libraries/{library_id}/entities", response_model=Entity, tags=["entity"])
 async def new_entity(
     new_entity: NewEntityParam,
     library_id: int,
@@ -278,8 +281,7 @@ async def new_entity(
 
     return entity
 
-
-@app.get(
+@api_router.get(
     "/libraries/{library_id}/folders/{folder_id}/entities",
     response_model=List[Entity],
     tags=["entity"],
@@ -324,8 +326,7 @@ def list_entities_in_folder(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-
-@app.get(
+@api_router.get(
     "/libraries/{library_id}/entities/by-filepath",
     response_model=Entity,
     tags=["entity"],
@@ -341,8 +342,7 @@ def get_entity_by_filepath(
         )
     return entity
 
-
-@app.post(
+@api_router.post(
     "/libraries/{library_id}/entities/by-filepaths",
     response_model=List[Entity],
     tags=["entity"],
@@ -353,8 +353,7 @@ def get_entities_by_filepaths(
     entities = crud.get_entities_by_filepaths(filepaths, db)
     return [entity for entity in entities if entity.library_id == library_id]
 
-
-@app.get("/entities/{entity_id}", response_model=Entity, tags=["entity"])
+@api_router.get("/entities/{entity_id}", response_model=Entity, tags=["entity"])
 def get_entity_by_id(entity_id: int, db: Session = Depends(get_db)):
     entity = crud.get_entity_by_id(entity_id, db, include_relationships=True)
     if entity is None:
@@ -364,8 +363,7 @@ def get_entity_by_id(entity_id: int, db: Session = Depends(get_db)):
         )
     return entity
 
-
-@app.get(
+@api_router.get(
     "/libraries/{library_id}/entities/{entity_id}",
     response_model=Entity,
     tags=["entity"],
@@ -381,8 +379,7 @@ def get_entity_by_id_in_library(
         )
     return entity
 
-
-@app.put("/entities/{entity_id}", response_model=Entity, tags=["entity"])
+@api_router.put("/entities/{entity_id}", response_model=Entity, tags=["entity"])
 async def update_entity(
     entity_id: int,
     request: Request,
@@ -417,8 +414,7 @@ async def update_entity(
 
     return entity
 
-
-@app.post(
+@api_router.post(
     "/entities/{entity_id}/last-scan-at",
     status_code=status.HTTP_204_NO_CONTENT,
     tags=["entity"],
@@ -434,8 +430,7 @@ def update_entity_last_scan_at(entity_id: int, db: Session = Depends(get_db)):
             detail="Entity not found",
         )
 
-
-@app.post(
+@api_router.post(
     "/entities/{entity_id}/index",
     status_code=status.HTTP_204_NO_CONTENT,
     tags=["entity"],
@@ -457,8 +452,7 @@ def update_index(
 
     search_provider.update_entity_index(entity.id, db)
 
-
-@app.post(
+@api_router.post(
     "/entities/batch-index",
     status_code=status.HTTP_204_NO_CONTENT,
     tags=["entity"],
@@ -476,8 +470,7 @@ async def batch_update_index(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
-
-@app.put("/entities/{entity_id}/tags", response_model=Entity, tags=["entity"])
+@api_router.put("/entities/{entity_id}/tags", response_model=Entity, tags=["entity"])
 def replace_entity_tags(
     entity_id: int, update_tags: UpdateEntityTagsParam, db: Session = Depends(get_db)
 ):
@@ -490,8 +483,7 @@ def replace_entity_tags(
 
     return crud.update_entity_tags(entity_id, update_tags.tags, db)
 
-
-@app.patch("/entities/{entity_id}/tags", response_model=Entity, tags=["entity"])
+@api_router.patch("/entities/{entity_id}/tags", response_model=Entity, tags=["entity"])
 def patch_entity_tags(
     entity_id: int, update_tags: UpdateEntityTagsParam, db: Session = Depends(get_db)
 ):
@@ -504,8 +496,7 @@ def patch_entity_tags(
 
     return crud.add_new_tags(entity_id, update_tags.tags, db)
 
-
-@app.patch("/entities/{entity_id}/metadata", response_model=Entity, tags=["entity"])
+@api_router.patch("/entities/{entity_id}/metadata", response_model=Entity, tags=["entity"])
 def patch_entity_metadata(
     entity_id: int,
     update_metadata: UpdateEntityMetadataParam,
@@ -525,8 +516,7 @@ def patch_entity_metadata(
     )
     return entity
 
-
-@app.delete(
+@api_router.delete(
     "/libraries/{library_id}/entities/{entity_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     tags=["entity"],
@@ -541,8 +531,7 @@ def remove_entity(library_id: int, entity_id: int, db: Session = Depends(get_db)
 
     crud.remove_entity(entity_id, db)
 
-
-@app.post("/plugins", response_model=Plugin, tags=["plugin"])
+@api_router.post("/plugins", response_model=Plugin, tags=["plugin"])
 def new_plugin(new_plugin: NewPluginParam, db: Session = Depends(get_db)):
     existing_plugin = crud.get_plugin_by_name(new_plugin.name, db)
     if existing_plugin:
@@ -553,14 +542,12 @@ def new_plugin(new_plugin: NewPluginParam, db: Session = Depends(get_db)):
     plugin = crud.create_plugin(new_plugin, db)
     return plugin
 
-
-@app.get("/plugins", response_model=List[Plugin], tags=["plugin"])
+@api_router.get("/plugins", response_model=List[Plugin], tags=["plugin"])
 def list_plugins(db: Session = Depends(get_db)):
     plugins = crud.get_plugins(db)
     return plugins
 
-
-@app.post(
+@api_router.post(
     "/libraries/{library_id}/plugins",
     status_code=status.HTTP_204_NO_CONTENT,
     tags=["plugin"],
@@ -593,8 +580,7 @@ def add_library_plugin(
 
     crud.add_plugin_to_library(library_id, plugin.id, db)
 
-
-@app.delete(
+@api_router.delete(
     "/libraries/{library_id}/plugins/{plugin_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     tags=["plugin"],
@@ -718,8 +704,7 @@ def schedule_thumbnail_cleanup(interval_hours=24):
     cleanup_thread.start()
     logging.info(f"Scheduled thumbnail cleanup every {interval_hours} hours")
 
-
-@app.get("/files/video/{file_path:path}", tags=["files"])
+@api_router.get("/files/video/{file_path:path}", tags=["files"])
 async def get_video_frame(file_path: str):
 
     full_path = Path("/") / file_path.strip("/")
@@ -758,8 +743,7 @@ async def get_video_frame(file_path: str):
         temp_path, headers={"Content-Disposition": f"inline; filename={full_path.name}"}
     )
 
-
-@app.get("/files/{file_path:path}", tags=["files"])
+@api_router.get("/files/{file_path:path}", tags=["files"])
 async def get_file(file_path: str):
     full_path = Path("/") / file_path.strip("/")
     # Check if the file exists and is a file
@@ -770,8 +754,7 @@ async def get_file(file_path: str):
             content={"detail": "File not found"}, status_code=status.HTTP_404_NOT_FOUND
         )
 
-
-@app.get("/thumbnails/{file_path:path}", tags=["files"])
+@api_router.get("/thumbnails/{file_path:path}", tags=["files"])
 async def get_thumbnail(file_path: str, width: int = 200, height: int = 200):
     """Dedicated endpoint for thumbnails to make it easier for clients"""
     full_path = Path("/") / file_path.strip("/")
@@ -800,8 +783,7 @@ async def get_thumbnail(file_path: str, width: int = 200, height: int = 200):
         # Fallback to original file if thumbnail generation fails
         return FileResponse(full_path)
 
-
-@app.get("/search", response_model=SearchResult, tags=["search"])
+@api_router.get("/search", response_model=SearchResult, tags=["search"])
 async def search_entities_v2(
     q: str,
     library_ids: str = Query(None, description="Comma-separated list of library IDs"),
@@ -950,8 +932,7 @@ async def search_entities_v2(
             detail=str(e),
         )
 
-
-@app.get(
+@api_router.get(
     "/libraries/{library_id}/entities/{entity_id}/context",
     response_model=EntityContext,
     tags=["entity"],
@@ -995,8 +976,7 @@ def get_entity_context(
     # Return the context object
     return EntityContext(prev=prev_entities, next=next_entities)
 
-
-@app.get("/api/config", tags=["config"])
+@api_router.get("/config", tags=["config"])
 async def get_config():
     """Get the current configuration"""
     config = load_config()
@@ -1012,7 +992,7 @@ async def get_config():
     
     return config_dict
 
-@app.put("/api/config", tags=["config"])
+@api_router.put("/config", tags=["config"])
 async def update_config(config_updates: dict):
     """Update the configuration"""
     try:
@@ -1041,7 +1021,7 @@ async def update_config(config_updates: dict):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to update config: {str(e)}")
 
-@app.post("/api/config/restart", tags=["config"])
+@api_router.post("/config/restart", tags=["config"])
 async def restart_services(components: dict = {"serve": True, "watch": True, "record": True}):
     """Restart specified components"""
     try:
@@ -1062,14 +1042,12 @@ def run_server():
     logging.info("OCR plugin enabled: %s", settings.ocr)
 
     # Add VLM plugin router
-    # Removed check for settings.vlm.enabled
     vlm_main.init_plugin(settings.vlm)
-    app.include_router(vlm_main.router, prefix="/plugins/vlm")
+    api_router.include_router(vlm_main.router, prefix="/plugins/vlm")
 
     # Add OCR plugin router
-    # Removed check for settings.ocr.enabled
     ocr_main.init_plugin(settings.ocr)
-    app.include_router(ocr_main.router, prefix="/plugins/ocr")
+    api_router.include_router(ocr_main.router, prefix="/plugins/ocr")
 
     uvicorn.run(
         "memos.server:app",
