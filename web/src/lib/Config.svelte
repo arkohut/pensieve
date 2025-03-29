@@ -11,6 +11,7 @@
 	import { toast } from 'svelte-sonner';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { _ } from 'svelte-i18n';
+	import HealthCheck from './HealthCheck.svelte';
 
 	// 用于返回主页面的函数，由父组件传入
 	export let onBack: () => void;
@@ -26,6 +27,12 @@
 
 	// 添加状态变量控制显示确认对话框
 	let showRestartConfirm = false;
+	
+	// 服务重启中的状态
+	let servicesRestarting = false;
+	
+	// 健康检查组件引用
+	let healthCheckComponent: HealthCheck;
 
 	// Section collapse state
 	let sectionCollapsed = {
@@ -42,8 +49,8 @@
 		sectionCollapsed[section] = !sectionCollapsed[section];
 	}
 
-	onMount(async () => {
-		await fetchConfig();
+	onMount(() => {
+		fetchConfig();
 	});
 
 	async function fetchConfig() {
@@ -125,21 +132,29 @@
 		showRestartConfirm = false;
 	}
 
+	// 处理服务重启状态变化
+	function handleRestartStatusChange(restarting: boolean) {
+		servicesRestarting = restarting;
+	}
+
 	// 执行实际的重启服务操作
 	async function confirmRestart() {
 		showRestartConfirm = false;
 		saving = true;
+		
 		try {
+			const restartData = {
+				serve: true,
+				watch: true,
+				record: true
+			};
+			
 			const response = await fetch(`${apiEndpoint}/config/restart`, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json'
 				},
-				body: JSON.stringify({
-					serve: true,
-					watch: true,
-					record: true
-				})
+				body: JSON.stringify(restartData)
 			});
 
 			if (!response.ok) {
@@ -150,12 +165,17 @@
 			toast.success($_('config.title'), {
 				description: $_('config.servicesRestarting')
 			});
+			
+			// 使用HealthCheck组件开始健康检查
+			healthCheckComponent.startHealthCheck();
+			
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Unknown error restarting services';
 			console.error(error);
 			toast.error($_('config.error'), {
 				description: error
 			});
+			servicesRestarting = false;
 		} finally {
 			saving = false;
 		}
@@ -177,6 +197,9 @@
 		
 		// Set the value
 		current[lastKey] = value;
+		// 创建一个新对象以触发Svelte的响应式更新
+		changes = { ...changes };
+		console.log("Changes updated:", changes);
 	}
 
 	function getConfigValue(path: string[]) {
@@ -198,6 +221,14 @@
 </svelte:head>
 
 <div class="container mx-auto p-4 max-w-5xl">
+	<!-- 健康检查组件 -->
+	<HealthCheck 
+		bind:this={healthCheckComponent} 
+		{apiEndpoint} 
+		bind:servicesRestarting 
+		onStatusChange={handleRestartStatusChange} 
+	/>
+
 	<header class="flex justify-between items-center mb-8">
 		<div class="flex items-center">
 			<Button variant="ghost" on:click={onBack} class="mr-4">
@@ -207,11 +238,11 @@
 			<h1 class="text-3xl font-bold">{$_('config.title')}</h1>
 		</div>
 		<div class="flex space-x-2">
-			<Button variant="outline" on:click={handleRestartClick} disabled={saving}>
+			<Button variant="outline" on:click={handleRestartClick} disabled={saving || servicesRestarting}>
 				<RotateCw size={18} class="mr-2" />
 				{$_('config.restartServices')}
 			</Button>
-			<Button variant="default" on:click={saveConfig} disabled={saving || Object.keys(changes).length === 0}>
+			<Button variant="default" on:click={saveConfig} disabled={saving || servicesRestarting || Object.keys(changes).length === 0}>
 				<Save size={18} class="mr-2" />
 				{$_('config.saveButton')}
 			</Button>
