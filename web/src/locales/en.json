@@ -25,5 +25,77 @@
     "searchLog": {
         "handleSearchStringChange": "handleSearchStringChange"
     },
-    "slogan": "Record, Retrieve, Review"
+    "slogan": "Record, Retrieve, Review",
+    "back": "Back",
+    "config": {
+        "title": "Configuration",
+        "saveButton": "Save Changes",
+        "restartServices": "Restart Services",
+        "savedSuccessfully": "Configuration saved successfully",
+        "noChanges": "No configuration changes to save",
+        "error": "Error",
+        "servicesRestarting": "All services are being restarted",
+        "general": {
+            "title": "General Configuration",
+            "description": "Basic settings for the application",
+            "baseDir": "Base Directory",
+            "screenshotsDir": "Screenshots Directory",
+            "databasePath": "Database Path",
+            "defaultLibrary": "Default Library",
+            "enableFacet": "Enable Facet Search"
+        },
+        "server": {
+            "title": "Server Configuration",
+            "description": "Settings for the server component",
+            "host": "Server Host",
+            "port": "Server Port",
+            "username": "Auth Username",
+            "password": "Auth Password"
+        },
+        "record": {
+            "title": "Record Configuration",
+            "description": "Settings for the record component",
+            "interval": "Record Interval (seconds)",
+            "intervalDescription": "Time between screenshot captures"
+        },
+        "watch": {
+            "title": "Watch Configuration",
+            "description": "Settings for the watch component",
+            "rateWindowSize": "Rate Window Size",
+            "sparsityFactor": "Sparsity Factor",
+            "processingInterval": "Processing Interval",
+            "idleTimeout": "Idle Timeout (seconds)",
+            "idleProcessStart": "Idle Process Start Time",
+            "idleProcessEnd": "Idle Process End Time"
+        },
+        "ocr": {
+            "title": "OCR Settings",
+            "description": "Configure Optical Character Recognition settings",
+            "useLocal": "Use Local OCR",
+            "forceJpeg": "Force JPEG",
+            "endpoint": "OCR Endpoint",
+            "token": "OCR API Token",
+            "concurrency": "Concurrency"
+        },
+        "vlm": {
+            "title": "VLM Settings",
+            "description": "Configure Vision Language Model settings",
+            "modelName": "Model Name",
+            "endpoint": "VLM Endpoint",
+            "token": "VLM API Token",
+            "concurrency": "Concurrency",
+            "forceJpeg": "Force JPEG",
+            "prompt": "VLM Prompt"
+        },
+        "embedding": {
+            "title": "Embedding Settings",
+            "description": "Configure embedding model settings",
+            "useLocal": "Use Local Embedding",
+            "useModelscope": "Use ModelScope",
+            "model": "Embedding Model",
+            "dimensions": "Number of Dimensions",
+            "endpoint": "Embedding Endpoint",
+            "token": "Embedding API Token"
+        }
+    }
 }
