@@ -12,8 +12,10 @@
 	import LucideIcon from '$lib/components/LucideIcon.svelte';
 	import LanguageSwitcher from '$lib/LanguageSwitcher.svelte';
 	import { _ } from 'svelte-i18n';
-	import { Github } from 'lucide-svelte';
+	import { Github, Settings } from 'lucide-svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
+	import { Button } from '$lib/components/ui/button';
+	import { goto } from '$app/navigation';
 
 	let searchString = '';
 	let isLoading = false;
@@ -63,6 +65,10 @@
 	$: inputClasses = `w-full p-2 transition-all duration-300 ${
 		!isScrolled ? 'mt-4' : ''
 	}`;
+
+	function goToConfig() {
+		goto('/config');
+	}
 
 	onMount(() => {
 		const handleScroll = () => {
@@ -301,6 +307,14 @@
 
 <!-- 添加一个最外层的容器来管理整体布局 -->
 <div class="min-h-screen flex flex-col">
+	<div class="w-full border-b">
+		<div class="mx-auto max-w-screen-lg flex justify-between items-center py-2">
+			<div></div> <!-- 左侧占位 -->
+			<Button variant="ghost" size="icon" on:click={goToConfig} title="Settings">
+				<Settings size={20} />
+			</Button>
+		</div>
+	</div>
 	<!-- Header 部分 -->
 	<header
 		class="sticky top-0 z-10 transition-all duration-300"
@@ -331,7 +345,7 @@
 	</header>
 
 	<!-- 添加一个动态调整高度的空白区域 -->
-	<div style="height: {isScrolled ? '100px' : '0px'}"></div>
+	<div style="height: {isScrolled ? '120px' : '0px'}"></div>
 
 	<!-- 主要内容区域 -->
 	<main class="flex-grow">
