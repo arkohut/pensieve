@@ -35,6 +35,10 @@
         "noChanges": "No configuration changes to save",
         "error": "Error",
         "servicesRestarting": "All services are being restarted",
+        "restartConfirmTitle": "Restart Services",
+        "restartConfirmMessage": "This will restart all services and may cause temporary interruption. Are you sure you want to continue?",
+        "cancel": "Cancel",
+        "confirm": "Confirm",
         "general": {
             "title": "General Configuration",
             "description": "Basic settings for the application",

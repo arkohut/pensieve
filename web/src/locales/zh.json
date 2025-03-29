@@ -35,6 +35,10 @@
         "noChanges": "没有要保存的配置更改",
         "error": "错误",
         "servicesRestarting": "所有服务正在重新启动",
+        "restartConfirmTitle": "重启服务",
+        "restartConfirmMessage": "这将重启所有服务，可能导致暂时中断。确定要继续吗？",
+        "cancel": "取消",
+        "confirm": "确认",
         "general": {
             "title": "常规配置",
             "description": "应用程序的基本设置",
