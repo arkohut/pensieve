@@ -25,5 +25,77 @@
     "searchLog": {
         "handleSearchStringChange": "处理搜索字符串变化"
     },
-    "slogan": "记录、检索、回顾"
+    "slogan": "记录、检索、回顾",
+    "back": "返回",
+    "config": {
+        "title": "配置",
+        "saveButton": "保存更改",
+        "restartServices": "重启服务",
+        "savedSuccessfully": "配置已成功保存",
+        "noChanges": "没有要保存的配置更改",
+        "error": "错误",
+        "servicesRestarting": "所有服务正在重新启动",
+        "general": {
+            "title": "常规配置",
+            "description": "应用程序的基本设置",
+            "baseDir": "基础目录",
+            "screenshotsDir": "截图目录",
+            "databasePath": "数据库路径",
+            "defaultLibrary": "默认仓库",
+            "enableFacet": "启用分面搜索"
+        },
+        "server": {
+            "title": "服务器配置",
+            "description": "服务器组件的设置",
+            "host": "服务器主机",
+            "port": "服务器端口",
+            "username": "认证用户名",
+            "password": "认证密码"
+        },
+        "record": {
+            "title": "记录配置",
+            "description": "记录组件的设置",
+            "interval": "记录间隔（秒）",
+            "intervalDescription": "截图捕获之间的时间"
+        },
+        "watch": {
+            "title": "监控配置",
+            "description": "监控组件的设置",
+            "rateWindowSize": "速率窗口大小",
+            "sparsityFactor": "稀疏因子",
+            "processingInterval": "处理间隔",
+            "idleTimeout": "空闲超时（秒）",
+            "idleProcessStart": "空闲处理开始时间",
+            "idleProcessEnd": "空闲处理结束时间"
+        },
+        "ocr": {
+            "title": "OCR设置",
+            "description": "配置光学字符识别设置",
+            "useLocal": "使用本地OCR",
+            "forceJpeg": "强制使用JPEG",
+            "endpoint": "OCR端点",
+            "token": "OCR API令牌",
+            "concurrency": "并发数"
+        },
+        "vlm": {
+            "title": "VLM设置",
+            "description": "配置视觉语言模型设置",
+            "modelName": "模型名称",
+            "endpoint": "VLM端点",
+            "token": "VLM API令牌",
+            "concurrency": "并发数",
+            "forceJpeg": "强制使用JPEG",
+            "prompt": "VLM提示"
+        },
+        "embedding": {
+            "title": "嵌入设置",
+            "description": "配置嵌入模型设置",
+            "useLocal": "使用本地嵌入",
+            "useModelscope": "使用ModelScope",
+            "model": "嵌入模型",
+            "dimensions": "维度数量",
+            "endpoint": "嵌入端点",
+            "token": "嵌入API令牌"
+        }
+    }
 }
