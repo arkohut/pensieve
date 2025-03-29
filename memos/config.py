@@ -418,24 +418,54 @@ def restart_processes(components: dict):
         for process in processes:
             pids_to_kill.append(process.info["pid"])
     
-    # Start non-serve services first, before killing anything
+    # 先杀死所有需要重启的进程
+    for pid in pids_to_kill:
+        try:
+            os.kill(pid, signal.SIGTERM)
+            logging.info(f"Terminated process {pid}")
+            # 等待进程确实被终止
+            try:
+                # 检查进程是否仍然存在，等待最多5秒
+                wait_time = 0
+                while psutil.pid_exists(pid) and wait_time < 5:
+                    time.sleep(0.5)
+                    wait_time += 0.5
+                
+                # 如果进程仍然存在，试图强制终止
+                if psutil.pid_exists(pid):
+                    os.kill(pid, signal.SIGKILL)
+                    logging.info(f"Force terminated process {pid}")
+                    time.sleep(0.5)
+            except Exception as e:
+                logging.error(f"Error waiting for process {pid} to terminate: {e}")
+        except Exception as e:
+            logging.error(f"Error terminating process {pid}: {e}")
+    
+    # 在所有进程被终止后再启动新的进程
+    time.sleep(1)  # 额外等待1秒确保所有进程已完全终止
+    
+    # 现在启动非serve服务
     for service, should_restart in components.items():
         if should_restart and service != "serve":
             try:
+                # 确保该服务的所有旧进程已经终止
+                existing_processes = [
+                    p for p in psutil.process_iter(["pid", "name", "cmdline"])
+                    if "python" in p.info["name"].lower()
+                    and p.info["cmdline"] is not None
+                    and "memos.commands" in p.info["cmdline"]
+                    and service in p.info["cmdline"]
+                ]
+                
+                if existing_processes:
+                    logging.warning(f"Found {len(existing_processes)} {service} processes still running, skipping restart")
+                    continue
+                
                 subprocess.Popen(
                     [str(script_path), "-m", "memos.commands", service],
                     shell=True,
                     creationflags=subprocess.CREATE_NEW_CONSOLE
                 )
+                logging.info(f"Started {service} service")
             except Exception as e:
                 logging.error(f"Failed to start {service} service: {e}")
-    
-    # Now kill all processes that need to be restarted
-    # For serve, this will terminate the current process, but the launcher
-    # process we created earlier will start a new one
-    for pid in pids_to_kill:
-        try:
-            os.kill(pid, signal.SIGTERM)
-            logging.info(f"Terminated process {pid}")
-        except Exception as e:
-            logging.error(f"Error terminating process {pid}: {e}")

@@ -4,6 +4,8 @@ import uvicorn
 import mimetypes
 import time
 import threading
+import psutil
+from datetime import datetime, timedelta
 
 import logfire
 
@@ -104,6 +106,49 @@ app.mount("/api", api_router)
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@api_router.get("/processes", tags=["system"])
+async def get_processes():
+    """获取当前所有服务进程的状态"""
+    services = ["serve", "watch", "record"]
+    processes = []
+
+    for service in services:
+        service_processes = [
+            p
+            for p in psutil.process_iter(["pid", "name", "cmdline", "create_time"])
+            if "python" in p.info["name"].lower()
+            and p.info["cmdline"] is not None
+            and "memos.commands" in p.info["cmdline"]
+            and service in p.info["cmdline"]
+        ]
+
+        if service_processes:
+            for process in service_processes:
+                create_time = datetime.fromtimestamp(
+                    process.info["create_time"]
+                ).strftime("%Y-%m-%d %H:%M:%S")
+                running_time = str(
+                    timedelta(seconds=int(time.time() - process.info["create_time"]))
+                )
+                processes.append({
+                    "name": service,
+                    "status": "Running",
+                    "pid": process.info["pid"],
+                    "startedAt": create_time,
+                    "runningFor": running_time
+                })
+        else:
+            processes.append({
+                "name": service,
+                "status": "Not Running",
+                "pid": "-",
+                "startedAt": "-",
+                "runningFor": "-"
+            })
+
+    return {"processes": processes}
 
 
 @app.get("/favicon.png", response_class=FileResponse)
