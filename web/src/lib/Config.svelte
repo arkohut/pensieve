@@ -24,6 +24,9 @@
 	let error: string | null = null;
 	let changes: any = {};
 
+	// 添加状态变量控制显示确认对话框
+	let showRestartConfirm = false;
+
 	// Section collapse state
 	let sectionCollapsed = {
 		general: false,
@@ -112,7 +115,19 @@
 		}
 	}
 
-	async function restartServices() {
+	// 显示重启确认对话框
+	function handleRestartClick() {
+		showRestartConfirm = true;
+	}
+
+	// 取消重启操作
+	function cancelRestart() {
+		showRestartConfirm = false;
+	}
+
+	// 执行实际的重启服务操作
+	async function confirmRestart() {
+		showRestartConfirm = false;
 		saving = true;
 		try {
 			const response = await fetch(`${apiEndpoint}/config/restart`, {
@@ -192,7 +207,7 @@
 			<h1 class="text-3xl font-bold">{$_('config.title')}</h1>
 		</div>
 		<div class="flex space-x-2">
-			<Button variant="outline" on:click={restartServices} disabled={saving}>
+			<Button variant="outline" on:click={handleRestartClick} disabled={saving}>
 				<RotateCw size={18} class="mr-2" />
 				{$_('config.restartServices')}
 			</Button>
@@ -207,6 +222,24 @@
 		<Alert variant="destructive" class="mb-4">
 			<AlertDescription>{error}</AlertDescription>
 		</Alert>
+	{/if}
+
+	<!-- 重启服务确认对话框 -->
+	{#if showRestartConfirm}
+		<div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+			<div class="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+				<h3 class="text-lg font-medium mb-2">{$_('config.restartConfirmTitle')}</h3>
+				<p class="text-gray-600 mb-4">{$_('config.restartConfirmMessage')}</p>
+				<div class="flex justify-end space-x-2">
+					<Button variant="outline" on:click={cancelRestart}>
+						{$_('config.cancel')}
+					</Button>
+					<Button variant="destructive" on:click={confirmRestart}>
+						{$_('config.confirm')}
+					</Button>
+				</div>
+			</div>
+		</div>
 	{/if}
 
 	{#if loading}
