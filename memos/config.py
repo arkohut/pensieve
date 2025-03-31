@@ -362,94 +362,17 @@ def apply_config_updates(current_config: dict, updates: dict):
     
     return current_config, restart_required
 
-def restart_processes(components: dict):
-    """Restart the specified components
-    
-    Args:
-        components: Dict with keys "serve", "watch", "record" and boolean values
-    """
-    # Get the current script's path to run as the same user
+def _legacy_restart_processes(components: dict):
+    """备选的服务重启实现（不依赖service_manager模块）"""
+    results = {}
     script_path = sys.executable
     
-    # If serve needs to be restarted, we need a special approach
-    # Create a separate process that will:
-    # 1. Wait for the current serve process to terminate
-    # 2. Start a new serve process
-    if components.get("serve", False):
-        try:
-            # Create a detached process that will handle the restart
-            restart_cmd = [
-                str(script_path),
-                "-c",
-                (
-                    "import time, subprocess, sys, os, signal; "
-                    f"time.sleep(2); "  # Wait for original process to exit
-                    f"subprocess.Popen(['{script_path}', '-m', 'memos.commands', 'serve'], "
-                    f"shell=True, creationflags=subprocess.CREATE_NEW_CONSOLE)"
-                )
-            ]
-            
-            # Start the launcher process detached from this process
-            subprocess.Popen(
-                restart_cmd,
-                shell=True,
-                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
-            )
-            
-            logging.info("Created detached process to restart serve service")
-        except Exception as e:
-            logging.error(f"Failed to create restart process: {e}")
-    
-    # Get a list of PIDs to kill (for all services including serve)
-    pids_to_kill = []
+    # 处理非serve组件
     for service, should_restart in components.items():
-        if not should_restart:
-            continue
-            
-        # Find processes matching this service
-        processes = [
-            p for p in psutil.process_iter(["pid", "name", "cmdline"])
-            if "python" in p.info["name"].lower()
-            and p.info["cmdline"] is not None
-            and "memos.commands" in p.info["cmdline"]
-            and service in p.info["cmdline"]
-        ]
-        
-        for process in processes:
-            pids_to_kill.append(process.info["pid"])
-    
-    # 先杀死所有需要重启的进程
-    for pid in pids_to_kill:
-        try:
-            os.kill(pid, signal.SIGTERM)
-            logging.info(f"Terminated process {pid}")
-            # 等待进程确实被终止
+        if service != "serve" and should_restart:
             try:
-                # 检查进程是否仍然存在，等待最多5秒
-                wait_time = 0
-                while psutil.pid_exists(pid) and wait_time < 5:
-                    time.sleep(0.5)
-                    wait_time += 0.5
-                
-                # 如果进程仍然存在，试图强制终止
-                if psutil.pid_exists(pid):
-                    os.kill(pid, signal.SIGKILL)
-                    logging.info(f"Force terminated process {pid}")
-                    time.sleep(0.5)
-            except Exception as e:
-                logging.error(f"Error waiting for process {pid} to terminate: {e}")
-        except Exception as e:
-            logging.error(f"Error terminating process {pid}: {e}")
-    
-    # 在所有进程被终止后再启动新的进程
-    time.sleep(1)  # 额外等待1秒确保所有进程已完全终止
-    
-    # 现在启动非serve服务
-    for service, should_restart in components.items():
-        if should_restart and service != "serve":
-            try:
-                # 确保该服务的所有旧进程已经终止
-                existing_processes = [
+                # 查找对应的进程
+                processes = [
                     p for p in psutil.process_iter(["pid", "name", "cmdline"])
                     if "python" in p.info["name"].lower()
                     and p.info["cmdline"] is not None
@@ -457,15 +380,88 @@ def restart_processes(components: dict):
                     and service in p.info["cmdline"]
                 ]
                 
-                if existing_processes:
-                    logging.warning(f"Found {len(existing_processes)} {service} processes still running, skipping restart")
-                    continue
+                # 停止服务
+                for process in processes:
+                    try:
+                        os.kill(process.info["pid"], signal.SIGTERM)
+                        logging.info(f"发送SIGTERM到{service}服务 (PID: {process.info['pid']})")
+                        time.sleep(2)  # 等待进程终止
+                    except Exception as e:
+                        logging.error(f"终止{service}服务失败: {e}")
                 
-                subprocess.Popen(
-                    [str(script_path), "-m", "memos.commands", service],
-                    shell=True,
-                    creationflags=subprocess.CREATE_NEW_CONSOLE
-                )
-                logging.info(f"Started {service} service")
+                # 启动服务
+                log_dir = settings.resolved_base_dir / "logs"
+                log_dir.mkdir(parents=True, exist_ok=True)
+                
+                if platform.system() == "Windows":
+                    pythonw_path = script_path.replace("python.exe", "pythonw.exe")
+                    subprocess.Popen(
+                        [pythonw_path, "-m", "memos.commands", service],
+                        stdout=open(log_dir / f"{service}.log", "a"),
+                        stderr=subprocess.STDOUT,
+                        creationflags=subprocess.CREATE_NEW_CONSOLE
+                    )
+                else:
+                    subprocess.Popen(
+                        [script_path, "-m", "memos.commands", service],
+                        stdout=open(log_dir / f"{service}.log", "a"),
+                        stderr=subprocess.STDOUT,
+                        start_new_session=True
+                    )
+                
+                results[service] = True
             except Exception as e:
-                logging.error(f"Failed to start {service} service: {e}")
+                logging.error(f"重启{service}服务失败: {e}")
+                results[service] = False
+    
+    # 处理serve组件
+    if components.get("serve", False):
+        try:
+            # 创建独立进程执行重启
+            restart_script = (
+                f"import time, subprocess, sys, os, signal; "
+                f"time.sleep(1); "  # 等待API响应完成
+                f"processes = [p for p in __import__('psutil').process_iter(['pid', 'cmdline']) "
+                f"if p.info['cmdline'] and 'memos.commands' in ' '.join(p.info['cmdline']) and 'serve' in ' '.join(p.info['cmdline'])]; "
+                f"for p in processes: os.kill(p.info['pid'], signal.SIGTERM); "
+                f"time.sleep(2); "  # 等待进程终止
+                f"subprocess.Popen(['{script_path}', '-m', 'memos.commands', 'serve'], "
+                f"stdout=open('{settings.resolved_base_dir}/logs/serve.log', 'a'), stderr=subprocess.STDOUT, "
+                f"{'creationflags=subprocess.CREATE_NEW_CONSOLE' if platform.system() == 'Windows' else 'start_new_session=True'})"
+            )
+            
+            if platform.system() == "Windows":
+                subprocess.Popen(
+                    [script_path, "-c", restart_script],
+                    creationflags=subprocess.DETACHED_PROCESS | 
+                                 subprocess.CREATE_NEW_PROCESS_GROUP |
+                                 subprocess.CREATE_NO_WINDOW
+                )
+            else:
+                subprocess.Popen(
+                    [script_path, "-c", restart_script],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True
+                )
+            
+            results["serve"] = True
+        except Exception as e:
+            logging.error(f"创建serve重启进程失败: {e}")
+            results["serve"] = False
+    
+    return results
+
+
+def restart_processes(components: dict):
+    """使用service_manager模块重启进程，若不可用则使用备选实现"""
+    try:
+        # 导入service_manager模块
+        from .service_manager import api_restart_services
+        
+        # 调用安全重启函数
+        return api_restart_services(components)
+    except ImportError:
+        # 如果service_manager不可用，使用备选实现
+        logging.warning("service_manager模块不可用，使用旧版重启方法")
+        return _legacy_restart_processes(components)
