@@ -360,7 +360,6 @@ def watch_default_library(
             verbose=verbose,
         )
     finally:
-        # 确保清理PID文件
         remove_pid_file("watch")
 
 
