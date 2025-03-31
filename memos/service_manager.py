@@ -295,23 +295,16 @@ def register_service_signals(service_name: str) -> None:
 
 # 9. API安全重启函数
 def api_restart_services(components: Dict[str, bool]) -> Dict[str, bool]:
-    """用于API调用的安全重启函数"""
+    """为API调用提供的安全重启函数"""
     results = {}
     
-    # 检查是否需要重启serve服务
-    restart_serve = components.get("serve", False)
+    # 1. 先处理非serve组件（即时重启）
+    for service, should_restart in components.items():
+        if service != "serve" and should_restart:
+            results[service] = restart_service(service)
     
-    # 创建非serve组件的副本
-    non_serve_components = {k: v for k, v in components.items() if k != "serve"}
-    
-    # 立即重启非serve组件
-    if non_serve_components:
-        for service, should_restart in non_serve_components.items():
-            if should_restart:
-                results[service] = restart_service(service)
-    
-    # 如果需要重启serve，创建延迟执行的后台任务
-    if restart_serve:
+    # 2. 特殊处理serve组件（延迟重启）
+    if components.get("serve", False):
         # 创建延迟重启脚本
         script_path = sys.executable
         log_dir = settings.resolved_base_dir / "logs"
@@ -319,9 +312,7 @@ def api_restart_services(components: Dict[str, bool]) -> Dict[str, bool]:
         
         restart_script = f"""
 import time
-import subprocess
 import sys
-import os
 import logging
 
 # 配置日志
@@ -332,26 +323,24 @@ logging.basicConfig(
 )
 
 try:
-    # 短暂延迟确保API响应完成
+    # 延迟以确保API响应完成
     logging.info("等待API响应完成...")
     time.sleep(1)
     
-    # 重启serve服务
-    logging.info("开始重启serve服务...")
-    # 导入服务管理模块
+    # 导入并调用重启函数
     sys.path.insert(0, "{Path(__file__).parent.parent}")
     from memos.service_manager import restart_serve_service
+    logging.info("开始重启serve服务")
     restart_serve_service()
 except Exception as e:
     logging.error(f"重启serve服务失败: {{str(e)}}")
 """
         
-        # 保存重启脚本
+        # 保存脚本并启动独立进程
         script_file = log_dir / "restart_api.py"
         with open(script_file, "w") as f:
             f.write(restart_script)
         
-        # 启动独立进程执行重启
         try:
             if platform.system() == "Windows":
                 subprocess.Popen(

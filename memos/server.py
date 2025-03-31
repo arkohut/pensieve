@@ -1069,23 +1069,16 @@ async def update_config(config_updates: dict):
 @api_router.post("/config/restart", tags=["config"])
 async def restart_services(components: dict = {"serve": True, "watch": True, "record": True}):
     """Restart specified components"""
-    try:
-        from memos.service_manager import api_restart_services
-        
-        # 使用安全重启函数
-        results = api_restart_services(components)
-        
-        # 构建返回消息
-        has_serve = components.get("serve", False)
-        message = "重启操作已安排" if has_serve else "重启完成"
-        
-        return {
-            "success": True, 
-            "message": message,
-            "results": {k: "已安排" if v else "失败" for k, v in results.items()}
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to restart services: {str(e)}")
+    from memos.service_manager import api_restart_services
+    
+    results = api_restart_services(components)
+    has_serve = components.get("serve", False)
+    
+    return {
+        "success": True, 
+        "message": "Restart operation scheduled" if has_serve else "Restart completed",
+        "results": {k: "Scheduled" if v else "Failed" for k, v in results.items()}
+    }
 
 def run_server():
     # Clean up old thumbnails on startup
