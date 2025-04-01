@@ -103,7 +103,7 @@ app.mount(
 # Mount API router with prefix
 app.mount("/api", api_router)
 
-@app.get("/health")
+@api_router.get("/health")
 async def health():
     return {"status": "ok"}
 
