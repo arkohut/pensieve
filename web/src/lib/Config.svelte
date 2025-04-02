@@ -47,6 +47,16 @@
 
 	let isInitialized = false; // 添加初始化标志
 
+	let isScrolled = false;
+
+	function handleScroll() {
+		if (window.scrollY > 100) {
+			isScrolled = true;
+		} else if (isScrolled && window.scrollY < 20) {
+			isScrolled = false;
+		}
+	}
+
 	// Load collapse states from localStorage
 	function loadCollapseStates() {
 		try {
@@ -77,10 +87,17 @@
 		saveCollapseStates();
 	}
 
-	onMount(async () => {
+	onMount(() => {
 		loadCollapseStates();
-		await fetchConfig();
-		isInitialized = true; // 标记初始化完成
+		fetchConfig().then(() => {
+			isInitialized = true;
+		});
+
+		window.addEventListener('scroll', handleScroll);
+		
+		return () => {
+			window.removeEventListener('scroll', handleScroll);
+		};
 	});
 
 	async function fetchConfig() {
@@ -255,7 +272,7 @@
 	<title>Pensieve - {$_('config.title')}</title>
 </svelte:head>
 
-<div class="container mx-auto p-4 max-w-5xl">
+<div class="container mx-auto p-4 pt-0 max-w-5xl">
 	<!-- 健康检查组件 -->
 	<HealthCheck 
 		bind:this={healthCheckComponent} 
@@ -264,23 +281,30 @@
 		onStatusChange={handleRestartStatusChange} 
 	/>
 
-	<header class="flex justify-between items-center mb-8">
-		<div class="flex items-center">
-			<Button variant="ghost" on:click={onBack} class="mr-4">
-				<ArrowLeft size={18} class="mr-2" />
-				{$_('back')}
-			</Button>
-			<h1 class="text-3xl font-bold">{$_('config.title')}</h1>
-		</div>
-		<div class="flex space-x-2">
-			<Button variant="outline" on:click={handleRestartClick} disabled={saving || servicesRestarting}>
-				<RotateCw size={18} class="mr-2" />
-				{$_('config.restartServices')}
-			</Button>
-			<Button variant="default" on:click={saveConfig} disabled={saving || servicesRestarting || Object.keys(changes).length === 0}>
-				<Save size={18} class="mr-2" />
-				{$_('config.saveButton')}
-			</Button>
+	<header
+		class="sticky top-0 z-10 transition-all duration-300 bg-white mb-4 border rounded-b-lg"
+	>
+		<div 
+			class="flex items-center justify-between p-4 transition-all duration-300"
+			class:shadow-md={isScrolled}
+		>
+			<div class="flex items-center">
+				<Button variant="ghost" on:click={onBack} class="mr-4">
+					<ArrowLeft size={18} class="mr-2" />
+					{$_('back')}
+				</Button>
+				<h1 class="text-3xl font-bold">{$_('config.title')}</h1>
+			</div>
+			<div class="flex space-x-2">
+				<Button variant="outline" on:click={handleRestartClick} disabled={saving || servicesRestarting}>
+					<RotateCw size={18} class="mr-2" />
+					{$_('config.restartServices')}
+				</Button>
+				<Button variant="default" on:click={saveConfig} disabled={saving || servicesRestarting || Object.keys(changes).length === 0}>
+					<Save size={18} class="mr-2" />
+					{$_('config.saveButton')}
+				</Button>
+			</div>
 		</div>
 	</header>
 
@@ -548,6 +572,9 @@
 											value={getConfigValue(['watch', 'rate_window_size'])}
 											on:change={(e) => handleChange(['watch', 'rate_window_size'], parseInt(e.currentTarget.value))}
 										/>
+										<p class="text-sm text-muted-foreground mt-1">
+											{$_('config.watch.rateWindowSizeDesc')}
+										</p>
 									</div>
 
 									<div>
@@ -559,6 +586,9 @@
 											value={getConfigValue(['watch', 'sparsity_factor'])}
 											on:change={(e) => handleChange(['watch', 'sparsity_factor'], parseFloat(e.currentTarget.value))}
 										/>
+										<p class="text-sm text-muted-foreground mt-1">
+											{$_('config.watch.sparsityFactorDesc')}
+										</p>
 									</div>
 								</div>
 
@@ -571,6 +601,9 @@
 											value={getConfigValue(['watch', 'processing_interval'])}
 											on:change={(e) => handleChange(['watch', 'processing_interval'], parseInt(e.currentTarget.value))}
 										/>
+										<p class="text-sm text-muted-foreground mt-1">
+											{$_('config.watch.processingIntervalDesc')}
+										</p>
 									</div>
 
 									<div>
@@ -581,6 +614,9 @@
 											value={getConfigValue(['watch', 'idle_timeout'])}
 											on:change={(e) => handleChange(['watch', 'idle_timeout'], parseInt(e.currentTarget.value))}
 										/>
+										<p class="text-sm text-muted-foreground mt-1">
+											{$_('config.watch.idleTimeoutDesc')}
+										</p>
 									</div>
 								</div>
 
@@ -615,6 +651,9 @@
 												]);
 											}}
 										/>
+										<p class="text-sm text-muted-foreground mt-1">
+											{$_('config.watch.idleProcessDesc')}
+										</p>
 									</div>
 								</div>
 							</div>
@@ -646,26 +685,35 @@
 					<CollapsibleContent>
 						<div class="p-4 pt-0">
 							<div class="grid gap-4">
-								<div class="flex items-center space-x-2">
-									<Checkbox
-										id="use-local-ocr"
-										checked={getConfigValue(['ocr', 'use_local'])}
-										on:click={() => {
-											handleChange(['ocr', 'use_local'], !getConfigValue(['ocr', 'use_local']));
-										}}
-									/>
-									<Label for="use-local-ocr">{$_('config.ocr.useLocal')}</Label>
-								</div>
+								<div class="grid gap-4">
+									<div class="flex items-start space-x-2">
+										<Checkbox
+											id="use-local-ocr"
+											checked={getConfigValue(['ocr', 'use_local'])}
+											on:click={() => {
+												handleChange(['ocr', 'use_local'], !getConfigValue(['ocr', 'use_local']));
+											}}
+										/>
+										<div class="space-y-1 leading-none">
+											<Label for="use-local-ocr">{$_('config.ocr.useLocal')}</Label>
+										</div>
+									</div>
 
-								<div class="flex items-center space-x-2">
-									<Checkbox
-										id="force-jpeg-ocr"
-										checked={getConfigValue(['ocr', 'force_jpeg'])}
-										on:click={() => {
-											handleChange(['ocr', 'force_jpeg'], !getConfigValue(['ocr', 'force_jpeg']));
-										}}
-									/>
-									<Label for="force-jpeg-ocr">{$_('config.ocr.forceJpeg')}</Label>
+									<div class="flex items-start space-x-2">
+										<Checkbox
+											id="force-jpeg-ocr"
+											checked={getConfigValue(['ocr', 'force_jpeg'])}
+											on:click={() => {
+												handleChange(['ocr', 'force_jpeg'], !getConfigValue(['ocr', 'force_jpeg']));
+											}}
+										/>
+										<div class="space-y-1 leading-none">
+											<Label for="force-jpeg-ocr">{$_('config.ocr.forceJpeg')}</Label>
+											<p class="text-sm text-muted-foreground">
+												{$_('config.ocr.forceJpegDesc')}
+											</p>
+										</div>
+									</div>
 								</div>
 
 								<div class="grid grid-cols-2 gap-4">
@@ -677,6 +725,9 @@
 											disabled={getConfigValue(['ocr', 'use_local'])}
 											on:change={(e) => handleChange(['ocr', 'endpoint'], e.currentTarget.value)}
 										/>
+										<p class="text-sm text-muted-foreground mt-1">
+											{$_('config.ocr.endpointDesc')}
+										</p>
 									</div>
 
 									<div>
@@ -704,6 +755,9 @@
 										value={getConfigValue(['ocr', 'concurrency'])}
 										on:change={(e) => handleChange(['ocr', 'concurrency'], parseInt(e.currentTarget.value))}
 									/>
+									<p class="text-sm text-muted-foreground mt-1">
+										{$_('config.ocr.concurrencyDesc')}
+									</p>
 								</div>
 							</div>
 						</div>
@@ -741,6 +795,9 @@
 										value={getConfigValue(['vlm', 'modelname'])}
 										on:change={(e) => handleChange(['vlm', 'modelname'], e.currentTarget.value)}
 									/>
+									<p class="text-sm text-muted-foreground mt-1">
+										{$_('config.vlm.modelNameDesc')}
+									</p>
 								</div>
 
 								<div class="grid grid-cols-2 gap-4">
@@ -777,9 +834,12 @@
 										value={getConfigValue(['vlm', 'concurrency'])}
 										on:change={(e) => handleChange(['vlm', 'concurrency'], parseInt(e.currentTarget.value))}
 									/>
+									<p class="text-sm text-muted-foreground mt-1">
+										{$_('config.vlm.concurrencyDesc')}
+									</p>
 								</div>
 
-								<div class="flex items-center space-x-2">
+								<div class="flex items-start space-x-2">
 									<Checkbox
 										id="force-jpeg-vlm"
 										checked={getConfigValue(['vlm', 'force_jpeg'])}
@@ -787,7 +847,12 @@
 											handleChange(['vlm', 'force_jpeg'], !getConfigValue(['vlm', 'force_jpeg']));
 										}}
 									/>
-									<Label for="force-jpeg-vlm">{$_('config.vlm.forceJpeg')}</Label>
+									<div class="space-y-1 leading-none">
+										<Label for="force-jpeg-vlm">{$_('config.vlm.forceJpeg')}</Label>
+										<p class="text-sm text-muted-foreground">
+											{$_('config.vlm.forceJpegDesc')}
+										</p>
+									</div>
 								</div>
 
 								<div>
@@ -798,6 +863,9 @@
 										value={getConfigValue(['vlm', 'prompt'])}
 										on:change={(e) => handleChange(['vlm', 'prompt'], e.currentTarget.value)}
 									/>
+									<p class="text-sm text-muted-foreground mt-1">
+										{$_('config.vlm.promptDesc')}
+									</p>
 								</div>
 							</div>
 						</div>
@@ -828,26 +896,35 @@
 					<CollapsibleContent>
 						<div class="p-4 pt-0">
 							<div class="grid gap-4">
-								<div class="flex items-center space-x-2">
-									<Checkbox
-										id="use-local-embedding"
-										checked={getConfigValue(['embedding', 'use_local'])}
-										on:click={() => {
-											handleChange(['embedding', 'use_local'], !getConfigValue(['embedding', 'use_local']));
-										}}
-									/>
-									<Label for="use-local-embedding">{$_('config.embedding.useLocal')}</Label>
-								</div>
+								<div class="grid gap-4">
+									<div class="flex items-start space-x-2">
+										<Checkbox
+											id="use-local-embedding"
+											checked={getConfigValue(['embedding', 'use_local'])}
+											on:click={() => {
+												handleChange(['embedding', 'use_local'], !getConfigValue(['embedding', 'use_local']));
+											}}
+										/>
+										<div class="space-y-1 leading-none">
+											<Label for="use-local-embedding">{$_('config.embedding.useLocal')}</Label>
+										</div>
+									</div>
 
-								<div class="flex items-center space-x-2">
-									<Checkbox
-										id="use-modelscope"
-										checked={getConfigValue(['embedding', 'use_modelscope'])}
-										on:click={() => {
-											handleChange(['embedding', 'use_modelscope'], !getConfigValue(['embedding', 'use_modelscope']));
-										}}
-									/>
-									<Label for="use-modelscope">{$_('config.embedding.useModelscope')}</Label>
+									<div class="flex items-start space-x-2">
+										<Checkbox
+											id="use-modelscope"
+											checked={getConfigValue(['embedding', 'use_modelscope'])}
+											on:click={() => {
+												handleChange(['embedding', 'use_modelscope'], !getConfigValue(['embedding', 'use_modelscope']));
+											}}
+										/>
+										<div class="space-y-1 leading-none">
+											<Label for="use-modelscope">{$_('config.embedding.useModelscope')}</Label>
+											<p class="text-sm text-muted-foreground">
+												{$_('config.embedding.useModelScopeDesc')}
+											</p>
+										</div>
+									</div>
 								</div>
 
 								<div class="grid grid-cols-2 gap-4">
@@ -858,6 +935,9 @@
 											value={getConfigValue(['embedding', 'model'])}
 											on:change={(e) => handleChange(['embedding', 'model'], e.currentTarget.value)}
 										/>
+										<p class="text-sm text-muted-foreground mt-1">
+											{$_('config.embedding.modelDesc')}
+										</p>
 									</div>
 
 									<div>
@@ -868,6 +948,9 @@
 											value={getConfigValue(['embedding', 'num_dim'])}
 											on:change={(e) => handleChange(['embedding', 'num_dim'], parseInt(e.currentTarget.value))}
 										/>
+										<p class="text-sm text-muted-foreground mt-1">
+											{$_('config.embedding.dimensionsDesc')}
+										</p>
 									</div>
 								</div>
 
@@ -880,6 +963,9 @@
 											disabled={getConfigValue(['embedding', 'use_local'])}
 											on:change={(e) => handleChange(['embedding', 'endpoint'], e.currentTarget.value)}
 										/>
+										<p class="text-sm text-muted-foreground mt-1">
+											{$_('config.embedding.endpointDesc')}
+										</p>
 									</div>
 
 									<div>
