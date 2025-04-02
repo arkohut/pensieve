@@ -83,13 +83,7 @@ app.add_typer(lib_app, name="lib", callback=callback)
 @app.command()
 def serve():
     """Run the server after initializing if necessary."""
-    from .service_manager import ensure_single_instance, register_service_signals, remove_pid_file
-    
-    # 确保只有一个实例
-    can_proceed, error_msg = ensure_single_instance("serve")
-    if not can_proceed:
-        typer.echo(error_msg)
-        raise typer.Exit(code=1)
+    from .service_manager import register_service_signals, remove_pid_file
     
     # 注册信号处理
     register_service_signals("serve")
@@ -100,7 +94,6 @@ def serve():
         
         db_success = init_database(settings)
         if db_success:
-            # 运行迁移
             run_migrations()
             
             from .server import run_server
@@ -255,17 +248,10 @@ def record(
     once: bool = typer.Option(False, help="Run once and exit"),
 ):
     """Record screenshots of the screen."""
-    from .service_manager import ensure_single_instance, register_service_signals, remove_pid_file
+    from .service_manager import register_service_signals, remove_pid_file
     
-    # 只有持续运行模式才需要单实例检查
+    # 只有持续运行模式才需要注册信号处理
     if not once:
-        # 确保只有一个实例
-        can_proceed, error_msg = ensure_single_instance("record")
-        if not can_proceed:
-            typer.echo(error_msg)
-            raise typer.Exit(code=1)
-        
-        # 注册信号处理
         register_service_signals("record")
     
     try:
@@ -324,13 +310,7 @@ def watch_default_library(
     ),
 ):
     """Watch the default library for file changes and sync automatically."""
-    from .service_manager import ensure_single_instance, register_service_signals, remove_pid_file
-    
-    # 确保只有一个实例
-    can_proceed, error_msg = ensure_single_instance("watch")
-    if not can_proceed:
-        typer.echo(error_msg)
-        raise typer.Exit(code=1)
+    from .service_manager import register_service_signals, remove_pid_file
     
     # 注册信号处理
     register_service_signals("watch")
@@ -382,7 +362,7 @@ def generate_windows_bat():
 call "{activate_path}"
 start /B "" "{pythonw_path}" -m memos.commands record > "{log_dir / 'record.log'}" 2>&1
 start /B "" "{pythonw_path}" -m memos.commands serve > "{log_dir / 'serve.log'}" 2>&1
-timeout /t 15 /nobreak >nul
+REM watch service will automatically retry until serve is ready
 start /B "" "{pythonw_path}" -m memos.commands watch > "{log_dir / 'watch.log'}" 2>&1
 """
     else:
@@ -390,7 +370,7 @@ start /B "" "{pythonw_path}" -m memos.commands watch > "{log_dir / 'watch.log'}"
         content = f"""@echo off
 start /B "" "{pythonw_path}" -m memos.commands record > "{log_dir / 'record.log'}" 2>&1
 start /B "" "{pythonw_path}" -m memos.commands serve > "{log_dir / 'serve.log'}" 2>&1
-timeout /t 15 /nobreak >nul
+REM watch service will automatically retry until serve is ready
 start /B "" "{pythonw_path}" -m memos.commands watch > "{log_dir / 'watch.log'}" 2>&1
 """
 
@@ -415,10 +395,7 @@ fi
 # run memos serve
 {python_path} -m memos.commands serve &
 
-# wait for 15 seconds before starting memos watch
-sleep 15
-
-# run memos watch
+# run memos watch (watch service will automatically retry until serve is ready)
 {python_path} -m memos.commands watch &
 
 # wait for all background processes

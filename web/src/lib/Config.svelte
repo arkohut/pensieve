@@ -142,13 +142,17 @@
 		showRestartConfirm = false;
 		saving = true;
 		
+		const restartData = {
+			serve: true,
+			watch: true,
+			record: true
+		};
+
+		if (restartData.serve) {
+			healthCheckComponent.startHealthCheck();
+		}
+		
 		try {
-			const restartData = {
-				serve: true,
-				watch: true,
-				record: true
-			};
-			
 			const response = await fetch(`${apiEndpoint}/config/restart`, {
 				method: 'POST',
 				headers: {
@@ -166,8 +170,9 @@
 				description: $_('config.servicesRestarting')
 			});
 			
-			// 使用HealthCheck组件开始健康检查
-			healthCheckComponent.startHealthCheck();
+			if (!restartData.serve) {
+				healthCheckComponent.startHealthCheck();
+			}
 			
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Unknown error restarting services';
