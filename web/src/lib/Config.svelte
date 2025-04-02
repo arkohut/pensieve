@@ -319,7 +319,7 @@
 				<div class="border rounded-lg bg-white">
 					<CollapsibleTrigger class="w-full">
 						<div class="flex items-center justify-between p-4">
-							<div class="space-y-1">
+							<div class="space-y-1 text-left">
 								<h3 class="text-lg font-semibold">{$_('config.general.title')}</h3>
 								<p class="text-sm text-muted-foreground">{$_('config.general.description')}</p>
 							</div>
@@ -407,7 +407,7 @@
 				<div class="border rounded-lg bg-white">
 					<CollapsibleTrigger class="w-full">
 						<div class="flex items-center justify-between p-4">
-							<div class="space-y-1">
+							<div class="space-y-1 text-left">
 								<h3 class="text-lg font-semibold">{$_('config.server.title')}</h3>
 								<p class="text-sm text-muted-foreground">{$_('config.server.description')}</p>
 							</div>
@@ -482,7 +482,7 @@
 				<div class="border rounded-lg bg-white">
 					<CollapsibleTrigger class="w-full">
 						<div class="flex items-center justify-between p-4">
-							<div class="space-y-1">
+							<div class="space-y-1 text-left">
 								<h3 class="text-lg font-semibold">{$_('config.record.title')}</h3>
 								<p class="text-sm text-muted-foreground">{$_('config.record.description')}</p>
 							</div>
@@ -523,7 +523,7 @@
 				<div class="border rounded-lg bg-white">
 					<CollapsibleTrigger class="w-full">
 						<div class="flex items-center justify-between p-4">
-							<div class="space-y-1">
+							<div class="space-y-1 text-left">
 								<h3 class="text-lg font-semibold">{$_('config.watch.title')}</h3>
 								<p class="text-sm text-muted-foreground">{$_('config.watch.description')}</p>
 							</div>
@@ -630,7 +630,7 @@
 				<div class="border rounded-lg bg-white">
 					<CollapsibleTrigger class="w-full">
 						<div class="flex items-center justify-between p-4">
-							<div class="space-y-1">
+							<div class="space-y-1 text-left">
 								<h3 class="text-lg font-semibold">{$_('config.ocr.title')}</h3>
 								<p class="text-sm text-muted-foreground">{$_('config.ocr.description')}</p>
 							</div>
@@ -718,7 +718,7 @@
 				<div class="border rounded-lg bg-white">
 					<CollapsibleTrigger class="w-full">
 						<div class="flex items-center justify-between p-4">
-							<div class="space-y-1">
+							<div class="space-y-1 text-left">
 								<h3 class="text-lg font-semibold">{$_('config.vlm.title')}</h3>
 								<p class="text-sm text-muted-foreground">{$_('config.vlm.description')}</p>
 							</div>
@@ -812,7 +812,7 @@
 				<div class="border rounded-lg bg-white">
 					<CollapsibleTrigger class="w-full">
 						<div class="flex items-center justify-between p-4">
-							<div class="space-y-1">
+							<div class="space-y-1 text-left">
 								<h3 class="text-lg font-semibold">{$_('config.embedding.title')}</h3>
 								<p class="text-sm text-muted-foreground">{$_('config.embedding.description')}</p>
 							</div>
