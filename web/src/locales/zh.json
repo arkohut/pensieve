@@ -71,40 +71,61 @@
             "title": "监控配置",
             "description": "监控组件的设置",
             "rateWindowSize": "速率窗口大小",
+            "rateWindowSizeDesc": "计算处理速率时考虑的最近事件数量",
             "sparsityFactor": "稀疏因子",
+            "sparsityFactorDesc": "控制文件处理频率的因子，值越高处理频率越低。1.0 表示处理每个文件",
             "processingInterval": "处理间隔",
+            "processingIntervalDesc": "每N个文件处理一个文件。这个值会根据处理速率自动调整",
             "idleTimeout": "空闲超时（秒）",
+            "idleTimeoutDesc": "多少秒没有新文件后标记为空闲状态",
             "idleProcessStart": "空闲处理开始时间",
-            "idleProcessEnd": "空闲处理结束时间"
+            "idleProcessEnd": "空闲处理结束时间",
+            "idleProcessDesc": "系统空闲时处理跳过文件的时间区间"
         },
         "ocr": {
             "title": "OCR设置",
             "description": "配置光学字符识别设置",
             "useLocal": "使用本地OCR",
             "forceJpeg": "强制使用JPEG",
+            "forceJpegDesc": "将图像转换为JPEG格式再进行OCR",
             "endpoint": "OCR端点",
+            "endpointDesc": "仅在不使用本地OCR时使用",
             "token": "OCR API令牌",
-            "concurrency": "并发数"
+            "concurrency": "并发数",
+            "concurrencyDesc": "同时处理的最大OCR请求数"
         },
         "vlm": {
             "title": "VLM设置",
             "description": "配置视觉语言模型设置",
             "modelName": "模型名称",
+            "modelNameDesc": "用于图像描述的视觉语言模型",
             "endpoint": "VLM端点",
             "token": "VLM API令牌",
             "concurrency": "并发数",
+            "concurrencyDesc": "同时处理的最大请求数",
             "forceJpeg": "强制使用JPEG",
-            "prompt": "VLM提示"
+            "forceJpegDesc": "某些模型可能不支持WebP格式",
+            "prompt": "VLM提示",
+            "promptDesc": "用于提示模型生成图像描述的文本"
         },
         "embedding": {
             "title": "嵌入设置",
             "description": "配置嵌入模型设置",
             "useLocal": "使用本地嵌入",
             "useModelscope": "使用ModelScope",
+            "useModelScopeDesc": "从ModelScope而不是Hugging Face拉取模型",
             "model": "嵌入模型",
+            "modelDesc": "用于生成文本嵌入的模型名称",
             "dimensions": "维度数量",
+            "dimensionsDesc": "警告：修改此值将导致所有现有的向量索引失效",
             "endpoint": "嵌入端点",
+            "endpointDesc": "仅在不使用本地嵌入时使用",
             "token": "嵌入API令牌"
+        },
+        "sensitiveConfig": {
+            "title": "警告：敏感配置修改",
+            "confirm": "确认修改",
+            "cancel": "取消"
         }
     }
 }
