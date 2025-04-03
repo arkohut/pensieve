@@ -26,7 +26,7 @@ def display_plugins(plugins):
 
 @plugin_app.command("ls")
 def ls():
-    response = httpx.get(f"{BASE_URL}/plugins")
+    response = httpx.get(f"{BASE_URL}/api/plugins")
     plugins = response.json()
     display_plugins(plugins)
 
@@ -34,7 +34,7 @@ def ls():
 @plugin_app.command("create")
 def create(name: str, webhook_url: str, description: str = ""):
     response = httpx.post(
-        f"{BASE_URL}/plugins",
+        f"{BASE_URL}/api/plugins",
         json={"name": name, "description": description, "webhook_url": webhook_url},
     )
     if 200 <= response.status_code < 300:
@@ -55,7 +55,7 @@ def bind(
         plugin_param = {"plugin_name": plugin}
 
     # Check if the plugin is already bound to the library
-    response = httpx.get(f"{BASE_URL}/libraries/{library_id}")
+    response = httpx.get(f"{BASE_URL}/api/libraries/{library_id}")
     if response.status_code == 200:
         library_data = response.json()
         bound_plugins = library_data.get("plugins", [])
@@ -69,7 +69,7 @@ def bind(
                 return
 
     response = httpx.post(
-        f"{BASE_URL}/libraries/{library_id}/plugins",
+        f"{BASE_URL}/api/libraries/{library_id}/plugins",
         json=plugin_param,
     )
     if response.status_code == 204:
@@ -86,7 +86,7 @@ def unbind(
     plugin_id: int = typer.Option(..., "--plugin", help="ID of the plugin"),
 ):
     response = httpx.delete(
-        f"{BASE_URL}/libraries/{library_id}/plugins/{plugin_id}",
+        f"{BASE_URL}/api/libraries/{library_id}/plugins/{plugin_id}",
     )
     if response.status_code == 204:
         print("Plugin unbound from library successfully")

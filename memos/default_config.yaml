@@ -1,4 +1,5 @@
 base_dir: ~/.memos
+# The base directory for storing application data.
 
 # Database settings
 # Can be either:
@@ -6,17 +7,25 @@ base_dir: ~/.memos
 # 2. SQLite URL: sqlite:///absolute/path/to/database.db
 # 3. PostgreSQL URL: postgresql://postgres:mysecretpassword@localhost:5432/postgres
 database_path: database.db
+# Path to the database file. Can be a relative path or a full URL for SQLite or PostgreSQL.
+
 
 default_library: screenshots
+# The default library name to use for storing screenshots.
+
 screenshots_dir: screenshots
+# Directory for storing screenshots.
 
 server_host: 0.0.0.0
+# The host address to listen on.
 server_port: 8839
+# The port number to listen on.
 
 # Enable authentication by uncommenting the following lines
 # auth_username: admin
 # auth_password: changeme
 
+# List of default plugins to load at startup.
 default_plugins:
 - builtin_ocr
 # - builtin_vlm
@@ -90,4 +99,6 @@ watch:
 #   use_modelscope: false
 
 record_interval: 4 # seconds
+# Shorter intervals mean denser data capture, reducing missed data but increasing storage costs.
 facet: false # support facet filter
+# When set to true, enables filtering of search results based on specific attributes or dimensions.

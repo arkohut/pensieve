@@ -13,6 +13,13 @@ import yaml
 from collections import OrderedDict
 import typer
 from datetime import datetime
+import sys
+import psutil
+import signal
+import time
+import platform
+import subprocess
+import logging
 
 
 class VLMSettings(BaseModel):
@@ -258,3 +265,104 @@ def display_config():
                 typer.echo(formatted_value)
             else:
                 typer.echo(f"{key}: {formatted_value}")
+
+
+def load_config() -> Settings:
+    """Load configuration from the config file"""
+    return Settings()
+
+def save_config(config_dict: dict):
+    """Save configuration to the config file"""
+    # Get the path to the config file
+    config_path = Path.home() / ".memos" / "config.yaml"
+    
+    # Convert SecretStr values appropriately
+    for section_name, section in config_dict.items():
+        if isinstance(section, dict):
+            for key, value in section.items():
+                if isinstance(value, str) and value == "********":
+                    # Skip masked password fields - keep the original value
+                    section_obj = getattr(settings, section_name, None)
+                    if section_obj and hasattr(section_obj, key):
+                        original_value = getattr(section_obj, key)
+                        section[key] = original_value
+    
+    # Write to file
+    with open(config_path, "w") as f:
+        yaml.dump(config_dict, f, sort_keys=False, default_flow_style=False)
+
+def categorize_settings_by_restart():
+    """Categorize which settings require restart of which components
+    
+    Returns a dictionary mapping setting paths to affected components.
+    Example: {"database_path": ["serve"], "record_interval": ["record"]}
+    """
+    return {
+        # 影响所有服务的核心配置
+        "base_dir": ["serve", "watch", "record"],  # 基础目录变更影响所有服务
+        "screenshots_dir": ["serve", "record", "watch"],     # 截图目录变更影响记录和监控服务
+        
+        # 仅影响服务器的配置
+        "database_path": ["serve"],     # 数据库路径变更
+        "server_host": ["serve"],       # 服务器主机变更
+        "server_port": ["serve"],       # 服务器端口变更
+        "auth_username": ["serve"],     # 认证信息变更
+        "auth_password": ["serve"],
+        "facet": ["serve"],            # 搜索 facet 功能变更
+        
+        # 仅影响记录服务的配置
+        "record_interval": ["record"],  # 记录间隔变更
+        
+        # 仅影响监控服务的配置
+        "watch.rate_window_size": ["watch"],
+        "watch.sparsity_factor": ["watch"],
+        "watch.processing_interval": ["watch"],
+        "watch.idle_timeout": ["watch"],
+        "watch.idle_process_interval": ["watch"],
+        
+        # 插件相关配置
+        "vlm": ["serve"],
+        "ocr": ["serve"],
+        "embedding": ["serve"],
+        "default_plugins": ["serve"],
+    }
+
+def apply_config_updates(current_config: dict, updates: dict):
+    """Apply updates to the configuration
+    
+    Returns the updated config dict and a dict indicating which components need restart
+    """
+    restart_required = {"serve": False, "watch": False, "record": False}
+    restart_map = categorize_settings_by_restart()
+    
+    # Helper function to apply updates recursively
+    def apply_updates_recursive(current, updates, path=""):
+        for key, value in updates.items():
+            current_path = f"{path}.{key}" if path else key
+            
+            # Check if this setting requires restart
+            if current_path in restart_map:
+                for component in restart_map[current_path]:
+                    restart_required[component] = True
+            
+            # If this is a nested dict, recursively update
+            if isinstance(value, dict) and key in current and isinstance(current[key], dict):
+                apply_updates_recursive(current[key], value, current_path)
+            else:
+                # Check for masked password values
+                if isinstance(value, str) and value == "********":
+                    # Skip - keep original value
+                    continue
+                
+                # Direct update
+                current[key] = value
+    
+    # Apply updates
+    apply_updates_recursive(current_config, updates)
+    
+    return current_config, restart_required
+
+def restart_processes(components: dict):
+    """使用service_manager模块重启进程"""
+    from .service_manager import api_restart_services
+    return api_restart_services(components)
