@@ -8,18 +8,11 @@ from pydantic_settings import (
     SettingsConfigDict,
     YamlConfigSettingsSource,
 )
-from pydantic import BaseModel, SecretStr, field_validator, ValidationError
+from pydantic import BaseModel, SecretStr, field_validator
 import yaml
 from collections import OrderedDict
 import typer
 from datetime import datetime
-import sys
-import psutil
-import signal
-import time
-import platform
-import subprocess
-import logging
 
 
 class VLMSettings(BaseModel):
@@ -298,29 +291,29 @@ def categorize_settings_by_restart():
     Example: {"database_path": ["serve"], "record_interval": ["record"]}
     """
     return {
-        # 影响所有服务的核心配置
-        "base_dir": ["serve", "watch", "record"],  # 基础目录变更影响所有服务
-        "screenshots_dir": ["serve", "record", "watch"],     # 截图目录变更影响记录和监控服务
+        # Core configuration affecting all services
+        "base_dir": ["serve", "watch", "record"],  # Changes to the base directory affect all services
+        "screenshots_dir": ["serve", "record", "watch"],     # Changes to the screenshots directory affect recording and monitoring services
         
-        # 仅影响服务器的配置
-        "database_path": ["serve"],     # 数据库路径变更
-        "server_host": ["serve"],       # 服务器主机变更
-        "server_port": ["serve"],       # 服务器端口变更
-        "auth_username": ["serve"],     # 认证信息变更
+        # Configuration affecting only the server
+        "database_path": ["serve"],     # Changes to the database path
+        "server_host": ["serve"],       # Changes to the server host
+        "server_port": ["serve"],       # Changes to the server port
+        "auth_username": ["serve"],     # Changes to authentication information
         "auth_password": ["serve"],
-        "facet": ["serve"],            # 搜索 facet 功能变更
+        "facet": ["serve"],            # Changes to the search facet feature
         
-        # 仅影响记录服务的配置
-        "record_interval": ["record"],  # 记录间隔变更
+        # Configuration affecting only the recording service
+        "record_interval": ["record"],  # Changes to the recording interval
         
-        # 仅影响监控服务的配置
+        # Configuration affecting only the monitoring service
         "watch.rate_window_size": ["watch"],
         "watch.sparsity_factor": ["watch"],
         "watch.processing_interval": ["watch"],
         "watch.idle_timeout": ["watch"],
         "watch.idle_process_interval": ["watch"],
         
-        # 插件相关配置
+        # Plugin-related configuration
         "vlm": ["serve"],
         "ocr": ["serve"],
         "embedding": ["serve"],
@@ -363,6 +356,6 @@ def apply_config_updates(current_config: dict, updates: dict):
     return current_config, restart_required
 
 def restart_processes(components: dict):
-    """使用service_manager模块重启进程"""
+    """Restart processes using the service_manager module"""
     from .service_manager import api_restart_services
     return api_restart_services(components)
