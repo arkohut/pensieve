@@ -28,6 +28,8 @@ This project draws heavily from two other projects: one called [Rewind](https://
 
 ## 📰 Latest News
 
+- **Configuration Management UI**: Version `v0.27.0` introduces an intuitive configuration management interface that allows you to easily configure all Pensieve settings through the web interface.
+- **API Structure Optimization**: All API endpoints now use a standard `/api` prefix for improved consistency and maintainability.
 - **Intelligent Idle Processing Strategy**: Starting from version `v0.26.0`, Pensieve introduces an intelligent idle processing strategy that automatically processes pending files during system idle time. This feature maximizes screenshot processing while minimizing performance impact during active system use. For more details, please refer to the [Idle Processing Strategy](#idle-processing-strategy) section.
 - **PostgreSQL Support**: Starting from version `v0.25.4`, Pensieve now fully supports using PostgreSQL as the backend database. This enhancement allows for improved retrieval performance, especially with large data volumes. If you have extensive screenshot data or require high-speed retrieval, we strongly recommend using PostgreSQL.
 
@@ -234,7 +236,18 @@ memos migrate ^
 
 ## User Guide
 
-### Using the Appropriate Embedding Model
+### Using the Configuration Management UI
+
+Pensieve v0.27.0 introduced a new configuration management interface that makes it easier to manage your system settings:
+
+1. Access the configuration UI by visiting `http://localhost:8839/config` in your browser
+2. The interface is divided into several main sections: General Configuration, Server Configuration, Record Configuration, Watch Configuration, etc.
+3. After modifying relevant settings, click the "Save Changes" button
+4. For changes that require service restart, the system will automatically prompt you and provide service restart options
+
+Through this configuration interface, you can easily adjust various settings such as OCR and VLM options, idle processing strategy, database configuration, and more without manually editing configuration files.
+
+### Using the Right Embedding Model
 
 #### 1. Model Selection
 
