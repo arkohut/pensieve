@@ -371,6 +371,7 @@ def update_entity(
     entity_id: int,
     updated_entity: UpdateEntityParam,
     db: Session,
+    force: bool = False,
 ) -> Entity:
     db_entity = db.query(EntityModel).filter(EntityModel.id == entity_id).first()
 
@@ -424,6 +425,13 @@ def update_entity(
             )
             db.add(entity_metadata)
             db_entity.metadata_entries.append(entity_metadata)
+
+    # If force is True, clear all plugin_status entries
+    if force:
+        db.query(EntityPluginStatusModel).filter(
+            EntityPluginStatusModel.entity_id == entity_id
+        ).delete()
+        db.commit()
 
     db.commit()
 
