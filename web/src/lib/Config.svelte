@@ -13,7 +13,6 @@
 	import HealthCheck from './HealthCheck.svelte';
 	import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "$lib/components/ui/collapsible";
 
-	// 用于返回主页面的函数，由父组件传入
 	export let onBack: () => void;
 
 	const apiEndpoint =
@@ -25,24 +24,17 @@
 	let error: string | null = null;
 	let changes: any = {};
 
-	// 添加状态变量控制显示确认对话框
 	let showRestartConfirm = false;
 	
-	// 服务重启中的状态
 	let servicesRestarting = false;
 	
-	// 健康检查组件引用
 	let healthCheckComponent: HealthCheck;
 
-	// 控制OCR输入字段是否禁用的本地状态
-	let ocrInputsDisabled = false;
-
-	// 用于跟踪UI状态的对象（包括各种features的启用/禁用状态）
 	let uiState = {
 		inputsDisabled: {
 			ocr: false,
 			embedding: false
-			// 可以添加更多需要跟踪的特性
+			// You can add more features to track here
 		}
 	};
 
@@ -57,7 +49,7 @@
 		embedding: false
 	};
 
-	let isInitialized = false; // 添加初始化标志
+	let isInitialized = false;
 
 	let isScrolled = false;
 
@@ -85,7 +77,7 @@
 
 	// Save collapse states to localStorage
 	function saveCollapseStates() {
-		if (!isInitialized) return; // 如果还没初始化完成，不保存状态
+		if (!isInitialized) return;
 		try {
 			localStorage.setItem('configSectionStates', JSON.stringify(sectionCollapsed));
 			console.log('Saved states:', JSON.stringify(sectionCollapsed));
@@ -123,15 +115,10 @@
 			config = await response.json();
 			changes = {}; // Reset changes when loading new config
 			
-			// 在加载配置后设置OCR输入字段的禁用状态
 			if (config && config.ocr) {
-				ocrInputsDisabled = config.ocr.use_local;
-				
-				// 初始化通用UI状态
 				uiState.inputsDisabled.ocr = config.ocr.use_local;
 			}
 			
-			// 初始化embedding的UI状态
 			if (config && config.embedding) {
 				uiState.inputsDisabled.embedding = config.embedding.use_local;
 			}
@@ -198,22 +185,18 @@
 		}
 	}
 
-	// 显示重启确认对话框
 	function handleRestartClick() {
 		showRestartConfirm = true;
 	}
 
-	// 取消重启操作
 	function cancelRestart() {
 		showRestartConfirm = false;
 	}
-
-	// 处理服务重启状态变化
+	
 	function handleRestartStatusChange(restarting: boolean) {
 		servicesRestarting = restarting;
 	}
 
-	// 执行实际的重启服务操作
 	async function confirmRestart() {
 		showRestartConfirm = false;
 		saving = true;
@@ -278,7 +261,7 @@
 		
 		// Set the value
 		current[lastKey] = value;
-		// 创建一个新对象以触发Svelte的响应式更新
+		// Create a new object to trigger Svelte's reactive update
 		changes = { ...changes };
 		console.log("Changes updated:", changes);
 	}
@@ -296,13 +279,13 @@
 		return current;
 	}
 
-	// 获取有效的配置值，优先考虑用户的更改
+	// Get the effective config value, prioritizing user changes
 	function getEffectiveConfigValue(path: string[]) {
-		// OCR相关调试
+		// OCR-related debugging
 		const isOcrPath = path[0] === 'ocr';
 		const isOcrUseLocal = isOcrPath && path[1] === 'use_local';
 		
-		// 首先检查用户的更改中是否有该值
+		// First check if the value exists in user changes
 		let changedValue = undefined;
 		let current = changes;
 		
@@ -315,41 +298,40 @@
 			changedValue = current;
 		}
 		
-		// 如果在更改中找到了该值，则返回它
+		// If the value exists in user changes, return it
 		if (changedValue !== undefined) {
-
 			return changedValue;
 		}
 		
-		// 否则返回原始配置值
+		// Otherwise return the original config value
 		const originalValue = getConfigValue(path);
 
 		return originalValue;
 	}
 
-	// 处理use_local类型的复选框变化，同时更新UI状态
+	// Handle changes to the use_local checkbox type and update the UI state
 	function handleUseLocalChange(feature: 'ocr' | 'embedding', newValue: boolean) {		
-		// 更新配置
+		// Update the config
 		handleChange([feature, 'use_local'], newValue);
 		
-		// 更新UI状态
+		// Update the UI state
 		uiState.inputsDisabled[feature] = newValue;
 	}
 
 	let textareaElement: HTMLTextAreaElement;
 	
-	// 添加自动调整文本区域高度的函数
+	// Add a function to automatically adjust the height of the textarea
 	function adjustTextareaHeight(textarea: HTMLTextAreaElement) {
-		// 设置最小高度（3行）
-		const minHeight = 24 * 3; // 假设每行高度为24px
+		// Set the minimum height (3 rows)
+		const minHeight = 24 * 3; // Assuming each row is 24px tall
 		
-		// 重置高度以获取实际内容高度
+		// Reset height to get the actual content height
 		textarea.style.height = 'auto';
 		
-		// 计算新高度（内容高度和最小高度中的较大值）
+		// Calculate the new height (the larger of the content height and the minimum height)
 		const newHeight = Math.max(textarea.scrollHeight, minHeight);
 		
-		// 设置新高度
+		// Set the new height
 		textarea.style.height = newHeight + 'px';
 	}
 
@@ -421,7 +403,6 @@
 		</Alert>
 	{/if}
 
-	<!-- 重启服务确认对话框 -->
 	{#if showRestartConfirm}
 		<div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
 			<div class="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
@@ -1088,7 +1069,14 @@
 					</CollapsibleTrigger>
 					<CollapsibleContent>
 						<div class="p-4 pt-0">
-							<div class="grid gap-4">
+							<div class="grid gap-4">								
+								<Alert variant="destructive" class="bg-amber-50 border-amber-200 text-amber-700">
+									<AlertDescription>
+										{$_('config.embedding.changeWarningPrefix', { default: 'Changing the embedding model or dimensions requires restarting services and reindexing. After changes, run ' })}
+										<code class="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-800">memos reindex --force</code>
+									</AlertDescription>
+								</Alert>
+
 								<div class="grid gap-4">
 									<div class="flex items-start space-x-2">
 										<Checkbox
