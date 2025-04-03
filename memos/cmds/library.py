@@ -334,6 +334,7 @@ async def update_entity(
     plugins,
     new_entity,
     existing_entity,
+    force: bool = False,
 ) -> Tuple[FileStatus, bool, httpx.Response]:
     MAX_RETRIES = 3
     RETRY_DELAY = 2.0
@@ -346,6 +347,7 @@ async def update_entity(
                     params={
                         "trigger_webhooks_flag": "true",
                         "update_index": "true",
+                        "force": str(force).lower(),
                         **({"plugins": plugins} if plugins else {}),
                     },
                     timeout=60,
@@ -528,7 +530,7 @@ def sync(
     library_id: int,
     filepath: str,
     force: bool = typer.Option(
-        False, "--force", "-f", help="Force update the file even if it hasn't changed"
+        False, "--force", "-f", help="Force update the file and reprocess with plugins"
     ),
     without_webhooks: bool = typer.Option(
         False, "--no-plugins", help="Disable plugin triggers", is_flag=True
@@ -618,13 +620,13 @@ def sync(
             new_entity["size"] = existing_entity["size"]
 
         if not force:
-            # Merge existing metadata with new metadata
+            # When not forcing, preserve existing metadata
             new_metadata_keys = {
                 entry["key"] for entry in new_entity.get("metadata_entries", [])
             }
             for existing_entry in existing_entity.get("metadata_entries", []):
                 if existing_entry["key"] not in new_metadata_keys:
-                    new_entity["metadata_entries"].append(existing_entry)
+                    new_entity.setdefault("metadata_entries", []).append(existing_entry)
 
             # Merge existing tags with new tags
             existing_tags = {tag["name"] for tag in existing_entity.get("tags", [])}
@@ -634,17 +636,24 @@ def sync(
 
         # Only update if there are actual changes or force flag is set
         if force or has_entity_changes(new_entity, existing_entity):
+            # When forcing, always trigger webhooks unless explicitly disabled
+            should_trigger_webhooks = not without_webhooks if not force else True
+            
             update_response = httpx.put(
                 f"{BASE_URL}/api/entities/{existing_entity['id']}",
                 json=new_entity,
                 params={
-                    "trigger_webhooks_flag": str(not without_webhooks).lower(),
+                    "trigger_webhooks_flag": str(should_trigger_webhooks).lower(),
                     "update_index": "true",
+                    "force": str(force).lower(),
                 },
                 timeout=60,
             )
             if update_response.status_code == 200:
-                typer.echo(f"Updated file: {file_path}")
+                if force:
+                    typer.echo(f"Updated file and scheduled for plugin reprocessing: {file_path}")
+                else:
+                    typer.echo(f"Updated file: {file_path}")
             else:
                 typer.echo(
                     f"Error updating file: {update_response.status_code} - {update_response.text}"
@@ -1366,7 +1375,7 @@ async def process_file_batches(
                         # Directly update without merging if force is true
                         tasks.append(
                             update_entity(
-                                client, semaphore, plugins, new_entity, existing_entity
+                                client, semaphore, plugins, new_entity, existing_entity, force
                             )
                         )
                     else:
@@ -1414,6 +1423,7 @@ async def process_file_batches(
                                     plugins,
                                     new_entity,
                                     existing_entity,
+                                    force
                                 )
                             )
                         else:
@@ -1537,3 +1547,4 @@ async def check_deleted_files(
             offset += limit
 
     return deleted_count
+

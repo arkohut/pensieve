@@ -433,6 +433,7 @@ async def update_entity(
     trigger_webhooks_flag: bool = False,
     plugins: Annotated[List[int] | None, Query()] = None,
     update_index: bool = False,
+    force: bool = False,
     search_provider=Depends(lambda: app.state.search_provider),
 ):
     with logfire.span("fetch entity {entity_id=}", entity_id=entity_id):
@@ -444,7 +445,7 @@ async def update_entity(
             )
 
     if updated_entity:
-        entity = crud.update_entity(entity_id, updated_entity, db)
+        entity = crud.update_entity(entity_id, updated_entity, db, force=(force if trigger_webhooks_flag else False))
 
     if trigger_webhooks_flag:
         library = crud.get_library_by_id(entity.library_id, db)
