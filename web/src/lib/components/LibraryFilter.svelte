@@ -10,7 +10,7 @@
 	import { PUBLIC_API_ENDPOINT } from '$env/static/public';
 
 	const apiEndpoint =
-		typeof PUBLIC_API_ENDPOINT !== 'undefined' ? PUBLIC_API_ENDPOINT : window.location.origin;
+		(typeof PUBLIC_API_ENDPOINT !== 'undefined' ? PUBLIC_API_ENDPOINT : window.location.origin) + '/api';
 
 	async function fetchLibraries() {
 		try {

@@ -10,10 +10,11 @@
 	import { onMount } from 'svelte';
 	import { translateAppName } from '$lib/utils';
 	import LucideIcon from '$lib/components/LucideIcon.svelte';
-	import LanguageSwitcher from '$lib/LanguageSwitcher.svelte';
 	import { _ } from 'svelte-i18n';
-	import { Github } from 'lucide-svelte';
+	import { Settings } from 'lucide-svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
+	import { Button } from '$lib/components/ui/button';
+	import { goto } from '$app/navigation';
 
 	let searchString = '';
 	let isLoading = false;
@@ -48,7 +49,7 @@
 	let selectedDates: Record<string, boolean> = {};
 
 	const apiEndpoint =
-		typeof PUBLIC_API_ENDPOINT !== 'undefined' ? PUBLIC_API_ENDPOINT : window.location.origin;
+		(typeof PUBLIC_API_ENDPOINT !== 'undefined' ? PUBLIC_API_ENDPOINT : window.location.origin) + '/api';
 
 	let facetCounts: Facet[] | null = null;
 
@@ -63,6 +64,10 @@
 	$: inputClasses = `w-full p-2 transition-all duration-300 ${
 		!isScrolled ? 'mt-4' : ''
 	}`;
+
+	function goToConfig() {
+		goto('/config');
+	}
 
 	onMount(() => {
 		const handleScroll = () => {
@@ -301,6 +306,14 @@
 
 <!-- 添加一个最外层的容器来管理整体布局 -->
 <div class="min-h-screen flex flex-col">
+	<div class="w-full border-b">
+		<div class="mx-auto max-w-screen-lg flex justify-between items-center py-2">
+			<div></div> <!-- 左侧占位 -->
+			<Button variant="ghost" size="icon" on:click={goToConfig} title="Settings">
+				<Settings size={20} />
+			</Button>
+		</div>
+	</div>
 	<!-- Header 部分 -->
 	<header
 		class="sticky top-0 z-10 transition-all duration-300"
@@ -331,7 +344,7 @@
 	</header>
 
 	<!-- 添加一个动态调整高度的空白区域 -->
-	<div style="height: {isScrolled ? '100px' : '0px'}"></div>
+	<div style="height: {isScrolled ? '120px' : '0px'}"></div>
 
 	<!-- 主要内容区域 -->
 	<main class="flex-grow">
@@ -426,26 +439,6 @@
 			</div>
 		</div>
 	</main>
-
-	<!-- Footer -->
-	<footer class="w-full mx-auto mt-8">
-		<div class="container mx-auto">
-			<div class="border-t border-slate-900/5 py-10 text-center">
-				<p class="mt-2 text-sm leading-6 text-slate-500">{$_('slogan')}</p>
-				<p class="mt-2 text-sm leading-6 text-slate-500">{$_('copyright')}</p>
-				<div class="mt-2 flex justify-center items-center space-x-4 text-sm font-semibold leading-6 text-slate-700">
-					<a href="https://github.com/arkohut/memos" 
-					   target="_blank" 
-					   rel="noopener noreferrer"
-					   class="hover:text-slate-900 transition-colors">
-						<Github size={16} />
-					</a>
-					<div class="h-4 w-px bg-slate-500/20" />
-					<LanguageSwitcher />
-				</div>
-			</div>
-		</div>
-	</footer>
 </div>
 
 {#if searchResult && searchResult.hits.length && showModal}

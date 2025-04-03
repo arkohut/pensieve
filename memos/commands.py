@@ -83,18 +83,26 @@ app.add_typer(lib_app, name="lib", callback=callback)
 @app.command()
 def serve():
     """Run the server after initializing if necessary."""
-    from .databases.initializers import init_database
-    from .migrations import run_migrations
+    from .service_manager import register_service_signals, remove_pid_file
     
-    db_success = init_database(settings)
-    if db_success:
-        # Run any pending migrations
-        run_migrations()
+    # 注册信号处理
+    register_service_signals("serve")
+    
+    try:
+        from .databases.initializers import init_database
+        from .migrations import run_migrations
         
-        from .server import run_server
-        run_server()
-    else:
-        print("Server initialization failed. Unable to start the server.")
+        db_success = init_database(settings)
+        if db_success:
+            run_migrations()
+            
+            from .server import run_server
+            run_server()
+        else:
+            print("Server initialization failed. Unable to start the server.")
+    finally:
+        # 确保清理PID文件
+        remove_pid_file("serve")
 
 
 @app.command()
@@ -118,7 +126,7 @@ def get_or_create_default_library():
     """
     from .cmds.plugin import bind
 
-    response = httpx.get(f"{BASE_URL}/libraries")
+    response = httpx.get(f"{BASE_URL}/api/libraries")
     if response.status_code != 200:
         print(f"Failed to retrieve libraries: {response.status_code} - {response.text}")
         return None
@@ -131,7 +139,7 @@ def get_or_create_default_library():
     if not default_library:
         # Create the default library if it doesn't exist
         response = httpx.post(
-            f"{BASE_URL}/libraries",
+            f"{BASE_URL}/api/libraries",
             json={"name": settings.default_library, "folders": []},
         )
         if response.status_code != 200:
@@ -156,7 +164,7 @@ def get_or_create_default_library():
             ).isoformat(),
         }
         response = httpx.post(
-            f"{BASE_URL}/libraries/{default_library['id']}/folders",
+            f"{BASE_URL}/api/libraries/{default_library['id']}/folders",
             json={"folders": [folder]},
         )
         if response.status_code != 200:
@@ -239,33 +247,42 @@ def record(
     base_dir: str = typer.Option(None, help="Base directory for screenshots"),
     once: bool = typer.Option(False, help="Run once and exit"),
 ):
-    """
-    Record screenshots of the screen.
-    """
-    from .record import (
-        run_screen_recorder_once,
-        run_screen_recorder,
-        load_previous_hashes,
-    )
+    """Record screenshots of the screen."""
+    from .service_manager import register_service_signals, remove_pid_file
+    
+    # 只有持续运行模式才需要注册信号处理
+    if not once:
+        register_service_signals("record")
+    
+    try:
+        from .record import (
+            run_screen_recorder_once,
+            run_screen_recorder,
+            load_previous_hashes,
+        )
 
-    base_dir = (
-        os.path.expanduser(base_dir) if base_dir else settings.resolved_screenshots_dir
-    )
-    previous_hashes = load_previous_hashes(base_dir)
+        base_dir = (
+            os.path.expanduser(base_dir) if base_dir else settings.resolved_screenshots_dir
+        )
+        previous_hashes = load_previous_hashes(base_dir)
 
-    if once:
-        run_screen_recorder_once(threshold, base_dir, previous_hashes)
-    else:
-        # Log the record interval
-        logging.info(f"Record interval set to {settings.record_interval} seconds.")
-        while True:
-            try:
-                run_screen_recorder(threshold, base_dir, previous_hashes)
-            except Exception as e:
-                logging.error(
-                    f"Critical error occurred, program will restart in 10 seconds: {str(e)}"
-                )
-                time.sleep(10)
+        if once:
+            run_screen_recorder_once(threshold, base_dir, previous_hashes)
+        else:
+            # Log the record interval
+            logging.info(f"Record interval set to {settings.record_interval} seconds.")
+            while True:
+                try:
+                    run_screen_recorder(threshold, base_dir, previous_hashes)
+                except Exception as e:
+                    logging.error(
+                        f"Critical error occurred, program will restart in 10 seconds: {str(e)}"
+                    )
+                    time.sleep(10)
+    finally:
+        # 只有持续运行模式才需要清理PID文件
+        if not once:
+            remove_pid_file("record")
 
 
 @app.command("watch")
@@ -292,28 +309,38 @@ def watch_default_library(
         False, "--verbose", "-v", help="Enable verbose logging"
     ),
 ):
-    """
-    Watch the default library for file changes and sync automatically.
-    """
-    typer.echo(f"Watch settings:")
-    typer.echo(f"  rate_window_size: {rate_window_size}")
-    typer.echo(f"  sparsity_factor: {sparsity_factor}")
-    typer.echo(f"  processing_interval: {processing_interval}")
+    """Watch the default library for file changes and sync automatically."""
+    from .service_manager import register_service_signals, remove_pid_file
+    
+    # 注册信号处理
+    register_service_signals("watch")
+    
+    try:
+        typer.echo(f"Watch settings:")
+        typer.echo(f"  rate_window_size: {rate_window_size}")
+        typer.echo(f"  sparsity_factor: {sparsity_factor}")
+        typer.echo(f"  processing_interval: {processing_interval}")
 
-    from .cmds.library import watch
+        from .cmds.library import watch
 
-    default_library = get_or_create_default_library()
-    if not default_library:
-        return
+        # Add retry logic for getting default library
+        while True:
+            default_library = get_or_create_default_library()
+            if default_library:
+                break
+            typer.echo("Failed to get or create default library. Retrying in 5 seconds...")
+            time.sleep(5)
 
-    watch(
-        default_library["id"],
-        folders=None,
-        rate_window_size=rate_window_size,
-        sparsity_factor=sparsity_factor,
-        processing_interval=processing_interval,
-        verbose=verbose,
-    )
+        watch(
+            default_library["id"],
+            folders=None,
+            rate_window_size=rate_window_size,
+            sparsity_factor=sparsity_factor,
+            processing_interval=processing_interval,
+            verbose=verbose,
+        )
+    finally:
+        remove_pid_file("watch")
 
 
 def get_python_path():
@@ -335,7 +362,7 @@ def generate_windows_bat():
 call "{activate_path}"
 start /B "" "{pythonw_path}" -m memos.commands record > "{log_dir / 'record.log'}" 2>&1
 start /B "" "{pythonw_path}" -m memos.commands serve > "{log_dir / 'serve.log'}" 2>&1
-timeout /t 15 /nobreak >nul
+REM watch service will automatically retry until serve is ready
 start /B "" "{pythonw_path}" -m memos.commands watch > "{log_dir / 'watch.log'}" 2>&1
 """
     else:
@@ -343,7 +370,7 @@ start /B "" "{pythonw_path}" -m memos.commands watch > "{log_dir / 'watch.log'}"
         content = f"""@echo off
 start /B "" "{pythonw_path}" -m memos.commands record > "{log_dir / 'record.log'}" 2>&1
 start /B "" "{pythonw_path}" -m memos.commands serve > "{log_dir / 'serve.log'}" 2>&1
-timeout /t 15 /nobreak >nul
+REM watch service will automatically retry until serve is ready
 start /B "" "{pythonw_path}" -m memos.commands watch > "{log_dir / 'watch.log'}" 2>&1
 """
 
@@ -368,10 +395,7 @@ fi
 # run memos serve
 {python_path} -m memos.commands serve &
 
-# wait for 15 seconds before starting memos watch
-sleep 15
-
-# run memos watch
+# run memos watch (watch service will automatically retry until serve is ready)
 {python_path} -m memos.commands watch &
 
 # wait for all background processes
@@ -570,80 +594,49 @@ def ps():
 
 
 @app.command()
-def stop():
-    """Stop all running Memos processes"""
-    if is_windows():
-        services = ["serve", "watch", "record"]
-        stopped = False
-
-        for service in services:
-            processes = [
-                p
-                for p in psutil.process_iter(["pid", "name", "cmdline"])
-                if "python" in p.info["name"].lower()
-                and p.info["cmdline"] is not None
-                and "memos.commands" in p.info["cmdline"]
-                and service in p.info["cmdline"]
-            ]
-
-            for process in processes:
-                try:
-                    os.kill(process.info["pid"], signal.SIGTERM)
-                    typer.echo(
-                        f"Stopped {service} process (PID: {process.info['pid']})"
-                    )
-                    stopped = True
-                except ProcessLookupError:
-                    typer.echo(
-                        f"Process {service} (PID: {process.info['pid']}) not found"
-                    )
-                except PermissionError:
-                    typer.echo(
-                        f"Permission denied to stop {service} process (PID: {process.info['pid']})"
-                    )
-
-        if not stopped:
-            typer.echo("No running Memos processes found")
+def stop(
+    service: str = typer.Argument("all", help="Service to stop: serve, record, watch, or all")
+):
+    """Stop specific Memos service or all services"""
+    from .service_manager import stop_service
+    
+    if service == "all":
+        # 停止所有服务
+        for svc in ["watch", "record", "serve"]:  # 注意停止顺序
+            if stop_service(svc):
+                typer.echo(f"已停止{svc}服务")
+            else:
+                typer.echo(f"停止{svc}服务失败")
+    elif service in ["serve", "record", "watch"]:
+        if stop_service(service):
+            typer.echo(f"已停止{service}服务")
         else:
-            typer.echo("All Memos processes have been stopped")
-
-    elif is_macos():
-        service_name = "com.user.memos"
-        try:
-            subprocess.run(["launchctl", "stop", service_name], check=True)
-            typer.echo("Stopped Memos processes.")
-        except subprocess.CalledProcessError:
-            typer.echo("Failed to stop Memos processes. They may not be running.")
-
+            typer.echo(f"停止{service}服务失败")
     else:
-        typer.echo("Unsupported operating system.")
+        typer.echo(f"未知服务: {service}")
 
 
 @app.command()
-def start():
-    """Start all Memos processes"""
-    memos_dir = settings.resolved_base_dir
-
-    if is_windows():
-        bat_path = memos_dir / "launch.bat"
-        if not bat_path.exists():
-            typer.echo("Launch script not found. Please run 'memos enable' first.")
-            return
-
-        try:
-            subprocess.Popen(
-                [str(bat_path)], shell=True, creationflags=subprocess.CREATE_NEW_CONSOLE
-            )
-            typer.echo("Started Memos processes. Check the logs for more information.")
-        except Exception as e:
-            typer.echo(f"Failed to start Memos processes: {str(e)}")
-
-    elif is_macos():
-        service_name = "com.user.memos"
-        subprocess.run(["launchctl", "start", service_name], check=True)
-        typer.echo("Started Memos processes.")
+def start(
+    service: str = typer.Argument("all", help="Service to start: serve, record, watch, or all")
+):
+    """Start specific Memos service or all services"""
+    from .service_manager import start_service
+    
+    if service == "all":
+        # 启动所有服务
+        for svc in ["serve", "record", "watch"]:
+            if start_service(svc):
+                typer.echo(f"已启动{svc}服务")
+            else:
+                typer.echo(f"启动{svc}服务失败或已在运行")
+    elif service in ["serve", "record", "watch"]:
+        if start_service(service):
+            typer.echo(f"已启动{service}服务")
+        else:
+            typer.echo(f"启动{service}服务失败或已在运行")
     else:
-        typer.echo("Unsupported operating system.")
+        typer.echo(f"未知服务: {service}")
 
 
 @app.command()
@@ -860,6 +853,25 @@ def migrate_sqlite_to_pg(
             pg_session.close()
         except:
             pass
+
+
+@app.command()
+def restart(
+    service: str = typer.Argument("all", help="Service to restart: serve, record, watch, or all")
+):
+    """Restart specific Memos service or all services"""
+    from .service_manager import restart_service, restart_processes
+    
+    if service == "all":
+        # 重启所有服务
+        results = restart_processes({"watch": True, "record": True, "serve": True})
+        for svc, success in results.items():
+            typer.echo(f"{'已' if success else '未'}重启{svc}服务")
+    elif service in ["serve", "record", "watch"]:
+        success = restart_service(service)
+        typer.echo(f"{'已' if success else '未'}重启{service}服务")
+    else:
+        typer.echo(f"未知服务: {service}")
 
 
 if __name__ == "__main__":

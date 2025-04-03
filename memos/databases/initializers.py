@@ -42,16 +42,24 @@ def initialize_default_plugins(session):
     """Initialize default plugins in the database."""
     default_plugins = [
         PluginModel(
-            name="builtin_vlm", description="VLM Plugin", webhook_url="/plugins/vlm"
+            name="builtin_vlm", description="VLM Plugin", webhook_url="/api/plugins/vlm"
         ),
         PluginModel(
-            name="builtin_ocr", description="OCR Plugin", webhook_url="/plugins/ocr"
+            name="builtin_ocr", description="OCR Plugin", webhook_url="/api/plugins/ocr"
         ),
     ]
 
     for plugin in default_plugins:
         existing_plugin = session.query(PluginModel).filter_by(name=plugin.name).first()
-        if not existing_plugin:
+        if existing_plugin:
+            # Update existing plugin webhook URLs if they're using the old format
+            if existing_plugin.name == "builtin_vlm" and existing_plugin.webhook_url == "/plugins/vlm":
+                existing_plugin.webhook_url = "/api/plugins/vlm"
+                session.add(existing_plugin)
+            elif existing_plugin.name == "builtin_ocr" and existing_plugin.webhook_url == "/plugins/ocr":
+                existing_plugin.webhook_url = "/api/plugins/ocr"
+                session.add(existing_plugin)
+        else:
             session.add(plugin)
 
     session.commit()
