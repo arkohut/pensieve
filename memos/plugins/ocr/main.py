@@ -74,7 +74,13 @@ def convert_ocr_results(results):
     
     converted = []
     for result in results:
-        item = {"dt_boxes": result[0], "rec_txt": result[1], "score": result[2]}
+        # Round each coordinate in dt_boxes to 1 decimal place
+        rounded_boxes = []
+        for box in result[0]:
+            rounded_box = [round(coord, 1) for coord in box]
+            rounded_boxes.append(rounded_box)
+        
+        item = {"dt_boxes": rounded_boxes, "rec_txt": result[1], "score": round(result[2], 2)}
         converted.append(item)
     return converted
 
@@ -83,6 +89,12 @@ def convert_ocr_data(ocr_data):
     converted_data = []
     for text, score, bbox in ocr_data:
         x_min, y_min, x_max, y_max = bbox
+        # Round each coordinate to 1 decimal place
+        x_min = round(x_min, 1)
+        y_min = round(y_min, 1)
+        x_max = round(x_max, 1)
+        y_max = round(y_max, 1)
+        
         dt_boxes = [
             [x_min, y_min],
             [x_max, y_min],
@@ -92,7 +104,7 @@ def convert_ocr_data(ocr_data):
         entry = {
             'dt_boxes': dt_boxes,
             'rec_txt': text,
-            'score': float(score)
+            'score': round(float(score), 2)
         }
         converted_data.append(entry)
     return converted_data
