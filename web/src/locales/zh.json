@@ -120,13 +120,14 @@
         "embedding": {
             "title": "嵌入设置",
             "description": "配置嵌入模型设置",
+            "changeWarningPrefix": "修改嵌入模型或维度需要重启服务并重新索引。变更后，请运行",
             "useLocal": "使用本地嵌入",
             "useModelscope": "使用 ModelScope",
             "useModelScopeDesc": "从 ModelScope而不是 HuggingFace 拉取模型",
             "model": "嵌入模型",
             "modelDesc": "用于生成文本嵌入的模型名称",
             "dimensions": "维度数量",
-            "dimensionsDesc": "警告：修改此值将导致所有现有的向量索引失效",
+            "dimensionsDesc": "该字段通常和嵌入模型有关，请根据模型文档设置",
             "endpoint": "嵌入 URL",
             "endpointDesc": "仅在不使用本地嵌入时使用",
             "token": "嵌入 API 令牌"

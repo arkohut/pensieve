@@ -120,13 +120,14 @@
         "embedding": {
             "title": "Embedding Settings",
             "description": "Configure embedding model settings",
+            "changeWarningPrefix": "Changing the embedding model or dimensions requires restarting services and reindexing. After changes, run",
             "useLocal": "Use Local Embedding",
             "useModelscope": "Use ModelScope",
             "useModelScopeDesc": "Pull model from ModelScope instead of Hugging Face",
             "model": "Embedding Model",
             "modelDesc": "Model name for generating text embeddings",
             "dimensions": "Number of Dimensions",
-            "dimensionsDesc": "Warning: Changing this value will invalidate all existing vector indices",
+            "dimensionsDesc": "This field is typically related to the embedding model; please set it according to the model documentation.",
             "endpoint": "Embedding Endpoint",
             "endpointDesc": "Only used if not using local embedding",
             "token": "Embedding API Token"
