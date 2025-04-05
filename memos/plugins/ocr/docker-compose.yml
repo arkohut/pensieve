@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  rapidocr-predict-server:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - MAX_WORKERS=1
+      - USE_GPU=false
+      - API_TOKEN=your_api_token_here  # 请根据需要替换这个值
+    restart: always
