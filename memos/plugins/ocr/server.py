@@ -2,6 +2,9 @@ from PIL import Image
 import numpy as np
 import logging
 from fastapi import FastAPI, Body, HTTPException
+from fastapi import Depends, status
+from fastapi import Request
+from fastapi.security import APIKeyHeader
 from contextlib import asynccontextmanager
 import base64
 import io
@@ -14,8 +17,12 @@ import time
 import uvicorn
 import os
 
+
 # Configure logger
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(message)s"
+    )
 logger = logging.getLogger(__name__)
 
 # 创建进程池
@@ -137,9 +144,30 @@ class OCRResult(BaseModel):
     rec_txt: str = Field(..., description="Recognized text")
     score: float = Field(..., description="Confidence score")
 
+# ----------- 安全配置 -----------
+API_TOKEN = os.getenv("API_TOKEN")
+api_key_header = APIKeyHeader(name="Authorization", auto_error=False)
+
+async def verify_token(api_key: str = Depends(api_key_header)):
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Authorization Header",
+        )
+    # 安全比较防止时序攻击
+    token = api_key.replace("Bearer ", "", 1).strip()
+    if not secrets.compare_digest(token, API_TOKEN):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Token",
+        )
+    return True
 
 @app.post("/predict", response_model=List[OCRResult])
-async def predict_base64(image_base64: str = Body(..., embed=True)):
+async def predict_base64(
+    _auth: bool = Depends(verify_token),
+    image_base64: str = Body(..., embed=True)
+    ):
     try:
         if not image_base64:
             raise HTTPException(status_code=400, detail="Missing image_base64 field")
