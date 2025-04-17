@@ -635,7 +635,9 @@ def sync(
             new_entity["tags"] = list(merged_tags)
 
         # Only update if there are actual changes or force flag is set
-        if force or has_entity_changes(new_entity, existing_entity):
+        has_changes = has_entity_changes(new_entity, existing_entity)
+        
+        if force or has_changes:
             # When forcing, always trigger webhooks unless explicitly disabled
             should_trigger_webhooks = not without_webhooks if not force else True
             
@@ -658,9 +660,29 @@ def sync(
                 typer.echo(
                     f"Error updating file: {update_response.status_code} - {update_response.text}"
                 )
+        elif not without_webhooks:
+            # Send update request with trigger_webhooks_flag=true 
+            # The server-side trigger_webhooks function will only process plugins 
+            # that haven't processed this entity yet
+            update_response = httpx.put(
+                f"{BASE_URL}/api/entities/{existing_entity['id']}",
+                json=new_entity,
+                params={
+                    "trigger_webhooks_flag": "true",
+                    "update_index": "true",
+                    "force": "false",
+                },
+                timeout=60,
+            )
+            if update_response.status_code == 200:
+                # Assume plugins may have been processed, since server-side will process any pending plugins
+                typer.echo(f"File content unchanged, checking for pending plugins: {file_path}")
+            else:
+                typer.echo(
+                    f"Error updating file: {update_response.status_code} - {update_response.text}"
+                )
         else:
             typer.echo(f"File {file_path} is up to date. No changes detected.")
-
     else:
         # 3. File doesn't exist, check if it belongs to a folder in the library
         folder = next(
@@ -822,7 +844,8 @@ class LibraryFileHandler(FileSystemEventHandler):
                 if self.state != "idle":
                     self.state = "idle"
                     self.logger.info(
-                        f"State changed to idle (no activity for {self.idle_timeout} seconds)"
+                        f"State changed to idle (no activity for {self.idle_timeout} seconds)",
+                        extra={"log_type": "bg"}
                     )
                     # Start processing unprocessed files when entering idle state
                     if not is_on_battery() and current_in_process_window:
@@ -836,7 +859,8 @@ class LibraryFileHandler(FileSystemEventHandler):
                                 f"outside processing hours {settings.watch.idle_process_interval[0]}-{settings.watch.idle_process_interval[1]}"
                             )
                         self.logger.info(
-                            f"Not processing unprocessed files ({', '.join(reasons)})"
+                            f"Not processing unprocessed files ({', '.join(reasons)})",
+                            extra={"log_type": "bg"}
                         )
                 elif (
                     window_state_changed
@@ -845,13 +869,14 @@ class LibraryFileHandler(FileSystemEventHandler):
                 ):
                     # We're already idle and just entered the processing window
                     self.logger.info(
-                        "Entered processing window while idle, starting to process files"
+                        "Entered processing window while idle, starting to process files",
+                        extra={"log_type": "bg"}
                     )
                     self.process_unprocessed_files()
             else:
                 if self.state != "busy":
                     self.state = "busy"
-                    self.logger.info("State changed to busy")
+                    self.logger.info("State changed to busy", extra={"log_type": "bg"})
 
     def process_unprocessed_files(self):
         """Process unprocessed files using the API endpoint"""
@@ -859,40 +884,51 @@ class LibraryFileHandler(FileSystemEventHandler):
             return
 
         if is_on_battery():
-            self.logger.info("Not processing unprocessed files while on battery")
+            self.logger.info("Not processing unprocessed files while on battery", extra={"log_type": "bg"})
             return
 
         if not self.is_within_process_interval():
             self.logger.info(
-                f"Not processing unprocessed files outside of hours {settings.watch.idle_process_interval[0]}-{settings.watch.idle_process_interval[1]}"
+                f"Not processing unprocessed files outside of hours {settings.watch.idle_process_interval[0]}-{settings.watch.idle_process_interval[1]}",
+                extra={"log_type": "bg"}
             )
             return
 
         self.is_processing_skipped = True
-        self.logger.info("Starting to process unprocessed files")
+        self.logger.info("Starting background processing", extra={
+            "event": "background_processing_start",
+            "idle_timeout": self.idle_timeout,
+            "process_interval": f"{settings.watch.idle_process_interval[0]}-{settings.watch.idle_process_interval[1]}",
+            "log_type": "bg"
+        })
 
         def process_files():
-            while self.is_processing_skipped:
-                with self.lock:
-                    if self.state != "idle":
-                        self.logger.info(
-                            "Stopping unprocessed file processing as system is no longer idle"
-                        )
-                        self.is_processing_skipped = False
-                        return
+            while True:
+                # Check state conditions at the start of each iteration
+                if not self.is_processing_skipped:
+                    self.logger.info("Background processing stopped: processing_skipped flag cleared", 
+                                   extra={"log_type": "bg"})
+                    break
 
-                    # Check battery status and time interval periodically
-                    if is_on_battery() or not self.is_within_process_interval():
-                        reason = (
-                            "switched to battery"
-                            if is_on_battery()
-                            else "outside of processing hours"
-                        )
-                        self.logger.info(
-                            f"Stopping unprocessed file processing as system is {reason}"
-                        )
-                        self.is_processing_skipped = False
-                        return
+                if is_on_battery():
+                    self.logger.info("Background processing stopped: system on battery", 
+                                   extra={"log_type": "bg"})
+                    self.is_processing_skipped = False
+                    break
+
+                if not self.is_within_process_interval():
+                    self.logger.info(
+                        f"Background processing stopped: outside processing hours {settings.watch.idle_process_interval[0]}-{settings.watch.idle_process_interval[1]}", 
+                        extra={"log_type": "bg"}
+                    )
+                    self.is_processing_skipped = False
+                    break
+
+                if self.state != "idle":
+                    self.logger.info("Background processing stopped: system no longer idle", 
+                                   extra={"log_type": "bg"})
+                    self.is_processing_skipped = False
+                    break
 
                 try:
                     # Get library information to get folder IDs
@@ -903,8 +939,21 @@ class LibraryFileHandler(FileSystemEventHandler):
                     library = library_response.json()
 
                     has_unprocessed_files = False
+                    cycle_stats = {
+                        "processed_count": 0,
+                        "failed_count": 0,
+                        "skipped_count": 0
+                    }
+
                     # Process each folder
                     for folder in library["folders"]:
+                        self.logger.debug("Processing folder", extra={
+                            "event": "folder_processing_start",
+                            "folder_id": folder['id'],
+                            "library_id": self.library_id,
+                            "log_type": "bg"
+                        })
+
                         # Get unprocessed files from API for this folder
                         response = httpx.get(
                             f"{BASE_URL}/api/libraries/{self.library_id}/folders/{folder['id']}/entities",
@@ -914,47 +963,109 @@ class LibraryFileHandler(FileSystemEventHandler):
                         entities = response.json()
 
                         if not entities:
-                            self.logger.info("No unprocessed files found")
+                            self.logger.debug("No unprocessed files found in folder", extra={
+                                "event": "folder_processing_empty",
+                                "folder_id": folder['id'],
+                                "log_type": "bg"
+                            })
                             continue
 
                         has_unprocessed_files = True
                         for entity in entities:
-                            if not self.is_processing_skipped:
-                                break
+                            # Re-check conditions before processing each entity
+                            if not self.is_processing_skipped or is_on_battery() or not self.is_within_process_interval() or self.state != "idle":
+                                return
 
                             filepath = entity["filepath"]
                             if not os.path.exists(filepath):
+                                self.logger.debug("File not found, skipping", extra={
+                                    "event": "entity_processing_skip",
+                                    "entity_id": entity['id'],
+                                    "filepath": filepath,
+                                    "reason": "file_not_found",
+                                    "log_type": "bg"
+                                })
+                                cycle_stats["skipped_count"] += 1
                                 continue
 
-                            self.logger.info(f"Processing unprocessed file: {filepath}")
+                            self.logger.debug("Processing file", extra={
+                                "event": "entity_processing_start",
+                                "entity_id": entity['id'],
+                                "filepath": filepath,
+                                "log_type": "bg"
+                            })
+
                             try:
-                                sync(self.library_id, filepath, without_webhooks=False)
+                                sync(self.library_id, filepath, without_webhooks=False, force=False)
                                 with self.lock:
                                     self.background_synced += 1
                                     self.failed_retries.pop(filepath, None)
+                                cycle_stats["processed_count"] += 1
+                                
+                                self.logger.debug("Successfully processed file", extra={
+                                    "event": "entity_processing_success",
+                                    "entity_id": entity['id'],
+                                    "filepath": filepath,
+                                    "log_type": "bg"
+                                })
                             except Exception as e:
-                                self.logger.error(
-                                    f"Error processing file {filepath}: {e}"
-                                )
+                                cycle_stats["failed_count"] += 1
                                 with self.lock:
                                     retry_count = self.failed_retries[filepath] + 1
                                     if retry_count < self.max_retries:
                                         self.failed_retries[filepath] = retry_count
                                         self.logger.info(
-                                            f"Will retry file {filepath} (attempt {retry_count}/{self.max_retries})"
+                                            f"Will retry file {filepath} (attempt {retry_count}/{self.max_retries})",
+                                            extra={
+                                                "event": "entity_processing_retry",
+                                                "entity_id": entity['id'],
+                                                "filepath": filepath,
+                                                "retry_count": retry_count,
+                                                "max_retries": self.max_retries,
+                                                "error": str(e),
+                                                "log_type": "bg"
+                                            }
                                         )
                                     else:
                                         self.logger.warning(
-                                            f"Giving up on file {filepath} after {self.max_retries} attempts"
+                                            f"Giving up on file {filepath} after {self.max_retries} attempts",
+                                            extra={
+                                                "event": "entity_processing_give_up",
+                                                "entity_id": entity['id'],
+                                                "filepath": filepath,
+                                                "max_retries": self.max_retries,
+                                                "error": str(e),
+                                                "log_type": "bg"
+                                            }
                                         )
                                         self.failed_retries.pop(filepath, None)
 
+                    # Log cycle summary
+                    if cycle_stats["processed_count"] > 0 or cycle_stats["failed_count"] > 0:
+                        self.logger.info("Background processing cycle completed", extra={
+                            "event": "background_processing_cycle_complete",
+                            "processed_count": cycle_stats["processed_count"],
+                            "failed_count": cycle_stats["failed_count"],
+                            "skipped_count": cycle_stats["skipped_count"],
+                            "has_unprocessed_files": has_unprocessed_files,
+                            "log_type": "bg"
+                        })
+
                     # If we've gone through all folders and found no files to process, wait before starting over
                     if not has_unprocessed_files:
+                        self.logger.debug("No unprocessed files found in any folder, waiting before next cycle", extra={
+                            "event": "background_processing_wait",
+                            "wait_time": 60,
+                            "log_type": "bg"
+                        })
                         time.sleep(60)
 
                 except Exception as e:
-                    self.logger.error(f"Error fetching unprocessed files: {e}")
+                    self.logger.error("Error in background processing", extra={
+                        "event": "background_processing_error",
+                        "error": str(e),
+                        "log_type": "bg"
+                    })
                     self.is_processing_skipped = False
                     return
 
@@ -1003,11 +1114,13 @@ class LibraryFileHandler(FileSystemEventHandler):
                 f"Files synced: {self.file_synced}, "
                 f"Files skipped: {self.file_skipped}, "
                 f"Failed retries: {len(self.failed_retries)}, "
-                f"Current state: {self.state}"
+                f"Current state: {self.state}",
+                extra={"log_type": "bg"}
             )
             if self.background_synced > 0:
                 self.logger.info(
-                    f"Background processing - Files synced: {self.background_synced}"
+                    f"Background processing - Files synced: {self.background_synced}",
+                    extra={"log_type": "bg"}
                 )
 
         self.check_state()
@@ -1016,7 +1129,7 @@ class LibraryFileHandler(FileSystemEventHandler):
     def process_file(self, path, no_plugins):
         self.logger.debug(f"Processing file: {path} (with plugins: {not no_plugins})")
         start_time = time.time()
-        sync(self.library_id, path, without_webhooks=no_plugins)
+        sync(self.library_id, path, without_webhooks=no_plugins, force=False)
         end_time = time.time()
         if not no_plugins:
             with self.lock:
@@ -1065,7 +1178,8 @@ class LibraryFileHandler(FileSystemEventHandler):
                 if is_on_battery():
                     new_processing_interval *= 2
                     self.logger.info(
-                        "Running on battery, doubling the processing interval."
+                        "Running on battery, doubling the processing interval.",
+                        extra={"log_type": "bg"}
                     )
 
                 if new_processing_interval != self.processing_interval:
@@ -1075,7 +1189,8 @@ class LibraryFileHandler(FileSystemEventHandler):
                         f"Processing interval: {old_processing_interval} -> {self.processing_interval}, "
                         f"Changes: {changes_per_second:.2f}it/s, "
                         f"Processing: {processing_per_second:.2f}it/s, "
-                        f"Rate (changes/processing): {rate:.2f}"
+                        f"Rate (changes/processing): {rate:.2f}",
+                        extra={"log_type": "bg"}
                     )
 
     def is_valid_file(self, path):
