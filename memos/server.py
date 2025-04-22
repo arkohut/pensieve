@@ -1089,16 +1089,24 @@ def run_server():
     schedule_thumbnail_cleanup()
 
     logging.info("Database path: %s", settings.database_url)
-    logging.info("VLM plugin enabled: %s", settings.vlm)
-    logging.info("OCR plugin enabled: %s", settings.ocr)
+    logging.info("VLM plugin enabled: %s", settings.vlm.enabled)
+    logging.info("OCR plugin enabled: %s", settings.ocr.enabled)
 
-    # Add VLM plugin router
-    vlm_main.init_plugin(settings.vlm)
-    api_router.include_router(vlm_main.router, prefix="/plugins/vlm")
+    # Only add VLM plugin router if enabled
+    if settings.vlm.enabled:
+        vlm_main.init_plugin(settings.vlm)
+        api_router.include_router(vlm_main.router, prefix="/plugins/vlm")
+        logging.info("VLM plugin initialized and router added")
+    else:
+        logging.info("VLM plugin disabled")
 
-    # Add OCR plugin router
-    ocr_main.init_plugin(settings.ocr)
-    api_router.include_router(ocr_main.router, prefix="/plugins/ocr")
+    # Only add OCR plugin router if enabled
+    if settings.ocr.enabled:
+        ocr_main.init_plugin(settings.ocr)
+        api_router.include_router(ocr_main.router, prefix="/plugins/ocr")
+        logging.info("OCR plugin initialized and router added")
+    else:
+        logging.info("OCR plugin disabled")
 
     uvicorn.run(
         "memos.server:app",

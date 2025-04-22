@@ -35,6 +35,10 @@
 			ocr: false,
 			embedding: false
 			// You can add more features to track here
+		},
+		pluginDisabled: {
+			ocr: false,
+			vlm: false
 		}
 	};
 
@@ -117,10 +121,15 @@
 			
 			if (config && config.ocr) {
 				uiState.inputsDisabled.ocr = config.ocr.use_local;
+				uiState.pluginDisabled.ocr = !config.ocr.enabled;
 			}
 			
 			if (config && config.embedding) {
 				uiState.inputsDisabled.embedding = config.embedding.use_local;
+			}
+			
+			if (config && config.vlm) {
+				uiState.pluginDisabled.vlm = !config.vlm.enabled;
 			}
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Unknown error fetching configuration';
@@ -318,6 +327,15 @@
 		uiState.inputsDisabled[feature] = newValue;
 	}
 
+	// Handle changes to the enabled checkbox
+	function handlePluginEnabledChange(plugin: 'ocr' | 'vlm', newValue: boolean) {
+		// Update the config
+		handleChange([plugin, 'enabled'], newValue);
+		
+		// Update the UI state
+		uiState.pluginDisabled[plugin] = !newValue;
+	}
+
 	let textareaElement: HTMLTextAreaElement;
 	
 	// Add a function to automatically adjust the height of the textarea
@@ -447,34 +465,62 @@
 					<CollapsibleContent>
 						<div class="p-4 pt-0">
 							<div class="grid gap-4">
-								<div class="grid gap-4">
-									<div class="flex items-start space-x-2">
-										<Checkbox
-											id="use-local-ocr"
-											checked={getEffectiveConfigValue(['ocr', 'use_local'])}
-											on:click={() => {
-												handleUseLocalChange('ocr', !getEffectiveConfigValue(['ocr', 'use_local']));
-											}}
-										/>
-										<div class="space-y-1 leading-none">
-											<Label for="use-local-ocr">{$_('config.ocr.useLocal')}</Label>
-										</div>
+								<div class="flex items-start space-x-2">
+									<Checkbox
+										id="enable-ocr"
+										checked={getEffectiveConfigValue(['ocr', 'enabled'])}
+										on:click={() => {
+											handlePluginEnabledChange('ocr', !getEffectiveConfigValue(['ocr', 'enabled']));
+										}}
+									/>
+									<div class="space-y-1 leading-none">
+										<Label for="enable-ocr">{$_('config.ocr.enabled', { default: 'Enable OCR Plugin' })}</Label>
+										<p class="text-sm text-muted-foreground">
+											{$_('config.ocr.enabledDesc', { default: 'Whether to enable the OCR plugin. Disable to save memory.' })}
+										</p>
 									</div>
+								</div>
 
-									<div class="flex items-start space-x-2">
-										<Checkbox
-											id="force-jpeg-ocr"
-											checked={getEffectiveConfigValue(['ocr', 'force_jpeg'])}
-											on:click={() => {
+								<div class="flex items-start space-x-2">
+									<Checkbox
+										id="use-local-ocr"
+										checked={getEffectiveConfigValue(['ocr', 'use_local'])}
+										disabled={uiState.pluginDisabled.ocr}
+										on:click={() => {
+											if (!uiState.pluginDisabled.ocr) {
+												handleUseLocalChange('ocr', !getEffectiveConfigValue(['ocr', 'use_local']));
+											}
+										}}
+									/>
+									<div class="space-y-1 leading-none">
+										<Label for="use-local-ocr">
+											<span class={uiState.pluginDisabled.ocr ? "text-muted-foreground" : ""}>
+												{$_('config.ocr.useLocal')}
+											</span>
+										</Label>
+									</div>
+								</div>
+
+								<div class="flex items-start space-x-2">
+									<Checkbox
+										id="force-jpeg-ocr"
+										checked={getEffectiveConfigValue(['ocr', 'force_jpeg'])}
+										disabled={uiState.pluginDisabled.ocr}
+										on:click={() => {
+											if (!uiState.pluginDisabled.ocr) {
 												handleChange(['ocr', 'force_jpeg'], !getEffectiveConfigValue(['ocr', 'force_jpeg']));
-											}}
-										/>
-										<div class="space-y-1 leading-none">
-											<Label for="force-jpeg-ocr">{$_('config.ocr.forceJpeg')}</Label>
-											<p class="text-sm text-muted-foreground">
-												{$_('config.ocr.forceJpegDesc')}
-											</p>
-										</div>
+											}
+										}}
+									/>
+									<div class="space-y-1 leading-none">
+										<Label for="force-jpeg-ocr">
+											<span class={uiState.pluginDisabled.ocr ? "text-muted-foreground" : ""}>
+												{$_('config.ocr.forceJpeg')}
+											</span>
+										</Label>
+										<p class="text-sm text-muted-foreground">
+											{$_('config.ocr.forceJpegDesc')}
+										</p>
 									</div>
 								</div>
 
@@ -485,9 +531,9 @@
 											id="ocr-endpoint"
 											class="font-mono"
 											value={getEffectiveConfigValue(['ocr', 'endpoint'])}
-											disabled={uiState.inputsDisabled.ocr}
+											disabled={uiState.inputsDisabled.ocr || uiState.pluginDisabled.ocr}
 											on:change={(e) => {
-												if (!uiState.inputsDisabled.ocr) {
+												if (!uiState.inputsDisabled.ocr && !uiState.pluginDisabled.ocr) {
 													handleChange(['ocr', 'endpoint'], e.currentTarget.value);
 												}
 											}}
@@ -505,9 +551,9 @@
 											type="password"
 											value={getEffectiveConfigValue(['ocr', 'token']) === '********' ? '' : getEffectiveConfigValue(['ocr', 'token'])}
 											placeholder="********"
-											disabled={uiState.inputsDisabled.ocr}
+											disabled={uiState.inputsDisabled.ocr || uiState.pluginDisabled.ocr}
 											on:change={(e) => {
-												if (e.currentTarget.value && !uiState.inputsDisabled.ocr) {
+												if (e.currentTarget.value && !uiState.inputsDisabled.ocr && !uiState.pluginDisabled.ocr) {
 													handleChange(['ocr', 'token'], e.currentTarget.value);
 												}
 											}}
@@ -522,7 +568,12 @@
 										class="font-mono"
 										type="number"
 										value={getEffectiveConfigValue(['ocr', 'concurrency'])}
-										on:change={(e) => handleChange(['ocr', 'concurrency'], parseInt(e.currentTarget.value))}
+										disabled={uiState.pluginDisabled.ocr}
+										on:change={(e) => {
+											if (!uiState.pluginDisabled.ocr) {
+												handleChange(['ocr', 'concurrency'], parseInt(e.currentTarget.value));
+											}
+										}}
 									/>
 									<p class="text-sm text-muted-foreground mt-1">
 										{$_('config.ocr.concurrencyDesc')}
@@ -557,13 +608,34 @@
 					<CollapsibleContent>
 						<div class="p-4 pt-0">
 							<div class="grid gap-4">
+								<div class="flex items-start space-x-2 mb-4">
+									<Checkbox
+										id="enable-vlm"
+										checked={getEffectiveConfigValue(['vlm', 'enabled'])}
+										on:click={() => {
+											handlePluginEnabledChange('vlm', !getEffectiveConfigValue(['vlm', 'enabled']));
+										}}
+									/>
+									<div class="space-y-1 leading-none">
+										<Label for="enable-vlm">{$_('config.vlm.enabled', { default: 'Enable VLM Plugin' })}</Label>
+										<p class="text-sm text-muted-foreground">
+											{$_('config.vlm.enabledDesc', { default: 'Whether to enable the VLM plugin. Disable to save memory.' })}
+										</p>
+									</div>
+								</div>
+
 								<div>
 									<Label for="model-name">{$_('config.vlm.modelName')}</Label>
 									<Input
 										id="model-name"
 										class="font-mono"
 										value={getEffectiveConfigValue(['vlm', 'modelname'])}
-										on:change={(e) => handleChange(['vlm', 'modelname'], e.currentTarget.value)}
+										disabled={uiState.pluginDisabled.vlm}
+										on:change={(e) => {
+											if (!uiState.pluginDisabled.vlm) {
+												handleChange(['vlm', 'modelname'], e.currentTarget.value);
+											}
+										}}
 									/>
 									<p class="text-sm text-muted-foreground mt-1">
 										{$_('config.vlm.modelNameDesc')}
@@ -577,7 +649,12 @@
 											id="vlm-endpoint"
 											class="font-mono"
 											value={getEffectiveConfigValue(['vlm', 'endpoint'])}
-											on:change={(e) => handleChange(['vlm', 'endpoint'], e.currentTarget.value)}
+											disabled={uiState.pluginDisabled.vlm}
+											on:change={(e) => {
+												if (!uiState.pluginDisabled.vlm) {
+													handleChange(['vlm', 'endpoint'], e.currentTarget.value);
+												}
+											}}
 										/>
 									</div>
 
@@ -589,8 +666,9 @@
 											type="password"
 											value={getEffectiveConfigValue(['vlm', 'token']) === '********' ? '' : getEffectiveConfigValue(['vlm', 'token'])}
 											placeholder="********"
+											disabled={uiState.pluginDisabled.vlm}
 											on:change={(e) => {
-												if (e.currentTarget.value) {
+												if (e.currentTarget.value && !uiState.pluginDisabled.vlm) {
 													handleChange(['vlm', 'token'], e.currentTarget.value);
 												}
 											}}
@@ -605,7 +683,12 @@
 										class="font-mono"
 										type="number"
 										value={getEffectiveConfigValue(['vlm', 'concurrency'])}
-										on:change={(e) => handleChange(['vlm', 'concurrency'], parseInt(e.currentTarget.value))}
+										disabled={uiState.pluginDisabled.vlm}
+										on:change={(e) => {
+											if (!uiState.pluginDisabled.vlm) {
+												handleChange(['vlm', 'concurrency'], parseInt(e.currentTarget.value));
+											}
+										}}
 									/>
 									<p class="text-sm text-muted-foreground mt-1">
 										{$_('config.vlm.concurrencyDesc')}
@@ -616,12 +699,19 @@
 									<Checkbox
 										id="force-jpeg-vlm"
 										checked={getEffectiveConfigValue(['vlm', 'force_jpeg'])}
+										disabled={uiState.pluginDisabled.vlm}
 										on:click={() => {
-											handleChange(['vlm', 'force_jpeg'], !getEffectiveConfigValue(['vlm', 'force_jpeg']));
+											if (!uiState.pluginDisabled.vlm) {
+												handleChange(['vlm', 'force_jpeg'], !getEffectiveConfigValue(['vlm', 'force_jpeg']));
+											}
 										}}
 									/>
 									<div class="space-y-1 leading-none">
-										<Label for="force-jpeg-vlm">{$_('config.vlm.forceJpeg')}</Label>
+										<Label for="force-jpeg-vlm">
+											<span class={uiState.pluginDisabled.vlm ? "text-muted-foreground" : ""}>
+												{$_('config.vlm.forceJpeg')}
+											</span>
+										</Label>
 										<p class="text-sm text-muted-foreground">
 											{$_('config.vlm.forceJpegDesc')}
 										</p>
@@ -636,9 +726,12 @@
 											id="vlm-prompt"
 											class="font-mono resize-none overflow-hidden w-full min-h-[72px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
 											value={getEffectiveConfigValue(['vlm', 'prompt'])}
+											disabled={uiState.pluginDisabled.vlm}
 											on:input={(e) => {
-												handleChange(['vlm', 'prompt'], e.currentTarget.value);
-												adjustTextareaHeight(e.currentTarget);
+												if (!uiState.pluginDisabled.vlm) {
+													handleChange(['vlm', 'prompt'], e.currentTarget.value);
+													adjustTextareaHeight(e.currentTarget);
+												}
 											}}
 										/>
 									</div>

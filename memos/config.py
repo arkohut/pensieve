@@ -24,6 +24,8 @@ class VLMSettings(BaseModel):
     force_jpeg: bool = True
     # prompt for vlm to extract caption
     prompt: str = "请帮描述这个图片中的内容，包括画面格局、出现的视觉元素等"
+    # whether to enable the VLM plugin
+    enabled: bool = True
 
 
 class OCRSettings(BaseModel):
@@ -33,6 +35,8 @@ class OCRSettings(BaseModel):
     concurrency: int = 8
     use_local: bool = True
     force_jpeg: bool = False
+    # whether to enable the OCR plugin
+    enabled: bool = True
 
 
 class EmbeddingSettings(BaseModel):
@@ -315,7 +319,9 @@ def categorize_settings_by_restart():
         
         # Plugin-related configuration
         "vlm": ["serve"],
+        "vlm.enabled": ["serve"],       # Changes to VLM plugin enabled flag
         "ocr": ["serve"],
+        "ocr.enabled": ["serve"],       # Changes to OCR plugin enabled flag
         "embedding": ["serve"],
         "default_plugins": ["serve"],
     }
