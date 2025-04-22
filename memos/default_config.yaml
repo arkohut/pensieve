@@ -41,6 +41,8 @@ vlm:
   # English version
   prompt: Please describe the content of this image, including the layout and visual elements.
   token: ''
+  # whether to enable the VLM plugin
+  enabled: true
 
 # using local ocr
 ocr:
@@ -50,6 +52,8 @@ ocr:
   force_jpeg: false
   token: ''
   use_local: true
+  # whether to enable the OCR plugin
+  enabled: true
 
 # using local embedding for English as the main language
 embedding:
