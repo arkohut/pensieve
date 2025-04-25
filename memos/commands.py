@@ -29,9 +29,6 @@ try:
 except ImportError:
     __version__ = "Unknown"
 
-
-app = typer.Typer(context_settings={"help_option_names": ["-h", "--help"]})
-
 BASE_URL = settings.server_endpoint
 
 # Configure logging
@@ -75,6 +72,8 @@ def callback(ctx: typer.Context):
             typer.echo("Error: Server is not running. Please start the server first.")
             raise typer.Exit(code=1)
 
+
+app = typer.Typer(context_settings={"help_option_names": ["-h", "--help"]})
 
 app.add_typer(plugin_app, name="plugin")
 app.add_typer(lib_app, name="lib", callback=callback)
@@ -222,7 +221,7 @@ def reindex_default_library(
     from .cmds.library import reindex
 
     # Get the default library
-    response = httpx.get(f"{BASE_URL}/libraries")
+    response = httpx.get(f"{BASE_URL}/api/libraries")
     if response.status_code != 200:
         print(f"Failed to retrieve libraries: {response.status_code} - {response.text}")
         return
