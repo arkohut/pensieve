@@ -57,7 +57,6 @@ def callback(ctx: typer.Context):
     server_dependent_commands = [
         "scan",
         "reindex",
-        "watch",
         "ls",
         "create",
         "add-folder",
