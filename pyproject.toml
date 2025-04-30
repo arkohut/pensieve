@@ -49,6 +49,7 @@ dependencies = [
     "logfire[sqlalchemy]",
     "logfire[fastapi]",
     "jieba",
+    "tabulate",
 ]
 
 [project.optional-dependencies]
