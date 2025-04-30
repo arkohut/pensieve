@@ -45,7 +45,7 @@ logging.getLogger("typer").setLevel(logging.ERROR)
 def check_server_health():
     """Check if the server is running and healthy."""
     try:
-        response = httpx.get(f"{BASE_URL}/health", timeout=5)
+        response = httpx.get(f"{BASE_URL}/api/health", timeout=5)
         return response.status_code == 200
     except httpx.RequestException:
         return False
