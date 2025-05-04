@@ -1,14 +1,29 @@
 <script lang="ts">
+	import { run } from 'svelte/legacy';
+
 	import { onMount } from 'svelte';
 
-	export let value: string = '';
-	export let id: string | undefined = undefined;
-	export let placeholder: string | undefined = undefined;
-	export let disabled: boolean = false;
-	export let minRows: number = 3;
-	export let className: string = '';
+	interface Props {
+		value?: string;
+		id?: string | undefined;
+		placeholder?: string | undefined;
+		disabled?: boolean;
+		minRows?: number;
+		className?: string;
+		[key: string]: any
+	}
 
-	let textareaElement: HTMLTextAreaElement;
+	let {
+		value = $bindable(''),
+		id = undefined,
+		placeholder = undefined,
+		disabled = false,
+		minRows = 3,
+		className = '',
+		...rest
+	}: Props = $props();
+
+	let textareaElement: HTMLTextAreaElement = $state();
 
 	// 添加自动调整文本区域高度的函数
 	function adjustTextareaHeight(textarea: HTMLTextAreaElement) {
@@ -27,9 +42,11 @@
 	}
 
 	// 监听值的变化
-	$: if (textareaElement && value !== undefined) {
-		setTimeout(() => adjustTextareaHeight(textareaElement), 0);
-	}
+	run(() => {
+		if (textareaElement && value !== undefined) {
+			setTimeout(() => adjustTextareaHeight(textareaElement), 0);
+		}
+	});
 
 	// 组件挂载时初始化
 	onMount(() => {
@@ -46,8 +63,8 @@
 	{disabled}
 	bind:value
 	class="resize-none overflow-hidden w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 {className}"
-	on:input={(e) => {
+	oninput={(e) => {
 		adjustTextareaHeight(e.currentTarget);
 	}}
-	{...$$restProps}
-/> 
+	{...rest}
+></textarea> 
