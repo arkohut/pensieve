@@ -26,7 +26,7 @@
 					<p class="mt-2 text-sm leading-6 text-slate-500">{$_('slogan')}</p>
 					<p class="mt-2 text-sm leading-6 text-slate-500">{$_('copyright')}</p>
 					<div class="mt-2 flex justify-center items-center space-x-4 text-sm font-semibold leading-6 text-slate-700">
-						<a href="https://github.com/arkohut/memos" 
+						<a href="https://github.com/arkohut/pensieve" 
 						   target="_blank" 
 						   rel="noopener noreferrer"
 						   class="hover:text-slate-900 transition-colors">

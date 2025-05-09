@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
 import { fileURLToPath } from 'url';
-import { generateMemosLogo } from './logoGenerator.js';
+import { generateLogo } from './logoGenerator.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,9 +11,9 @@ const __dirname = path.dirname(__filename);
 async function generatePNGLogo(size, outputFileName) {
     let svgContent;
     if (size <= 256) {
-        svgContent = generateMemosLogo(size, false, false);
+        svgContent = generateLogo(size, false, false);
     } else {
-        svgContent = generateMemosLogo(size, true, true);
+        svgContent = generateLogo(size, true, true);
     }
 
     // 确保 logos 目录存在
