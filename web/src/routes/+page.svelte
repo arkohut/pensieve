@@ -396,8 +396,8 @@
 					{/if}
 					<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
 						{#each searchResult.hits as hit, index}
-							<!-- svelte-ignore a11y-click-events-have-key-events -->
-							<!-- svelte-ignore a11y-no-static-element-interactions -->
+							<!-- svelte-ignore a11y_click_events_have_key_events -->
+							<!-- svelte-ignore a11y_no_static_element_interactions -->
 							<div
 								class="bg-white rounded-lg overflow-hidden border border-gray-300 relative"
 								onclick={() => openModal(index)}
