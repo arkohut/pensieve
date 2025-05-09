@@ -1,9 +1,9 @@
-<script>
-	import { Copy, Check } from 'lucide-svelte';
+<script lang="ts">
+	import { Copy, Check } from '@lucide/svelte';
 
-	export let text;
+	let { text } = $props();
 
-	let copied = false;
+	let copied = $state(false);
 
 	/**
 	 * Copy text to clipboard and change icon
@@ -21,7 +21,7 @@
 	}
 </script>
 
-<button class="ml-2 flex items-center" on:click={() => handleCopyClick(text)}>
+<button class="ml-2 flex items-center" onclick={() => handleCopyClick(text)}>
 	{#if copied}
 		<Check size={20} />
 	{:else}

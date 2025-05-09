@@ -3,7 +3,7 @@
 	import '../app.css';
 	import { _ } from 'svelte-i18n';
 	import LanguageSwitcher from '$lib/LanguageSwitcher.svelte';
-	import { Github } from 'lucide-svelte';
+	import { Github } from '@lucide/svelte';
 	let { children } = $props();
 </script>
 

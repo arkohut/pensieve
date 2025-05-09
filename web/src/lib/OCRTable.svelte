@@ -1,8 +1,12 @@
 <script>
+	
 	/**
-	 * @type {Array<{dt_boxes: any, rec_txt: string, score: number}>}
+	 * @typedef {Object} Props
+	 * @property {Array<{dt_boxes: any, rec_txt: string, score: number}>} [ocrData]
 	 */
-	export let ocrData = [];
+
+	/** @type {Props} */
+	let { ocrData = [] } = $props();
 </script>
 
 <div class="overflow-x-auto">
