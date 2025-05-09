@@ -23,6 +23,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.PAT_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -102,5 +103,6 @@ jobs:
       - name: Push changes and tag
         run: |
           git tag ${{ steps.bump_version.outputs.new_tag }}
+          git remote set-url origin https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository }}.git
           git push
-          git push origin ${{ steps.bump_version.outputs.new_tag }} 
+          git push origin ${{ steps.bump_version.outputs.new_tag }}
