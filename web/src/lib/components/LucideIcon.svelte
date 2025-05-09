@@ -26,7 +26,7 @@
     Youtube,
     Hexagon,
     Image
-  } from 'lucide-svelte';
+  } from '@lucide/svelte';
 
   const iconMap = {
     Chrome,
@@ -57,7 +57,9 @@
     Image
   };
 
-  export let name: keyof typeof iconMap;
+  let { name, ...extraProps } = $props();
+
+  let Icon = iconMap[name] || Hexagon;
 </script>
 
-<svelte:component this={iconMap[name] || Hexagon} {...$$props} />
+<Icon {name} {...extraProps} />

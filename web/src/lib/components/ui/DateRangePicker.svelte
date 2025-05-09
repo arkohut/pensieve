@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { run } from 'svelte/legacy';
+
     import { Calendar } from "lucide-svelte";
     import type { DateRange } from "bits-ui";
     import {
@@ -17,12 +19,16 @@
       dateStyle: "medium"
     });
 
-    export let startTimestamp: number;
-    export let endTimestamp: number;
+  interface Props {
+    startTimestamp: number;
+    endTimestamp: number;
+  }
+
+  let { startTimestamp = $bindable(), endTimestamp = $bindable() }: Props = $props();
    
-    let value: DateRange | undefined;
-    let initialized = false; // Flag to control reactive updates
-    let userSelected = false; // New flag to track user selection
+    let value: DateRange | undefined = $state();
+    let initialized = $state(false); // Flag to control reactive updates
+    let userSelected = $state(false); // New flag to track user selection
     
     onMount(() => {
       const now = new Date();
@@ -37,44 +43,48 @@
       initialized = true;
     });
 
-    $: if (initialized && value && value.start && value.end && !userSelected) {
-      userSelected = true; // Set flag when user selects a range
-      startTimestamp = value.start.toDate(getLocalTimeZone()).getTime() / 1000;
-      endTimestamp = value.end.toDate(getLocalTimeZone()).getTime() / 1000;
-    }
+    run(() => {
+    if (initialized && value && value.start && value.end && !userSelected) {
+        userSelected = true; // Set flag when user selects a range
+        startTimestamp = value.start.toDate(getLocalTimeZone()).getTime() / 1000;
+        endTimestamp = value.end.toDate(getLocalTimeZone()).getTime() / 1000;
+      }
+  });
     
-    let startValue: DateValue | undefined = undefined;
+    let startValue: DateValue | undefined = $state(undefined);
   </script>
    
   <div class="grid gap-2">
     <Popover.Root openFocus>
-      <Popover.Trigger asChild let:builder>
-        <Button
-          variant="outline"
-          class={cn(
-            "w-[220px] justify-start text-center font-normal text-xs",
-            (startTimestamp === -1 && endTimestamp === -1) && "text-muted-foreground"
-          )}
-          builders={[builder]}
-        >
-          <Calendar class="mr-2 h-4 w-4" />
-          {#if startTimestamp === -1 && endTimestamp === -1}
-            不限时间
-          {:else if value && value.start}
-            {#if value.end}
-              {df.format(value.start.toDate(getLocalTimeZone()))} - {df.format(
-                value.end.toDate(getLocalTimeZone())
-              )}
+      <Popover.Trigger asChild >
+        {#snippet children({ builder })}
+            <Button
+            variant="outline"
+            class={cn(
+              "w-[220px] justify-start text-center font-normal text-xs",
+              (startTimestamp === -1 && endTimestamp === -1) && "text-muted-foreground"
+            )}
+            builders={[builder]}
+          >
+            <Calendar class="mr-2 h-4 w-4" />
+            {#if startTimestamp === -1 && endTimestamp === -1}
+              不限时间
+            {:else if value && value.start}
+              {#if value.end}
+                {df.format(value.start.toDate(getLocalTimeZone()))} - {df.format(
+                  value.end.toDate(getLocalTimeZone())
+                )}
+              {:else}
+                {df.format(value.start.toDate(getLocalTimeZone()))}
+              {/if}
+            {:else if startValue}
+              {df.format(startValue.toDate(getLocalTimeZone()))}
             {:else}
-              {df.format(value.start.toDate(getLocalTimeZone()))}
+              Pick a date
             {/if}
-          {:else if startValue}
-            {df.format(startValue.toDate(getLocalTimeZone()))}
-          {:else}
-            Pick a date
-          {/if}
-        </Button>
-      </Popover.Trigger>
+          </Button>
+                  {/snippet}
+        </Popover.Trigger>
       <Popover.Content class="w-auto p-0" align="start">
         <RangeCalendar
           bind:value

@@ -2,11 +2,15 @@
   import { Checkbox } from '$lib/components/ui/checkbox';
   import { Label } from '$lib/components/ui/label';
 
-  export let facet: { field_name: string; counts: { value: string; count: number }[] };
-  export let selectedItems: Record<string, boolean>;
-  export let onItemChange: (item: string, checked: boolean) => void;
+  interface Props {
+    facet: { field_name: string; counts: { value: string; count: number }[] };
+    selectedItems: Record<string, boolean>;
+    onItemChange: (item: string, checked: boolean) => void;
+  }
 
-  $: title = facet.field_name === 'app_names' ? 'App Names' : 'Created Date';
+  let { facet, selectedItems, onItemChange }: Props = $props();
+
+  let title = $derived(facet.field_name === 'app_names' ? 'App Names' : 'Created Date');
 </script>
 
 <div class="mb-4">

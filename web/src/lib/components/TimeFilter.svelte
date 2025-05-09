@@ -11,96 +11,124 @@
 
 	let now = +new Date();
 
+	// rangeMap now only holds start/end values; label is derived via getLabel()
 	let rangeMap: {
 		[key: string]: {
-			label: string;
 			start: number | null;
 			end: number | null;
 		};
-	};
-
-	$: rangeMap = {
+	} = $state({
 		unlimited: {
-			label: $_('timeFilter.unlimited'),
 			start: null,
 			end: null
 		},
 		threeHours: {
-			label: $_('timeFilter.threeHours'),
 			start: now - 3 * 60 * 60 * 1000,
 			end: now
 		},
 		today: {
-			label: $_('timeFilter.today'),
 			start: now - 24 * 60 * 60 * 1000,
 			end: now
 		},
 		week: {
-			label: $_('timeFilter.week'),
 			start: now - 7 * 24 * 60 * 60 * 1000,
 			end: now
 		},
 		month: {
-			label: $_('timeFilter.month'),
 			start: now - 30 * 24 * 60 * 60 * 1000,
 			end: now
 		},
 		threeMonths: {
-			label: $_('timeFilter.threeMonths'),
 			start: now - 90 * 24 * 60 * 60 * 1000,
 			end: now
 		},
 		custom: {
-			label: $_('timeFilter.custom'),
 			start: null,
 			end: null
 		}
-	};
+	});
 
-	let timeFilter = 'unlimited';
-	export let start: number;
-	export let end: number;
+	let timeFilter = $state('unlimited');
+	interface Props {
+		start: number;
+		end: number;
+	}
 
-	let customDateRange = {
+	let { start = $bindable(), end = $bindable() }: Props = $props();
+
+	let customDateRange: { start: DateValue | null; end: DateValue | null } = $state({
 		start: null,
 		end: null
-	};
+	});
 
-	function updateCustomDateRange(range: { start: DateValue | null; end: DateValue | null }) {
-		if (range.start && range.end) {
-            rangeMap.custom.start = range.start.toDate(getLocalTimeZone()).getTime();
-            rangeMap.custom.end = range.end.toDate(getLocalTimeZone()).getTime();
-			if (timeFilter !== 'custom') {
-				timeFilter = 'custom';
-			}
+	// function to get localized label text for each key
+	function getLabel(key: string) {
+		switch (key) {
+			case 'unlimited': return $_('timeFilter.unlimited');
+			case 'threeHours': return $_('timeFilter.threeHours');
+			case 'today': return $_('timeFilter.today');
+			case 'week': return $_('timeFilter.week');
+			case 'month': return $_('timeFilter.month');
+			case 'threeMonths': return $_('timeFilter.threeMonths');
+			case 'custom': return $_('timeFilter.custom');
+			default: return '';
 		}
 	}
 
-	$: updateCustomDateRange(customDateRange);
-
-	$: if (timeFilter !== 'custom') {
-		customDateRange = {
-			start: null,
-			end: null
-		};
-	}
-
-	$: displayText =
-		(timeFilter === 'custom' && customDateRange.start && customDateRange.end)
+	let displayText =
+		$derived((timeFilter === 'custom' && customDateRange.start && customDateRange.end)
 			? $_('timeFilter.customRange', { values: { start: customDateRange.start?.toString(), end: customDateRange.end?.toString() } })
-			: rangeMap[timeFilter].label;
-	$: start = rangeMap[timeFilter].start;
-	$: end = rangeMap[timeFilter].end;
+			: getLabel(timeFilter));
+
+	// Only sync customDateRange to rangeMap.custom when timeFilter is 'custom'
+	$effect(() => {
+		if (timeFilter === 'custom' && customDateRange.start && customDateRange.end) {
+			rangeMap.custom.start = customDateRange.start.toDate(getLocalTimeZone()).getTime();
+			rangeMap.custom.end = customDateRange.end.toDate(getLocalTimeZone()).getTime();
+		}
+	});
+
+	// When timeFilter is changed to anything other than 'custom', clear customDateRange
+	$effect(() => {
+		if (timeFilter !== 'custom') {
+			customDateRange = { start: null, end: null };
+		}
+	});
+
+	// Automatically update start and end props based on timeFilter and rangeMap
+	$effect(() => {
+		if (
+			timeFilter === 'custom' &&
+			rangeMap.custom.start !== null &&
+			rangeMap.custom.end !== null
+		) {
+			start = rangeMap.custom.start;
+			end = rangeMap.custom.end;
+		} else if (timeFilter !== 'custom') {
+			start = rangeMap[timeFilter].start!;
+			end = rangeMap[timeFilter].end!;
+		}
+	});
+
+	// Automatically switch to 'custom' filter when user selects a valid customDateRange
+	$effect(() => {
+		if (
+			customDateRange.start &&
+			customDateRange.end &&
+			timeFilter !== 'custom'
+		) {
+			timeFilter = 'custom';
+		}
+	});
 </script>
 
 <div>
 	<DropdownMenu.Root>
-		<DropdownMenu.Trigger asChild let:builder>
+		<DropdownMenu.Trigger>
 			<Button
 				variant="outline"
 				size="sm"
 				class="border p-2 text-xs font-medium focus:outline-none"
-				builders={[builder]}
 			>
 				<span class="truncate">{displayText}</span>
 			</Button>
@@ -109,14 +137,14 @@
 			<DropdownMenu.Label>{$_('timeFilter.label')}</DropdownMenu.Label>
 			<DropdownMenu.Separator />
 			<DropdownMenu.RadioGroup bind:value={timeFilter}>
-				<DropdownMenu.RadioItem value="unlimited">{$_('timeFilter.unlimited')}</DropdownMenu.RadioItem>
-				<DropdownMenu.RadioItem value="threeHours">{$_('timeFilter.threeHours')}</DropdownMenu.RadioItem>
-				<DropdownMenu.RadioItem value="today">{$_('timeFilter.today')}</DropdownMenu.RadioItem>
-				<DropdownMenu.RadioItem value="week">{$_('timeFilter.week')}</DropdownMenu.RadioItem>
-				<DropdownMenu.RadioItem value="month">{$_('timeFilter.month')}</DropdownMenu.RadioItem>
-				<DropdownMenu.RadioItem value="threeMonths">{$_('timeFilter.threeMonths')}</DropdownMenu.RadioItem>
+				<DropdownMenu.RadioItem value="unlimited">{getLabel('unlimited')}</DropdownMenu.RadioItem>
+				<DropdownMenu.RadioItem value="threeHours">{getLabel('threeHours')}</DropdownMenu.RadioItem>
+				<DropdownMenu.RadioItem value="today">{getLabel('today')}</DropdownMenu.RadioItem>
+				<DropdownMenu.RadioItem value="week">{getLabel('week')}</DropdownMenu.RadioItem>
+				<DropdownMenu.RadioItem value="month">{getLabel('month')}</DropdownMenu.RadioItem>
+				<DropdownMenu.RadioItem value="threeMonths">{getLabel('threeMonths')}</DropdownMenu.RadioItem>
 				<DropdownMenu.Sub>
-					<DropdownMenu.SubTrigger>{$_('timeFilter.custom')}</DropdownMenu.SubTrigger>
+					<DropdownMenu.SubTrigger>{getLabel('custom')}</DropdownMenu.SubTrigger>
 					<DropdownMenu.SubContent>
 						<RangeCalendar bind:value={customDateRange} />
 					</DropdownMenu.SubContent>
