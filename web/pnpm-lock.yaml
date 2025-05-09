@@ -17,9 +17,6 @@ importers:
       date-fns:
         specifier: ^3.6.0
         version: 3.6.0
-      lucide-svelte:
-        specifier: ^0.417.0
-        version: 0.417.0(svelte@5.28.2)
       marked:
         specifier: ^13.0.2
         version: 13.0.3
@@ -1545,11 +1542,6 @@ packages:
 
   lru-queue@0.1.0:
     resolution: {integrity: sha512-BpdYkt9EvGl8OfWHDQPISVpcl5xZthb+XPsbELj5AQXxIC8IriDZIQYjBJPEm5rS420sjZ0TLEzRcq5KdBhYrQ==}
-
-  lucide-svelte@0.417.0:
-    resolution: {integrity: sha512-JizgL7FFw2vfYj0bkXUyivOvDx+rrbAdJrVzK2Yt/X2/OvUu/9IcOrcOyQcMxwztCvylS4q4MvxsAEnh2NZkLQ==}
-    peerDependencies:
-      svelte: ^3 || ^4 || ^5.0.0-next.42
 
   magic-string@0.30.17:
     resolution: {integrity: sha512-sNPKHvyjVf7gyjwS4xGTaW/mCnF8wnjtifKBEhxfZ7E/S8tQ0rssrwGNn6q8JH/ohItJfSQp9mBtQYuTlH5QnA==}
@@ -3571,10 +3563,6 @@ snapshots:
   lru-queue@0.1.0:
     dependencies:
       es5-ext: 0.10.64
-
-  lucide-svelte@0.417.0(svelte@5.28.2):
-    dependencies:
-      svelte: 5.28.2
 
   magic-string@0.30.17:
     dependencies:

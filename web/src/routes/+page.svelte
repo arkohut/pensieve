@@ -11,21 +11,20 @@
 	import { translateAppName } from '$lib/utils';
 	import LucideIcon from '$lib/components/LucideIcon.svelte';
 	import { _ } from 'svelte-i18n';
-	import { Settings } from 'lucide-svelte';
+	import { Settings } from '@lucide/svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { Button } from '$lib/components/ui/button';
 	import { goto } from '$app/navigation';
 
-	let searchString = '';
-	let isLoading = false;
-	let showModal = false;
-	let selectedImage = 0;
+	let searchString = $state('');
+	let isLoading = $state(false);
+	let showModal = $state(false);
+	let selectedImage = $state(0);
 
-	let startTimestamp: number | null = null;
-	let endTimestamp: number | null = null;
-
-	let selectedLibraries: number[] = [];
-	let searchResult: SearchResult | null = null;
+	let startTimestamp: number | null = $state(null);
+	let endTimestamp: number | null = $state(null);
+	let selectedLibraries: number[] = $state([]);
+	let searchResult: SearchResult | null = $state(null);
 
 	interface FacetCount {
 		value: string;
@@ -45,25 +44,20 @@
 		search_time_ms: number;
 	}
 
-	let selectedAppNames: Record<string, boolean> = {};
-	let selectedDates: Record<string, boolean> = {};
+	let selectedAppNames: Record<string, boolean> = $state({});
+	let selectedDates: Record<string, boolean> = $state({});
 
 	const apiEndpoint =
 		(typeof PUBLIC_API_ENDPOINT !== 'undefined' ? PUBLIC_API_ENDPOINT : window.location.origin) + '/api';
 
-	let facetCounts: Facet[] | null = null;
+	let facetCounts: Facet[] | null = $state(null);
 
-	let isScrolled = false;
+	let isScrolled = $state(false);
 	let headerElement: HTMLElement;
 
 	let currentAbortController: AbortController | null = null;
 
 	let debounceTimer: ReturnType<typeof setTimeout>;
-
-	// 添加一个计算属性来生成输入框的类名
-	$: inputClasses = `w-full p-2 transition-all duration-300 ${
-		!isScrolled ? 'mt-4' : ''
-	}`;
 
 	function goToConfig() {
 		goto('/config');
@@ -205,8 +199,17 @@
 		}, 300);
 	}
 
-	$: [startTimestamp, endTimestamp], handleFiltersChange();
-	$: selectedLibraries, handleFiltersChange();
+	$effect(() => {
+		if (startTimestamp !== undefined || endTimestamp !== undefined) {
+			handleFiltersChange();
+		}
+	});
+
+	$effect(() => {
+		if (selectedLibraries !== undefined) {
+			handleFiltersChange();
+		}
+	});
 
 	function handleAppNameChange(app_name: string, checked: boolean) {
 		selectedAppNames[app_name] = checked;
@@ -302,14 +305,14 @@
 	<title>Pensieve {searchString ? `- ${searchString}` : ''}</title>
 </svelte:head>
 
-<svelte:window on:keydown={handleKeydown} />
+<svelte:window onkeydown={handleKeydown} />
 
 <!-- 添加一个最外层的容器来管理整体布局 -->
 <div class="min-h-screen flex flex-col">
 	<div class="w-full border-b">
 		<div class="mx-auto max-w-screen-lg flex justify-between items-center py-2">
 			<div></div> <!-- 左侧占位 -->
-			<Button variant="ghost" size="icon" on:click={goToConfig} title="Settings">
+			<Button variant="ghost" size="icon" onclick={goToConfig} title="Settings">
 				<Settings size={20} />
 			</Button>
 		</div>
@@ -324,13 +327,13 @@
 			 class:flex-row={isScrolled}
 		>
 			<Logo size={isScrolled ? 32 : 128} withBorder={!isScrolled} hasGap={!isScrolled} class_="transition-transform duration-300 ease-in-out mr-4" />
-			<div class="flex {inputClasses}">
+			<div class="flex w-full p-2 transition-all duration-300" class:mt-4={!isScrolled}>
 				<Input
 					type="text"
 					class="w-full text-lg border-gray-500"
 					bind:value={searchString}
 					placeholder={$_('searchPlaceholder')}
-					on:keydown={handleEnterPress}
+					onkeydown={handleEnterPress}
 					autofocus
 				/>
 			</div>
@@ -397,7 +400,7 @@
 							<!-- svelte-ignore a11y-no-static-element-interactions -->
 							<div
 								class="bg-white rounded-lg overflow-hidden border border-gray-300 relative"
-								on:click={() => openModal(index)}
+								onclick={() => openModal(index)}
 							>
 								<div class="px-4 pt-4">
 									<h2 class="line-clamp-2 h-12">

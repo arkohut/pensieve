@@ -1,12 +1,21 @@
 <script lang="ts">
 	import { generateMemosLogo } from '$lib/logoGenerator';
 
-	export let size = 32;
-	export let class_ = '';
-	export let withBorder = true;
-	export let hasGap = true;
+	interface Props {
+		size?: number;
+		class_?: string;
+		withBorder?: boolean;
+		hasGap?: boolean;
+	}
 
-	$: logoSvg = generateMemosLogo(size, withBorder, hasGap);
+	let {
+		size = 32,
+		class_ = '',
+		withBorder = true,
+		hasGap = true
+	}: Props = $props();
+
+	let logoSvg = $derived(generateMemosLogo(size, withBorder, hasGap));
 </script>
 
 <div class={`${class_}`}>

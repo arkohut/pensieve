@@ -5,7 +5,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { Checkbox } from '$lib/components/ui/checkbox';
-	import { Save, RotateCw, ArrowLeft, ChevronUp, ChevronDown } from 'lucide-svelte';
+	import { Save, RotateCw, ArrowLeft, ChevronUp, ChevronDown } from '@lucide/svelte';
 	import { Alert, AlertDescription } from '$lib/components/ui/alert';
 	import { toast } from 'svelte-sonner';
 	import { Textarea } from '$lib/components/ui/textarea';
@@ -13,24 +13,27 @@
 	import HealthCheck from './HealthCheck.svelte';
 	import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "$lib/components/ui/collapsible";
 
-	export let onBack: () => void;
+	interface Props {
+		onBack: () => void;
+	}
+
+	let { onBack }: Props = $props();
 
 	const apiEndpoint =
 		(typeof PUBLIC_API_ENDPOINT !== 'undefined' ? PUBLIC_API_ENDPOINT : window.location.origin) + '/api';
 
-	let config: any = null;
-	let loading = true;
-	let saving = false;
-	let error: string | null = null;
-	let changes: any = {};
+	let config: any = $state(null);
+	let loading = $state(true);
+	let saving = $state(false);
+	let error: string | null = $state(null);
+	let changes: any = $state({});
 
-	let showRestartConfirm = false;
+	let showRestartConfirm = $state(false);
+	let servicesRestarting = $state(false);
 	
-	let servicesRestarting = false;
-	
-	let healthCheckComponent: HealthCheck;
+	let vlmPromptTextarea = $state<HTMLTextAreaElement | null>(null);
 
-	let uiState = {
+	let uiState = $state({
 		inputsDisabled: {
 			ocr: false,
 			embedding: false
@@ -40,10 +43,10 @@
 			ocr: false,
 			vlm: false
 		}
-	};
+	});
 
 	// Section collapse state
-	let sectionCollapsed = {
+	let sectionCollapsed = $state({
 		general: false,
 		serve: false,
 		record: false,
@@ -51,11 +54,11 @@
 		ocr: false,
 		vlm: false,
 		embedding: false
-	};
+	});
 
-	let isInitialized = false;
+	let isInitialized = $state(false);
 
-	let isScrolled = false;
+	let isScrolled = $state(false);
 
 	function handleScroll() {
 		if (window.scrollY > 100) {
@@ -72,7 +75,6 @@
 			if (savedStates) {
 				const parsedStates = JSON.parse(savedStates);
 				sectionCollapsed = { ...parsedStates };
-				console.log('Loaded states:', sectionCollapsed);
 			}
 		} catch (error) {
 			console.error('Error loading collapse states:', error);
@@ -84,16 +86,16 @@
 		if (!isInitialized) return;
 		try {
 			localStorage.setItem('configSectionStates', JSON.stringify(sectionCollapsed));
-			console.log('Saved states:', JSON.stringify(sectionCollapsed));
 		} catch (error) {
 			console.error('Error saving collapse states:', error);
 		}
 	}
 
-	// Use Svelte's reactive statement to watch for state changes
-	$: if (sectionCollapsed) {
-		saveCollapseStates();
-	}
+	$effect(() => {
+		if (sectionCollapsed) {
+			saveCollapseStates();
+		}
+	});
 
 	onMount(() => {
 		loadCollapseStates();
@@ -163,7 +165,6 @@
 			}
 
 			const result = await response.json();
-			console.log('Save result:', result);
 
 			// Check if any services need to be restarted
 			const restartRequired = result.restart_required;
@@ -173,7 +174,7 @@
 				});
 				
 				if (restartRequired.serve) {
-					healthCheckComponent.startHealthCheck();
+					servicesRestarting = true;
 				}
 			} else {
 				toast.success($_('config.title'), {
@@ -194,18 +195,6 @@
 		}
 	}
 
-	function handleRestartClick() {
-		showRestartConfirm = true;
-	}
-
-	function cancelRestart() {
-		showRestartConfirm = false;
-	}
-	
-	function handleRestartStatusChange(restarting: boolean) {
-		servicesRestarting = restarting;
-	}
-
 	async function confirmRestart() {
 		showRestartConfirm = false;
 		saving = true;
@@ -217,7 +206,7 @@
 		};
 
 		if (restartData.serve) {
-			healthCheckComponent.startHealthCheck();
+			servicesRestarting = true;
 		}
 		
 		try {
@@ -239,7 +228,7 @@
 			});
 			
 			if (!restartData.serve) {
-				healthCheckComponent.startHealthCheck();
+				servicesRestarting = true;
 			}
 			
 		} catch (err) {
@@ -270,9 +259,6 @@
 		
 		// Set the value
 		current[lastKey] = value;
-		// Create a new object to trigger Svelte's reactive update
-		changes = { ...changes };
-		console.log("Changes updated:", changes);
 	}
 
 	function getConfigValue(path: string[]) {
@@ -335,8 +321,6 @@
 		// Update the UI state
 		uiState.pluginDisabled[plugin] = !newValue;
 	}
-
-	let textareaElement: HTMLTextAreaElement;
 	
 	// Add a function to automatically adjust the height of the textarea
 	function adjustTextareaHeight(textarea: HTMLTextAreaElement) {
@@ -353,26 +337,11 @@
 		textarea.style.height = newHeight + 'px';
 	}
 
-	// 监听配置加载和文本区域挂载
-	$: if (config && textareaElement) {
-		setTimeout(() => adjustTextareaHeight(textareaElement), 0);
-	}
-
-	// 监听OCR设置的变化
-	$: if (changes && changes.ocr) {
-		if ('use_local' in changes.ocr) {
-			
-			// 检查DOM元素的状态
-			setTimeout(() => {
-				const endpointInput = document.getElementById('ocr-endpoint') as HTMLInputElement;
-				const tokenInput = document.getElementById('ocr-token') as HTMLInputElement;
-				if (endpointInput) {
-				}
-				if (tokenInput) {
-				}
-			}, 0);
+	$effect(() => {
+		if (config && !loading && vlmPromptTextarea) {
+			adjustTextareaHeight(vlmPromptTextarea);
 		}
-	}
+	});
 </script>
 
 <svelte:head>
@@ -381,13 +350,15 @@
 
 <div class="container mx-auto p-4 pt-0 max-w-5xl">
 	<!-- 健康检查组件 -->
-	<HealthCheck 
-		bind:this={healthCheckComponent} 
-		{apiEndpoint} 
-		bind:servicesRestarting 
-		onStatusChange={handleRestartStatusChange} 
-	/>
-
+	{#if servicesRestarting}
+		<HealthCheck 
+			{apiEndpoint} 
+			onStatusChange={() => {
+				servicesRestarting = false;
+			}} 
+		/>
+	{/if}
+	
 	<header
 		class="sticky top-0 z-10 transition-all duration-300 bg-white mb-4 border rounded-b-lg"
 	>
@@ -396,18 +367,20 @@
 			class:shadow-md={isScrolled}
 		>
 			<div class="flex items-center">
-				<Button variant="ghost" on:click={onBack} class="mr-4">
+				<Button variant="ghost" onclick={onBack} class="mr-4">
 					<ArrowLeft size={18} class="mr-2" />
 					{$_('back')}
 				</Button>
 				<h1 class="text-3xl font-bold">{$_('config.title')}</h1>
 			</div>
 			<div class="flex space-x-2">
-				<Button variant="outline" on:click={handleRestartClick} disabled={saving || servicesRestarting}>
+				<Button variant="outline" onclick={() => {
+					showRestartConfirm = true;
+				}} disabled={saving || servicesRestarting}>
 					<RotateCw size={18} class="mr-2" />
 					{$_('config.restartServices')}
 				</Button>
-				<Button variant="default" on:click={saveConfig} disabled={saving || servicesRestarting || Object.keys(changes).length === 0}>
+				<Button variant="default" onclick={saveConfig} disabled={saving || servicesRestarting || Object.keys(changes).length === 0}>
 					<Save size={18} class="mr-2" />
 					{$_('config.saveButton')}
 				</Button>
@@ -427,10 +400,12 @@
 				<h3 class="text-lg font-medium mb-2">{$_('config.restartConfirmTitle')}</h3>
 				<p class="text-gray-600 mb-4">{$_('config.restartConfirmMessage')}</p>
 				<div class="flex justify-end space-x-2">
-					<Button variant="outline" on:click={cancelRestart}>
+					<Button variant="outline" onclick={() => {
+						showRestartConfirm = false;
+					}}>
 						{$_('config.cancel')}
 					</Button>
-					<Button variant="destructive" on:click={confirmRestart}>
+					<Button variant="destructive" onclick={confirmRestart}>
 						{$_('config.confirm')}
 					</Button>
 				</div>
@@ -469,7 +444,7 @@
 									<Checkbox
 										id="enable-ocr"
 										checked={getEffectiveConfigValue(['ocr', 'enabled'])}
-										on:click={() => {
+										onCheckedChange={() => {
 											handlePluginEnabledChange('ocr', !getEffectiveConfigValue(['ocr', 'enabled']));
 										}}
 									/>
@@ -486,7 +461,7 @@
 										id="use-local-ocr"
 										checked={getEffectiveConfigValue(['ocr', 'use_local'])}
 										disabled={uiState.pluginDisabled.ocr}
-										on:click={() => {
+										onCheckedChange={() => {
 											if (!uiState.pluginDisabled.ocr) {
 												handleUseLocalChange('ocr', !getEffectiveConfigValue(['ocr', 'use_local']));
 											}
@@ -506,7 +481,7 @@
 										id="force-jpeg-ocr"
 										checked={getEffectiveConfigValue(['ocr', 'force_jpeg'])}
 										disabled={uiState.pluginDisabled.ocr}
-										on:click={() => {
+										onCheckedChange={() => {
 											if (!uiState.pluginDisabled.ocr) {
 												handleChange(['ocr', 'force_jpeg'], !getEffectiveConfigValue(['ocr', 'force_jpeg']));
 											}
@@ -532,7 +507,7 @@
 											class="font-mono"
 											value={getEffectiveConfigValue(['ocr', 'endpoint'])}
 											disabled={uiState.inputsDisabled.ocr || uiState.pluginDisabled.ocr}
-											on:change={(e) => {
+											onchange={(e) => {
 												if (!uiState.inputsDisabled.ocr && !uiState.pluginDisabled.ocr) {
 													handleChange(['ocr', 'endpoint'], e.currentTarget.value);
 												}
@@ -552,7 +527,7 @@
 											value={getEffectiveConfigValue(['ocr', 'token']) === '********' ? '' : getEffectiveConfigValue(['ocr', 'token'])}
 											placeholder="********"
 											disabled={uiState.inputsDisabled.ocr || uiState.pluginDisabled.ocr}
-											on:change={(e) => {
+											onchange={(e) => {
 												if (e.currentTarget.value && !uiState.inputsDisabled.ocr && !uiState.pluginDisabled.ocr) {
 													handleChange(['ocr', 'token'], e.currentTarget.value);
 												}
@@ -569,7 +544,7 @@
 										type="number"
 										value={getEffectiveConfigValue(['ocr', 'concurrency'])}
 										disabled={uiState.pluginDisabled.ocr}
-										on:change={(e) => {
+										onchange={(e) => {
 											if (!uiState.pluginDisabled.ocr) {
 												handleChange(['ocr', 'concurrency'], parseInt(e.currentTarget.value));
 											}
@@ -612,7 +587,7 @@
 									<Checkbox
 										id="enable-vlm"
 										checked={getEffectiveConfigValue(['vlm', 'enabled'])}
-										on:click={() => {
+										onCheckedChange={() => {
 											handlePluginEnabledChange('vlm', !getEffectiveConfigValue(['vlm', 'enabled']));
 										}}
 									/>
@@ -631,7 +606,7 @@
 										class="font-mono"
 										value={getEffectiveConfigValue(['vlm', 'modelname'])}
 										disabled={uiState.pluginDisabled.vlm}
-										on:change={(e) => {
+										onchange={(e) => {
 											if (!uiState.pluginDisabled.vlm) {
 												handleChange(['vlm', 'modelname'], e.currentTarget.value);
 											}
@@ -650,7 +625,7 @@
 											class="font-mono"
 											value={getEffectiveConfigValue(['vlm', 'endpoint'])}
 											disabled={uiState.pluginDisabled.vlm}
-											on:change={(e) => {
+											onchange={(e) => {
 												if (!uiState.pluginDisabled.vlm) {
 													handleChange(['vlm', 'endpoint'], e.currentTarget.value);
 												}
@@ -667,7 +642,7 @@
 											value={getEffectiveConfigValue(['vlm', 'token']) === '********' ? '' : getEffectiveConfigValue(['vlm', 'token'])}
 											placeholder="********"
 											disabled={uiState.pluginDisabled.vlm}
-											on:change={(e) => {
+											onchange={(e) => {
 												if (e.currentTarget.value && !uiState.pluginDisabled.vlm) {
 													handleChange(['vlm', 'token'], e.currentTarget.value);
 												}
@@ -684,7 +659,7 @@
 										type="number"
 										value={getEffectiveConfigValue(['vlm', 'concurrency'])}
 										disabled={uiState.pluginDisabled.vlm}
-										on:change={(e) => {
+										onchange={(e) => {
 											if (!uiState.pluginDisabled.vlm) {
 												handleChange(['vlm', 'concurrency'], parseInt(e.currentTarget.value));
 											}
@@ -700,7 +675,7 @@
 										id="force-jpeg-vlm"
 										checked={getEffectiveConfigValue(['vlm', 'force_jpeg'])}
 										disabled={uiState.pluginDisabled.vlm}
-										on:click={() => {
+										onCheckedChange={() => {
 											if (!uiState.pluginDisabled.vlm) {
 												handleChange(['vlm', 'force_jpeg'], !getEffectiveConfigValue(['vlm', 'force_jpeg']));
 											}
@@ -721,19 +696,19 @@
 								<div>
 									<Label for="vlm-prompt">{$_('config.vlm.prompt')}</Label>
 									<div class="relative">
-										<textarea
-											bind:this={textareaElement}
+										<Textarea
 											id="vlm-prompt"
+											bind:ref={vlmPromptTextarea}
 											class="font-mono resize-none overflow-hidden w-full min-h-[72px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
 											value={getEffectiveConfigValue(['vlm', 'prompt'])}
 											disabled={uiState.pluginDisabled.vlm}
-											on:input={(e) => {
+											oninput={(e) => {
 												if (!uiState.pluginDisabled.vlm) {
 													handleChange(['vlm', 'prompt'], e.currentTarget.value);
-													adjustTextareaHeight(e.currentTarget);
+													adjustTextareaHeight(vlmPromptTextarea);
 												}
 											}}
-										/>
+										></Textarea>
 									</div>
 									<p class="text-sm text-muted-foreground mt-1">
 										{$_('config.vlm.promptDesc')}
@@ -775,7 +750,7 @@
 										class="font-mono"
 										type="number"
 										value={getEffectiveConfigValue(['record_interval'])}
-										on:change={(e) => handleChange(['record_interval'], parseInt(e.currentTarget.value))}
+										onchange={(e) => handleChange(['record_interval'], parseInt(e.currentTarget.value))}
 									/>
 									<p class="text-sm text-muted-foreground mt-1">
 										{$_('config.record.intervalDesc')}
@@ -819,7 +794,7 @@
 											class="font-mono"
 											type="number"
 											value={getEffectiveConfigValue(['watch', 'rate_window_size'])}
-											on:change={(e) => handleChange(['watch', 'rate_window_size'], parseInt(e.currentTarget.value))}
+											onchange={(e) => handleChange(['watch', 'rate_window_size'], parseInt(e.currentTarget.value))}
 										/>
 										<p class="text-sm text-muted-foreground mt-1">
 											{$_('config.watch.rateWindowSizeDesc')}
@@ -834,7 +809,7 @@
 											type="number"
 											step="0.1"
 											value={getEffectiveConfigValue(['watch', 'sparsity_factor'])}
-											on:change={(e) => handleChange(['watch', 'sparsity_factor'], parseFloat(e.currentTarget.value))}
+											onchange={(e) => handleChange(['watch', 'sparsity_factor'], parseFloat(e.currentTarget.value))}
 										/>
 										<p class="text-sm text-muted-foreground mt-1">
 											{$_('config.watch.sparsityFactorDesc')}
@@ -850,7 +825,7 @@
 											class="font-mono"
 											type="number"
 											value={getEffectiveConfigValue(['watch', 'processing_interval'])}
-											on:change={(e) => handleChange(['watch', 'processing_interval'], parseInt(e.currentTarget.value))}
+											onchange={(e) => handleChange(['watch', 'processing_interval'], parseInt(e.currentTarget.value))}
 										/>
 										<p class="text-sm text-muted-foreground mt-1">
 											{$_('config.watch.processingIntervalDesc')}
@@ -864,7 +839,7 @@
 											class="font-mono"
 											type="number"
 											value={getEffectiveConfigValue(['watch', 'idle_timeout'])}
-											on:change={(e) => handleChange(['watch', 'idle_timeout'], parseInt(e.currentTarget.value))}
+											onchange={(e) => handleChange(['watch', 'idle_timeout'], parseInt(e.currentTarget.value))}
 										/>
 										<p class="text-sm text-muted-foreground mt-1">
 											{$_('config.watch.idleTimeoutDesc')}
@@ -880,7 +855,7 @@
 											class="font-mono"
 											type="time"
 											value={getEffectiveConfigValue(['watch', 'idle_process_interval'])?.[0] || "00:00"}
-											on:change={(e) => {
+											onchange={(e) => {
 												const currentInterval = getEffectiveConfigValue(['watch', 'idle_process_interval']) || ["00:00", "07:00"];
 												handleChange(['watch', 'idle_process_interval'], [
 													e.currentTarget.value,
@@ -897,7 +872,7 @@
 											class="font-mono"
 											type="time"
 											value={getEffectiveConfigValue(['watch', 'idle_process_interval'])?.[1] || "07:00"}
-											on:change={(e) => {
+											onchange={(e) => {
 												const currentInterval = getEffectiveConfigValue(['watch', 'idle_process_interval']) || ["00:00", "07:00"];
 												handleChange(['watch', 'idle_process_interval'], [
 													currentInterval[0],
@@ -946,7 +921,7 @@
 											id="base-dir"
 											class="font-mono"
 											value={getEffectiveConfigValue(['base_dir'])}
-											on:change={(e) => handleChange(['base_dir'], e.currentTarget.value)}
+											onchange={(e) => handleChange(['base_dir'], e.currentTarget.value)}
 										/>
 										<p class="text-sm text-muted-foreground mt-1">
 											{$_('config.general.baseDirDesc')}
@@ -959,7 +934,7 @@
 											id="screenshots-dir"
 											class="font-mono"
 											value={getEffectiveConfigValue(['screenshots_dir'])}
-											on:change={(e) => handleChange(['screenshots_dir'], e.currentTarget.value)}
+											onchange={(e) => handleChange(['screenshots_dir'], e.currentTarget.value)}
 										/>
 										<p class="text-sm text-muted-foreground mt-1">
 											{$_('config.general.screenshotsDirDesc')}
@@ -974,7 +949,7 @@
 											id="database-path"
 											class="font-mono"
 											value={getEffectiveConfigValue(['database_path'])}
-											on:change={(e) => handleChange(['database_path'], e.currentTarget.value)}
+											onchange={(e) => handleChange(['database_path'], e.currentTarget.value)}
 										/>
 										<p class="text-sm text-muted-foreground mt-1">
 											{$_('config.general.databasePathDesc')}
@@ -987,7 +962,7 @@
 											id="default-library"
 											class="font-mono"
 											value={getEffectiveConfigValue(['default_library'])}
-											on:change={(e) => handleChange(['default_library'], e.currentTarget.value)}
+											onchange={(e) => handleChange(['default_library'], e.currentTarget.value)}
 										/>
 										<p class="text-sm text-muted-foreground mt-1">
 											{$_('config.general.defaultLibraryDesc')}
@@ -999,7 +974,7 @@
 									<Checkbox
 										id="facet-option"
 										checked={getEffectiveConfigValue(['facet'])}
-										on:click={() => {
+										onCheckedChange={() => {
 											handleChange(['facet'], !getEffectiveConfigValue(['facet']));
 										}}
 									/>
@@ -1017,7 +992,7 @@
 										<Checkbox
 											id="builtin-ocr"
 											checked={getEffectiveConfigValue(['default_plugins'])?.includes('builtin_ocr')}
-											on:click={() => {
+											onCheckedChange={() => {
 												const plugins = new Set(getEffectiveConfigValue(['default_plugins']) || []);
 												if (plugins.has('builtin_ocr')) {
 													plugins.delete('builtin_ocr');
@@ -1033,7 +1008,7 @@
 										<Checkbox
 											id="builtin-vlm"
 											checked={getEffectiveConfigValue(['default_plugins'])?.includes('builtin_vlm')}
-											on:click={() => {
+											onCheckedChange={() => {
 												const plugins = new Set(getEffectiveConfigValue(['default_plugins']) || []);
 												if (plugins.has('builtin_vlm')) {
 													plugins.delete('builtin_vlm');
@@ -1085,7 +1060,7 @@
 											id="server-host"
 											class="font-mono"
 											value={getEffectiveConfigValue(['server_host'])}
-											on:change={(e) => handleChange(['server_host'], e.currentTarget.value)}
+											onchange={(e) => handleChange(['server_host'], e.currentTarget.value)}
 										/>
 										<p class="text-sm text-muted-foreground mt-1">
 											{$_('config.server.hostDesc')}
@@ -1099,7 +1074,7 @@
 											class="font-mono"
 											type="number"
 											value={getEffectiveConfigValue(['server_port'])}
-											on:change={(e) => handleChange(['server_port'], parseInt(e.currentTarget.value))}
+											onchange={(e) => handleChange(['server_port'], parseInt(e.currentTarget.value))}
 										/>
 										<p class="text-sm text-muted-foreground mt-1">
 											{$_('config.server.portDesc')}
@@ -1114,7 +1089,7 @@
 											id="auth-username"
 											class="font-mono"
 											value={getEffectiveConfigValue(['auth_username'])}
-											on:change={(e) => handleChange(['auth_username'], e.currentTarget.value)}
+											onchange={(e) => handleChange(['auth_username'], e.currentTarget.value)}
 										/>
 									</div>
 
@@ -1126,7 +1101,7 @@
 											type="password"
 											value={getEffectiveConfigValue(['auth_password']) === '********' ? '' : getEffectiveConfigValue(['auth_password'])}
 											placeholder="********"
-											on:change={(e) => {
+											onchange={(e) => {
 												if (e.currentTarget.value) {
 													handleChange(['auth_password'], e.currentTarget.value);
 												}
@@ -1175,7 +1150,7 @@
 										<Checkbox
 											id="use-local-embedding"
 											checked={getEffectiveConfigValue(['embedding', 'use_local'])}
-											on:click={() => {
+											onCheckedChange={() => {
 												handleUseLocalChange('embedding', !getEffectiveConfigValue(['embedding', 'use_local']));
 											}}
 										/>
@@ -1188,7 +1163,7 @@
 										<Checkbox
 											id="use-modelscope"
 											checked={getEffectiveConfigValue(['embedding', 'use_modelscope'])}
-											on:click={() => {
+											onCheckedChange={() => {
 												handleChange(['embedding', 'use_modelscope'], !getEffectiveConfigValue(['embedding', 'use_modelscope']));
 											}}
 										/>
@@ -1208,7 +1183,7 @@
 											id="embedding-model"
 											class="font-mono"
 											value={getEffectiveConfigValue(['embedding', 'model'])}
-											on:change={(e) => handleChange(['embedding', 'model'], e.currentTarget.value)}
+											onchange={(e) => handleChange(['embedding', 'model'], e.currentTarget.value)}
 										/>
 										<p class="text-sm text-muted-foreground mt-1">
 											{$_('config.embedding.modelDesc')}
@@ -1222,7 +1197,7 @@
 											class="font-mono"
 											type="number"
 											value={getEffectiveConfigValue(['embedding', 'num_dim'])}
-											on:change={(e) => handleChange(['embedding', 'num_dim'], parseInt(e.currentTarget.value))}
+											onchange={(e) => handleChange(['embedding', 'num_dim'], parseInt(e.currentTarget.value))}
 										/>
 										<p class="text-sm text-muted-foreground mt-1">
 											{$_('config.embedding.dimensionsDesc')}
@@ -1238,7 +1213,7 @@
 											class="font-mono"
 											value={getEffectiveConfigValue(['embedding', 'endpoint'])}
 											disabled={uiState.inputsDisabled.embedding}
-											on:change={(e) => handleChange(['embedding', 'endpoint'], e.currentTarget.value)}
+											onchange={(e) => handleChange(['embedding', 'endpoint'], e.currentTarget.value)}
 										/>
 										<p class="text-sm text-muted-foreground mt-1">
 											{$_('config.embedding.endpointDesc')}
@@ -1254,7 +1229,7 @@
 											value={getEffectiveConfigValue(['embedding', 'token']) === '********' ? '' : getEffectiveConfigValue(['embedding', 'token'])}
 											placeholder="********"
 											disabled={uiState.inputsDisabled.embedding}
-											on:change={(e) => {
+											onchange={(e) => {
 												if (e.currentTarget.value) {
 													handleChange(['embedding', 'token'], e.currentTarget.value);
 												}
