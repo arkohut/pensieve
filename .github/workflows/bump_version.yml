@@ -1,0 +1,101 @@
+name: Bump Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: 'patch'
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install toml
+
+      - name: Bump version
+        id: bump_version
+        run: |
+          python -c "
+          import toml
+          import os
+          import sys
+
+          # Read the current pyproject.toml
+          pyproject = toml.load('pyproject.toml')
+          current_version = pyproject['project']['version']
+          
+          # Parse version components
+          version_parts = current_version.split('.')
+          if len(version_parts) < 3:
+              print(f'Invalid version format: {current_version}. Expected X.Y.Z')
+              sys.exit(1)
+              
+          major, minor, patch = map(int, version_parts[:3])
+          
+          # Bump version based on input
+          bump_type = '${{ github.event.inputs.bump_type }}'
+          if bump_type == 'major':
+              major += 1
+              minor = 0
+              patch = 0
+          elif bump_type == 'minor':
+              minor += 1
+              patch = 0
+          elif bump_type == 'patch':
+              patch += 1
+          
+          # Create new version
+          new_version = f'{major}.{minor}.{patch}'
+          
+          # Update pyproject.toml
+          pyproject['project']['version'] = new_version
+          with open('pyproject.toml', 'w') as f:
+              toml.dump(pyproject, f)
+          
+          # Also update the pensiev toml if the script exists
+          if os.path.exists('create_pensiev_toml.py'):
+              import subprocess
+              try:
+                  subprocess.run(['python', 'create_pensiev_toml.py'], check=True)
+                  print('Updated pensiev_toml.py successfully')
+              except subprocess.CalledProcessError:
+                  print('Warning: Failed to update pensiev_toml.py')
+          
+          # Output for later steps
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f'new_version={new_version}\n')
+          
+          print(f'Version bumped from {current_version} to {new_version}')
+          "
+
+      - name: Commit changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add pyproject.toml
+          if [ -f "pyproject_pensiev.toml" ]; then
+            git add pyproject_pensiev.toml
+          fi
+          git commit -m "Bump version to ${{ steps.bump_version.outputs.new_version }}"
+          git tag -a v${{ steps.bump_version.outputs.new_version }} -m "Version ${{ steps.bump_version.outputs.new_version }}"
+          git push && git push --tags 
