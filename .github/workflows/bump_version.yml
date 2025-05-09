@@ -84,6 +84,7 @@ jobs:
           # Output for later steps
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
               f.write(f'new_version={new_version}\n')
+              f.write(f'new_tag=v{new_version}\n')
           
           print(f'Version bumped from {current_version} to {new_version}')
           "
@@ -97,5 +98,9 @@ jobs:
             git add pyproject_pensiev.toml
           fi
           git commit -m "Bump version to ${{ steps.bump_version.outputs.new_version }}"
-          git tag -a v${{ steps.bump_version.outputs.new_version }} -m "Version ${{ steps.bump_version.outputs.new_version }}"
-          git push && git push --tags 
+
+      - name: Push changes and tag
+        run: |
+          git tag ${{ steps.bump_version.outputs.new_tag }}
+          git push
+          git push origin ${{ steps.bump_version.outputs.new_tag }} 
