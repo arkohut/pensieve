@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { _ } from 'svelte-i18n'; // 导入翻译函数
+	import { _ } from 'svelte-i18n';
 
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
@@ -26,76 +26,41 @@
 		}
 	}
 
-	export let selectedLibraryIds: number[] = [];
+	let { selectedLibraryIds = $bindable([]) } = $props();
 
-	let popoverOpen = false;
-
-	let libraries: { id: number; name: string }[] = [];
-	let selectedLibraries: Record<number, boolean> = {};
-	let allSelected = true;
-
-	let displayName = $_('libraryFilter.all');
-
-	let prevSelectedLibraryIds: number[] = [];
-
-	async function toggleSelectAll(checked: boolean) {
-		allSelected = checked;
-		
-		if (checked) {
-			popoverOpen = false;
-			selectedLibraries = {};
-			selectedLibraryIds = [];
-			prevSelectedLibraryIds = [];
-		}
+	function addLibraryId(id: string) {
+		selectedLibraryIds = libraries.length === selectedLibraryIds.length + 1 ? [] : [...selectedLibraryIds, id];
+	}
+	
+	function removeLibraryId(id: string) {
+		selectedLibraryIds = selectedLibraryIds.filter((i) => i !== id);
 	}
 
-	$: {
-		const selectedCount = Object.values(selectedLibraries).filter(Boolean).length;
-		let newSelectedLibraryIds: number[] = [];
+	let libraries: { id: number; name: string }[] = $state([]);
+	let allSelected = $derived(selectedLibraryIds.length === 0);
+	let displayName = $derived(selectedLibraryIds.length > 0 ? selectedLibraryIds.map((id) => libraries.find(lib => lib.id === id)?.name).join(', ') : $_('libraryFilter.all'));
 
-		if (selectedCount > 0 && selectedCount < libraries.length) {
-			allSelected = false;
-			newSelectedLibraryIds = Object.entries(selectedLibraries)
-				.filter(([_, isSelected]) => isSelected)
-				.map(([id, _]) => +id);
-			displayName = newSelectedLibraryIds
-				.map((id) => libraries.find(lib => lib.id === id)?.name)
-				.join(', ');
-		} else if (selectedCount === 0) {
-			displayName = $_('libraryFilter.all');
-			allSelected = true;
-			selectedLibraries = {};
-			newSelectedLibraryIds = [];
-		} else {
-			displayName = $_('libraryFilter.all');
-			allSelected = true;
-			selectedLibraries = {};
-			newSelectedLibraryIds = [];
-			popoverOpen = false;
-		}
-
-		// 只在值真正改变时才更新 selectedLibraryIds
-		if (JSON.stringify(newSelectedLibraryIds) !== JSON.stringify(prevSelectedLibraryIds)) {
-			selectedLibraryIds = newSelectedLibraryIds;
-			prevSelectedLibraryIds = newSelectedLibraryIds;
-		}
+	async function toggleSelectAll() {
+		selectedLibraryIds = [];
 	}
 
 	// Fetch libraries when the component is mounted
-
 	onMount(async () => {
 		libraries = await fetchLibraries();
 	});
+
+	$inspect(selectedLibraryIds);
 </script>
 
 <div>
-	<Popover.Root portal={null} bind:open={popoverOpen}>
+	<Popover.Root>
 		<Popover.Trigger>
 			<Button
 				class="border p-2 text-xs font-medium focus:outline-none"
 				size="sm"
-				variant="outline">{displayName}</Button
-			>
+				variant="outline">
+				{displayName}
+			</Button>
 		</Popover.Trigger>
 		<Popover.Content class="w-56 mt-1 p-1" align="start" side="bottom">
 			<div class="px-2 py-1.5 text-sm font-semibold">
@@ -107,11 +72,21 @@
 						<Checkbox id="all-selected" bind:checked={allSelected} disabled={allSelected} onCheckedChange={toggleSelectAll} />
 						<Label for="all-selected" class="flex items-center text-sm">{$_('libraryFilter.selectAll')}</Label>
 				</div>
-				{#each libraries as library}
+				{#each libraries as library (library.id)}
+					{@const checked = selectedLibraryIds.includes(library.id)}
 					<div class="mb-2 items-top flex space-x-2">
 						<Checkbox
 							id={`library-${library.id}`}
-							bind:checked={selectedLibraries[library.id]}
+							name="library-select"
+							value={library.id}
+							{checked}
+							onCheckedChange={(v) => {
+								if (v) {
+								  addLibraryId(library.id);
+								} else {
+								  removeLibraryId(library.id);
+								}
+							}}
 						/>
 						<Label for={`library-${library.id}`} class="flex items-center text-sm">{library.name}#{library.id}</Label>
 					</div>

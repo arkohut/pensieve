@@ -3,7 +3,8 @@
 	import '../app.css';
 	import { _ } from 'svelte-i18n';
 	import LanguageSwitcher from '$lib/LanguageSwitcher.svelte';
-	import { Github } from 'lucide-svelte';
+	import { Github } from '@lucide/svelte';
+	let { children } = $props();
 </script>
 
 <svelte:head>
@@ -14,7 +15,7 @@
 	<div class="min-h-screen">
 		<div class="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
 			<div class="relative pt-0 pb-16">
-				<slot />
+				{@render children()}
 			</div>
 		</div>
 		
@@ -31,7 +32,7 @@
 						   class="hover:text-slate-900 transition-colors">
 							<Github size={16} />
 						</a>
-						<div class="h-4 w-px bg-slate-500/20" />
+						<div class="h-4 w-px bg-slate-500/20"></div>
 						<LanguageSwitcher />
 					</div>
 				</div>

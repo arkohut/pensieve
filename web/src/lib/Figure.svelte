@@ -13,83 +13,48 @@
 		Folder,
 		FileClock,
 		IndentIncrease
-	} from 'lucide-svelte';
+	} from '@lucide/svelte';
 	import { translateAppName } from '$lib/utils';
 	import LucideIcon from '$lib/components/LucideIcon.svelte';
 	import { onMount } from 'svelte';
 
 	/**
-	 * @type {string}
+	 * @typedef {Object} Props
+	 * @property {string} id
+	 * @property {number} library_id
+	 * @property {number} created_at
+	 * @property {number} folder_id
+	 * @property {any} image
+	 * @property {string} video
+	 * @property {string} filepath
+	 * @property {string} title
+	 * @property {any} app_name
+	 * @property {Array<string>} [tags]
+	 * @property {Array<{key: string, source: string, value: any}>} [metadata_entries]
+	 * @property {any} onClose
+	 * @property {any} onNext
+	 * @property {any} onPrevious
 	 */
-	export let id;
-	/**
-	 * @type {number}
-	 */
-	export let library_id;
-	/**
-	 * @type {number}
-	 */
-	export let created_at;
-	/**
-	 * @type {number}
-	 */
-	export let folder_id;
-	/**
-	 * @type {any}
-	 */
-	export let image;
-	/**
-	 * @type {string}
-	 */
-	export let video;
-	/**
-	 * @type {string}
-	 */
-	export let filepath;
-	/**
-	 * @type {string}
-	 */
-	export let title;
-	export let app_name;
-	/**
-	 * @type {Array<string>}
-	 */
-	export let tags = [];
 
-	/**
-	 * @type {Array<{key: string, source: string, value: any}>}
-	 */
-	export let metadata_entries = [];
+	/** @type {Props} */
+	let {
+		id,
+		library_id,
+		created_at,
+		folder_id,
+		image,
+		video,
+		filepath,
+		title,
+		app_name,
+		tags = [],
+		metadata_entries = [],
+		onClose,
+		onNext,
+		onPrevious
+	} = $props();
 
-	// Remove items with key "timestamp" or "sequence" and sort metadata_entries, placing "ocr_result" at the end
-	$: sortedMetadataEntries = [...metadata_entries]
-		.filter(
-			(entry) =>
-				entry.key !== 'timestamp' &&
-				entry.key !== 'sequence' &&
-				entry.key !== 'active_app' &&
-				entry.key !== 'active_window'
-		)
-		.sort((a, b) => {
-			if (a.key === 'ocr_result') return 1;
-			if (b.key === 'ocr_result') return -1;
-			return 0;
-		});
-
-	/**
-	 * @type {any}
-	 */
-	export let onClose;
-	/**
-	 * @type {any}
-	 */
-	export let onNext;
-	/**
-	 * @type {any}
-	 */
-	export let onPrevious;
-
-	let showDetails = false;
+	let showDetails = $state(false);
 
 	onMount(() => {
 		// 从 localStorage 读取状态
@@ -130,6 +95,20 @@
 
 		return true;
 	}
+	// Remove items with key "timestamp" or "sequence" and sort metadata_entries, placing "ocr_result" at the end
+	let sortedMetadataEntries = $derived([...metadata_entries]
+		.filter(
+			(entry) =>
+				entry.key !== 'timestamp' &&
+				entry.key !== 'sequence' &&
+				entry.key !== 'active_app' &&
+				entry.key !== 'active_window'
+		)
+		.sort((a, b) => {
+			if (a.key === 'ocr_result') return 1;
+			if (b.key === 'ocr_result') return -1;
+			return 0;
+		}));
 </script>
 
 <div
@@ -144,13 +123,13 @@
 			<div class="group absolute inset-x-0 h-full">
 				<button
 					class="absolute p-2 left-2 top-1/2 transform -translate-y-1/2 rounded-full hover:bg-gray-100 bg-white/80 border opacity-0 group-hover:opacity-100 flex z-[51] transition-all duration-200"
-					on:click={onPrevious}
+					onclick={onPrevious}
 				>
 					<ChevronLeft size={24} class="text-indigo-600" />
 				</button>
 				<button
 					class="absolute p-2 right-2 top-1/2 transform -translate-y-1/2 rounded-full hover:bg-gray-100 bg-white/80 border opacity-0 group-hover:opacity-100 flex z-[51] transition-all duration-200"
-					on:click={onNext}
+					onclick={onNext}
 				>
 					<ChevronRight size={24} class="text-indigo-600" />
 				</button>
@@ -161,7 +140,7 @@
 				<div class="flex-none {showDetails ? 'w-full md:w-1/2' : 'w-full'} flex flex-col h-full">
 					<div class="mb-2 relative z-[52]">
 						<div class="flex justify-between items-center">
-							<div class="flex-1" />
+							<div class="flex-1"></div>
 							<div class="flex items-center text-lg leading-tight font-medium text-black {showDetails ? 'w-full' : 'w-4/5'}">
 								<div class="flex items-center justify-between w-full">
 									<div class="flex-1 flex items-center justify-center min-w-0">
@@ -178,7 +157,7 @@
 									</div>
 									<button
 										class="p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
-										on:click={toggleDetails}
+										onclick={toggleDetails}
 									>
 										<IndentIncrease 
 											size={24} 
@@ -187,7 +166,7 @@
 									</button>
 								</div>
 							</div>
-							<div class="flex-1" />
+							<div class="flex-1"></div>
 						</div>
 					</div>
 
@@ -293,7 +272,7 @@
 			<div class="absolute top-2 right-2 z-[52]">
 				<button
 					class="p-2 rounded-full hover:bg-gray-100 bg-white/80 opacity-0 group-hover:opacity-100 transition-all duration-200"
-					on:click={onClose}
+					onclick={onClose}
 				>
 					<X size={24} class="text-indigo-600" />
 				</button>
