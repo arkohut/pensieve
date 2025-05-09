@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { generateMemosLogo } from '$lib/logoGenerator';
+	import { generateLogo } from '$lib/logoGenerator';
 
 	interface Props {
 		size?: number;
@@ -15,7 +15,7 @@
 		hasGap = true
 	}: Props = $props();
 
-	let logoSvg = $derived(generateMemosLogo(size, withBorder, hasGap));
+	let logoSvg = $derived(generateLogo(size, withBorder, hasGap));
 </script>
 
 <div class={`${class_}`}>

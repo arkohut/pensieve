@@ -132,7 +132,7 @@ function generateSvg(matrix, size, hasGap) {
     return svgContent;
 }
 
-export function generateMemosLogo(size, withBorder, hasGap) {
+export function generateLogo(size, withBorder, hasGap) {
     const matrix = prepareMatrixFromRandomColors(withBorder);
     return generateSvg(matrix, size, hasGap);
 }

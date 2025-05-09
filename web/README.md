@@ -1,6 +1,6 @@
-# Memos Web
+# Pensieve Web
 
-The web interface for Memos.
+The web interface for Pensieve.
 
 ## Developing
 
@@ -13,7 +13,7 @@ pnpm dev
 pnpm dev -- --open
 ```
 
-Make sure you already have the Memos server running.
+Make sure you already have the Pensieve server running.
 
 ## Building
 
