@@ -57,7 +57,7 @@ ocr:
 
 # using local embedding for English as the main language
 embedding:
-  model: arkohut/jina-embeddings-v2-base-en
+  model: jinaai/jina-embeddings-v2-base-en
   num_dim: 768
   use_local: true
   use_modelscope: false
@@ -89,7 +89,7 @@ watch:
 
 # using local embedding for Chinese as the main language
 # embedding:
-#   model: arkohut/jina-embeddings-v2-base-zh
+#   model: jinaai/jina-embeddings-v2-base-zh
 #   num_dim: 768
 #   use_local: true
 #   use_modelscope: true
