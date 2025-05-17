@@ -2,6 +2,7 @@
     import { onMount, onDestroy } from 'svelte';
     import { toast } from 'svelte-sonner';
     import { _ } from 'svelte-i18n';
+    import { Loader } from '@lucide/svelte';
 
     interface Props {
         apiEndpoint: string;
@@ -83,7 +84,7 @@
 
 {#if isRestarting}
     <div class="fixed inset-0 bg-black/70 flex flex-col items-center justify-center z-50">
-        <div class="animate-spin rounded-full h-16 w-16 border-4 border-t-primary border-r-transparent border-b-primary border-l-transparent mb-4"></div>
+        <Loader size={36} class="text-primary mb-4 animate-spin" />
         <h3 class="text-xl font-medium text-white mb-2">{$_('config.servicesRestartingTitle')}</h3>
         <p class="text-white text-center max-w-md">{$_('config.servicesRestartingMessage')}</p>
     </div>

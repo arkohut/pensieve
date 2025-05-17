@@ -895,15 +895,11 @@ async def search_entities_v2(
                 filepath=entity.filepath,
                 filename=entity.filename,
                 size=entity.size,
-                file_created_at=int(entity.file_created_at.timestamp()),
-                file_last_modified_at=int(entity.file_last_modified_at.timestamp()),
+                file_created_at=entity.file_created_at,
+                file_last_modified_at=entity.file_last_modified_at,
                 file_type=entity.file_type,
                 file_type_group=entity.file_type_group,
-                last_scan_at=(
-                    int(entity.last_scan_at.timestamp())
-                    if entity.last_scan_at
-                    else None
-                ),
+                last_scan_at=entity.last_scan_at if entity.last_scan_at else None,
                 library_id=entity.library_id,
                 folder_id=entity.folder_id,
                 tags=[tag.name for tag in entity.tags],

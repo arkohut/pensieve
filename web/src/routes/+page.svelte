@@ -407,7 +407,7 @@
 										{getEntityTitle(hit.document)}
 									</h2>
 									<p class="text-gray-700 text-xs">
-										{formatDistanceToNow(new Date(hit.document.file_created_at * 1000), {
+										{formatDistanceToNow(new Date(hit.document.file_created_at), {
 											addSuffix: true
 										})}
 									</p>
@@ -451,7 +451,7 @@
 		folder_id={searchResult.hits[selectedImage].document.folder_id}
 		image={`${apiEndpoint}/files/${searchResult.hits[selectedImage].document.filepath.replace(/^\/+/, '')}`}
 		video={`${apiEndpoint}/files/video/${searchResult.hits[selectedImage].document.filepath.replace(/^\/+/, '')}`}
-		created_at={searchResult.hits[selectedImage].document.file_created_at * 1000}
+		file_created_at={searchResult.hits[selectedImage].document.file_created_at}
 		filepath={searchResult.hits[selectedImage].document.filepath}
 		title={getEntityTitle(searchResult.hits[selectedImage].document)}
 		app_name={getAppName(searchResult.hits[selectedImage].document)}
