@@ -5,7 +5,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { Checkbox } from '$lib/components/ui/checkbox';
-	import { Save, RotateCw, ArrowLeft, ChevronUp, ChevronDown } from '@lucide/svelte';
+	import { Save, RotateCw, ArrowLeft, ChevronUp, ChevronDown, Loader } from '@lucide/svelte';
 	import { Alert, AlertDescription } from '$lib/components/ui/alert';
 	import { toast } from 'svelte-sonner';
 	import { Textarea } from '$lib/components/ui/textarea';
@@ -415,7 +415,7 @@
 
 	{#if loading}
 		<div class="flex justify-center items-center h-64">
-			<div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+			<Loader size={36} class="text-primary animate-spin" />
 		</div>
 	{:else if config}
 		<!-- OCR Section -->
@@ -705,7 +705,9 @@
 											oninput={(e) => {
 												if (!uiState.pluginDisabled.vlm) {
 													handleChange(['vlm', 'prompt'], e.currentTarget.value);
-													adjustTextareaHeight(vlmPromptTextarea);
+													if (vlmPromptTextarea) {
+														adjustTextareaHeight(vlmPromptTextarea);
+													}
 												}
 											}}
 										></Textarea>

@@ -137,5 +137,8 @@
             "confirm": "Confirm Change",
             "cancel": "Cancel"
         }
+    },
+    "figure": {
+        "viewContext": "View Context"
     }
 }
