@@ -450,7 +450,6 @@
 		library_id={searchResult.hits[selectedImage].document.library_id}
 		folder_id={searchResult.hits[selectedImage].document.folder_id}
 		image={`${apiEndpoint}/files/${searchResult.hits[selectedImage].document.filepath.replace(/^\/+/, '')}`}
-		video={`${apiEndpoint}/files/video/${searchResult.hits[selectedImage].document.filepath.replace(/^\/+/, '')}`}
 		file_created_at={searchResult.hits[selectedImage].document.file_created_at}
 		filepath={searchResult.hits[selectedImage].document.filepath}
 		title={getEntityTitle(searchResult.hits[selectedImage].document)}
