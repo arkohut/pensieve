@@ -2,6 +2,7 @@
   import { PUBLIC_API_ENDPOINT } from '$env/static/public';
   import { goto } from '$app/navigation';
   import * as Tooltip from "$lib/components/ui/tooltip";
+  import { onMount } from 'svelte';
 
   // Define interface for metadata entries
   interface EntityMetadata {
@@ -60,13 +61,40 @@
       }
     }
   }
+  
+  // 滚动容器引用
+  let scrollContainerRef: HTMLElement;
+  
+  // 鼠标滚轮处理
+  function handleWheel(e: WheelEvent) {
+    // 检查是否是鼠标滚轮事件 (而非触摸板)
+    // 触摸板通常产生的是具有惯性的平滑滚动，而鼠标滚轮产生的是离散的滚动
+    if (Math.abs(e.deltaY) >= 10 && e.deltaMode === 0) {  // 判断是否可能是鼠标滚轮
+      e.preventDefault(); // 阻止默认的垂直滚动
+      // 将垂直滚动转换为水平滚动
+      scrollContainerRef.scrollLeft += e.deltaY;
+    }
+    // 不处理触摸板事件，让它保持原始行为
+  }
+  
+  onMount(() => {
+    // 添加鼠标滚轮事件监听
+    if (scrollContainerRef) {
+      scrollContainerRef.addEventListener('wheel', handleWheel, { passive: false });
+      
+      // 清理函数
+      return () => {
+        scrollContainerRef.removeEventListener('wheel', handleWheel);
+      };
+    }
+  });
 
   const apiEndpoint = (typeof PUBLIC_API_ENDPOINT !== 'undefined' ? PUBLIC_API_ENDPOINT : window.location.origin) + '/api';
 </script>
 
 <!-- Context navigation bar - full width with proper scrolling -->
 <div class="h-full w-full flex items-center">
-  <div class="w-full px-2 overflow-x-auto">
+  <div class="w-full px-2 overflow-x-auto" bind:this={scrollContainerRef}>
     <div class="flex items-center justify-start gap-3 min-w-max pb-2">
       <Tooltip.Provider delayDuration={0}>
         {#each contextData.prev as contextEntity}
@@ -109,7 +137,7 @@
               <Tooltip.Trigger class="w-full h-full">
                 <a 
                   href={`/entities/${contextEntity.id}`}
-                  class="block w-full h-full rounded-lg overflow-hidden cursor-pointer opacity-70 hover:opacity-100 transition-opacity"
+                  class="flex-none w-full h-full rounded-lg overflow-hidden cursor-pointer opacity-70 hover:opacity-100 transition-opacity"
                   onclick={(e) => handleEntitySelect(contextEntity.id, e)}
                 >
                   <img
