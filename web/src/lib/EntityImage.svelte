@@ -14,6 +14,12 @@
   // Compute title and app_name from entity if not explicitly provided
   let displayTitle = $derived(entity ? getEntityTitle(entity) : 'unknown');
   let displayAppName = $derived(entity ? getAppName(entity) : 'unknown');
+  
+  // API基础路径
+  const apiEndpoint = (typeof PUBLIC_API_ENDPOINT !== 'undefined' ? PUBLIC_API_ENDPOINT : window.location.origin) + '/api';
+  
+  // 生成视频URL (如果路径存在)
+  let videoUrl = $derived(entity?.filepath ? `${apiEndpoint}/files/video/${entity.filepath.replace(/^\/+/, '')}` : null);
 
   // Helper to extract the entity title from metadata_entries or fallback to filename
   function getEntityTitle(document: any): string {
@@ -122,21 +128,13 @@
   {/if}
 
   <div class="relative flex-1 overflow-hidden flex items-center justify-center {showDetails ? 'mr-2' : ''}">
-    <!-- Allow for video click-through if exists -->
-    {#if entity?.video}
-      <a href={entity.video} target="_blank" rel="noopener noreferrer" class="block w-full h-full flex items-center justify-center">
-        <img
-          class="h-full object-contain rounded-lg drop-shadow-md"
-          src={entity?.image || (entity?.filepath ? `${PUBLIC_API_ENDPOINT}/api/files/${entity.filepath.replace(/^\/+/,'')}` : '')}
-          alt={displayTitle}
-        />
-      </a>
-    {:else}
+    <!-- 直接使用视频链接，不需要条件判断 -->
+    <a href={videoUrl} target="_blank" rel="noopener noreferrer" class="block w-full h-full flex items-center justify-center">
       <img
         class="h-full object-contain rounded-lg drop-shadow-md"
-        src={entity?.image || (entity?.filepath ? `${PUBLIC_API_ENDPOINT}/api/files/${entity.filepath.replace(/^\/+/,'')}` : '')}
+        src={entity?.image || (entity?.filepath ? `${apiEndpoint}/files/${entity.filepath.replace(/^\/+/,'')}` : '')}
         alt={displayTitle}
       />
-    {/if}
+    </a>
   </div>
 </div> 

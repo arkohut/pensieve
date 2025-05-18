@@ -17,7 +17,6 @@
 	 * @property {number} file_created_at
 	 * @property {number} folder_id
 	 * @property {any} image
-	 * @property {string} video
 	 * @property {string} filepath
 	 * @property {string} title
 	 * @property {any} app_name
@@ -35,7 +34,6 @@
 		file_created_at,
 		folder_id,
 		image,
-		video,
 		filepath,
 		tags = [],
 		metadata_entries = [],
@@ -68,7 +66,6 @@
 		file_created_at,
 		folder_id,
 		image,
-		video,
 		filepath,
 		tags,
 		metadata_entries
