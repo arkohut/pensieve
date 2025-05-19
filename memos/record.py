@@ -10,7 +10,6 @@ import imagehash
 from memos.utils import write_image_metadata
 import ctypes
 from mss import mss
-from pathlib import Path
 from memos.config import settings
 import datetime
 
@@ -67,6 +66,23 @@ def save_previous_hashes(base_dir, previous_hashes):
         json.dump(previous_hashes, f)
 
 
+def get_browser_url(app_name):
+    # Only support Chrome, Edge, Safari on macOS
+    if "chrome" in app_name.lower():
+        script = 'tell application "Google Chrome" to get URL of active tab of front window'
+    elif "edge" in app_name.lower():
+        script = 'tell application "Microsoft Edge" to get URL of active tab of front window'
+    elif "safari" in app_name.lower():
+        script = 'tell application "Safari" to get URL of front document'
+    else:
+        return None
+    try:
+        url = subprocess.check_output(['osascript', '-e', script]).decode().strip()
+        return url
+    except Exception:
+        return None
+
+
 def get_active_window_info_darwin():
     active_app = NSWorkspace.sharedWorkspace().activeApplication()
     app_name = active_app["NSApplicationName"]
@@ -78,10 +94,15 @@ def get_active_window_info_darwin():
     for window in windows:
         if window["kCGWindowOwnerPID"] == app_pid:
             window_title = window.get("kCGWindowName", "")
+            url = None
+            app_name_lower = app_name.lower()
+            if any(browser in app_name_lower for browser in ["chrome", "edge", "safari"]):
+                url = get_browser_url(app_name)
+            elif "firefox" in app_name_lower:
+                url = None
             if window_title:
-                return app_name, window_title
-
-    return app_name, ""  # 如果没有找到窗口标题，则返回空字符串作为标题
+                return app_name, window_title, url
+    return app_name, "", None  # If no window title found, return empty string and None for url
 
 
 def get_active_window_info_windows():
@@ -90,9 +111,9 @@ def get_active_window_info_windows():
         _, pid = win32process.GetWindowThreadProcessId(window)
         app_name = psutil.Process(pid).name()
         window_title = win32gui.GetWindowText(window)
-        return app_name, window_title
+        return app_name, window_title, None  # No URL support on Windows
     except:
-        return "", ""
+        return "", "", None
 
 
 def get_active_window_info():
@@ -111,6 +132,7 @@ def take_screenshot_macos(
     timestamp,
     app_name,
     window_title,
+    url,
 ):
     screenshots = []
     result = subprocess.check_output(["system_profiler", "SPDisplaysDataType", "-json"])
@@ -170,6 +192,7 @@ def take_screenshot_macos(
                 "active_window": window_title,
                 "screen_name": screen_name,
                 "sequence": screen_sequences[screen_name],
+                "url": url,
             }
 
             # Save as WebP with metadata included
@@ -252,7 +275,7 @@ def take_screenshot_windows(
 def take_screenshot(
     base_dir, previous_hashes, threshold, screen_sequences, date, timestamp
 ):
-    app_name, window_title = get_active_window_info()
+    app_name, window_title, url = get_active_window_info()
     os.makedirs(os.path.join(base_dir, date), exist_ok=True)
     worklog_path = os.path.join(base_dir, date, "worklog")
 
@@ -267,6 +290,7 @@ def take_screenshot(
                 timestamp,
                 app_name,
                 window_title,
+                url,
             )
         elif platform.system() == "Windows":
             screenshot_generator = take_screenshot_windows(
