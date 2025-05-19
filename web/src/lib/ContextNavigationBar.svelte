@@ -123,11 +123,18 @@
         
         <!-- Current entity -->
         <div class="flex-none w-28 h-28 rounded-lg overflow-hidden border-2 border-indigo-500 shadow-md">
-          <img
-            src={entity.image || `${apiEndpoint}/thumbnails/${entity.filepath.replace(/^\/+/, '')}`}
-            alt=""
-            class="w-full h-full object-cover"
-          />
+          <Tooltip.Root>
+            <Tooltip.Trigger class="w-full h-full">
+              <img
+                src={entity.image || `${apiEndpoint}/thumbnails/${entity.filepath.replace(/^\/+/, '')}`}
+                alt=""
+                class="w-full h-full object-cover"
+              />
+            </Tooltip.Trigger>
+            <Tooltip.Content>
+              {entity.metadata_entries?.find((entry: EntityMetadata) => entry.key === 'screen_name')?.value || ''} {entity.metadata_entries?.find((entry: EntityMetadata) => entry.key === 'active_app')?.value || ''} {formatDate(entity.file_created_at)}
+            </Tooltip.Content>
+          </Tooltip.Root>
         </div>
         
         {#each contextData.next as contextEntity}
