@@ -2,7 +2,7 @@
   import { PUBLIC_API_ENDPOINT } from '$env/static/public';
   import { IndentIncrease, Library, Folder, Hash, FileClock } from '@lucide/svelte';
   import LucideIcon from './components/LucideIcon.svelte';
-  import { translateAppName } from './utils';
+  import { translateAppName, formatDate } from './utils';
 
   let {
     entity,
@@ -63,7 +63,7 @@
             {#if !showDetails}
             <span class="inline-flex items-center text-sm text-gray-500 font-mono pl-4">
               <FileClock size={16} class="mr-1 text-gray-500" />
-              {entity?.file_created_at ? new Date(entity.file_created_at).toLocaleString() : ''}
+              {entity?.file_created_at ? formatDate(entity.file_created_at) : ''}
             </span>
             {/if}
           </div>
@@ -115,7 +115,7 @@
             size={16}
             class="uppercase tracking-wide text-sm text-indigo-600 font-bold mr-1 font-mono"
           />
-          {entity?.file_created_at ? new Date(entity.file_created_at).toLocaleString() : ''}
+          {entity?.file_created_at ? formatDate(entity.file_created_at) : ''}
         </span>
       </span>
 
