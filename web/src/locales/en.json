@@ -1,144 +1,144 @@
 {
-    "libraryFilter": {
-        "all": "All libs",
-        "repositoryFilter": "Repository Filter",
-        "selectAll": "Select All"
+  "libraryFilter": {
+    "all": "All libs",
+    "repositoryFilter": "Repository Filter",
+    "selectAll": "Select All"
+  },
+  "language": "Language",
+  "timeFilter": {
+    "label": "Time Filter",
+    "unlimited": "No time limit",
+    "threeHours": "Last 3 hours",
+    "today": "Today",
+    "week": "Last week",
+    "month": "Last month",
+    "threeMonths": "Last 3 months",
+    "custom": "Custom",
+    "customRange": "{start} - {end}"
+  },
+  "searchPlaceholder": "Input keyword to search or press Enter to show latest records",
+  "loading": "Loading...",
+  "searchSummary": "✨ {found} results found - Searched {outOf} recipes in {time}ms.",
+  "noResults": "No results found.",
+  "copyright": "© 2024 Arkohut Qinini. All rights reserved.",
+  "github": "GitHub",
+  "searchLog": {
+    "handleSearchStringChange": "handleSearchStringChange"
+  },
+  "slogan": "Record, Retrieve, Review",
+  "back": "Back",
+  "config": {
+    "title": "Configuration",
+    "saveButton": "Save Changes",
+    "restartServices": "Restart Services",
+    "savedSuccessfully": "Configuration saved successfully",
+    "noChanges": "No configuration changes to save",
+    "error": "Error",
+    "servicesRestarting": "All services are being restarted",
+    "servicesRestartingTitle": "Services Restarting",
+    "servicesRestartingMessage": "Services are restarting. Please wait until the process completes. This may take a few moments...",
+    "servicesRestarted": "Services have been successfully restarted",
+    "servicesRestartTimeout": "Service restart timed out. Please check server logs for issues.",
+    "servicesRestartAbnormal": "Service processes abnormal. Multiple processes detected or missing required service processes.",
+    "restartConfirmTitle": "Restart Services",
+    "restartConfirmMessage": "This will restart all services and may cause temporary interruption. Are you sure you want to continue?",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "general": {
+      "title": "General Configuration",
+      "description": "Basic settings for the application",
+      "baseDir": "Base Directory",
+      "baseDirDesc": "The base directory for storing application data.",
+      "screenshotsDir": "Screenshots Directory",
+      "screenshotsDirDesc": "Directory for storing screenshots.",
+      "databasePath": "Database Path",
+      "databasePathDesc": "Path to the database file. Can be a relative path or a full URL for SQLite or PostgreSQL.",
+      "defaultLibrary": "Default Library",
+      "defaultLibraryDesc": "The default library name to use for storing screenshots.",
+      "enableFacet": "Enable Facet Search",
+      "enableFacetDesc": "When set to true, enables filtering of search results based on specific attributes or dimensions.",
+      "defaultPlugins": "Default Plugins",
+      "defaultPluginsDesc": "Select plugins to enable by default"
     },
-    "language": "Language",
-    "timeFilter": {
-        "label": "Time Filter",
-        "unlimited": "No time limit",
-        "threeHours": "Last 3 hours",
-        "today": "Today",
-        "week": "Last week",
-        "month": "Last month",
-        "threeMonths": "Last 3 months",
-        "custom": "Custom",
-        "customRange": "{start} - {end}"
+    "server": {
+      "title": "Server Configuration",
+      "description": "Settings for the server component",
+      "host": "Server Host",
+      "hostDesc": "The host address to listen on. Use '0.0.0.0' to listen on all interfaces.",
+      "port": "Server Port",
+      "portDesc": "The port number for the server to listen on.",
+      "username": "Auth Username",
+      "password": "Auth Password"
     },
-    "searchPlaceholder": "Input keyword to search or press Enter to show latest records",
-    "loading": "Loading...",
-    "searchSummary": "✨ {found} results found - Searched {outOf} recipes in {time}ms.",
-    "noResults": "No results found.",
-    "copyright": "© 2024 Arkohut Qinini. All rights reserved.",
-    "github": "GitHub",
-    "searchLog": {
-        "handleSearchStringChange": "handleSearchStringChange"
+    "record": {
+      "title": "Record Configuration",
+      "description": "Settings for the record component",
+      "interval": "Record Interval (seconds)",
+      "intervalDesc": "Time between screenshot captures. Shorter intervals mean denser data capture, reducing missed data but increasing storage costs."
     },
-    "slogan": "Record, Retrieve, Review",
-    "back": "Back",
-    "config": {
-        "title": "Configuration",
-        "saveButton": "Save Changes",
-        "restartServices": "Restart Services",
-        "savedSuccessfully": "Configuration saved successfully",
-        "noChanges": "No configuration changes to save",
-        "error": "Error",
-        "servicesRestarting": "All services are being restarted",
-        "servicesRestartingTitle": "Services Restarting",
-        "servicesRestartingMessage": "Services are restarting. Please wait until the process completes. This may take a few moments...",
-        "servicesRestarted": "Services have been successfully restarted",
-        "servicesRestartTimeout": "Service restart timed out. Please check server logs for issues.",
-        "servicesRestartAbnormal": "Service processes abnormal. Multiple processes detected or missing required service processes.",
-        "restartConfirmTitle": "Restart Services",
-        "restartConfirmMessage": "This will restart all services and may cause temporary interruption. Are you sure you want to continue?",
-        "cancel": "Cancel",
-        "confirm": "Confirm",
-        "general": {
-            "title": "General Configuration",
-            "description": "Basic settings for the application",
-            "baseDir": "Base Directory",
-            "baseDirDesc": "The base directory for storing application data.",
-            "screenshotsDir": "Screenshots Directory",
-            "screenshotsDirDesc": "Directory for storing screenshots.",
-            "databasePath": "Database Path",
-            "databasePathDesc": "Path to the database file. Can be a relative path or a full URL for SQLite or PostgreSQL.",
-            "defaultLibrary": "Default Library",
-            "defaultLibraryDesc": "The default library name to use for storing screenshots.",
-            "enableFacet": "Enable Facet Search",
-            "enableFacetDesc": "When set to true, enables filtering of search results based on specific attributes or dimensions.",
-            "defaultPlugins": "Default Plugins",
-            "defaultPluginsDesc": "Select plugins to enable by default"
-        },
-        "server": {
-            "title": "Server Configuration",
-            "description": "Settings for the server component",
-            "host": "Server Host",
-            "hostDesc": "The host address to listen on. Use '0.0.0.0' to listen on all interfaces.",
-            "port": "Server Port",
-            "portDesc": "The port number for the server to listen on.",
-            "username": "Auth Username",
-            "password": "Auth Password"
-        },
-        "record": {
-            "title": "Record Configuration",
-            "description": "Settings for the record component",
-            "interval": "Record Interval (seconds)",
-            "intervalDesc": "Time between screenshot captures. Shorter intervals mean denser data capture, reducing missed data but increasing storage costs."
-        },
-        "watch": {
-            "title": "Watch Configuration",
-            "description": "Settings for the watch component",
-            "rateWindowSize": "Rate Window Size",
-            "rateWindowSizeDesc": "Number of recent events to consider when calculating processing rates.",
-            "sparsityFactor": "Sparsity Factor",
-            "sparsityFactorDesc": "Controls file processing frequency. Higher value means less frequent processing. 1.0 means process every file.",
-            "processingInterval": "Processing Interval",
-            "processingIntervalDesc": "Initial processing interval for file processing. Process one file with plugins for every N files. Will be adjusted automatically based on processing rate.",
-            "idleTimeout": "Idle Timeout (seconds)",
-            "idleTimeoutDesc": "Number of seconds without new files before marking state as idle.",
-            "idleProcessStart": "Idle Process Start Time",
-            "idleProcessEnd": "Idle Process End Time",
-            "idleProcessDesc": "Time interval for processing skipped files when system is idle (HH:MM format)."
-        },
-        "ocr": {
-            "title": "OCR Settings",
-            "description": "Configure Optical Character Recognition settings",
-            "useLocal": "Use Local OCR",
-            "forceJpeg": "Force JPEG",
-            "forceJpegDesc": "Convert images to JPEG format before OCR",
-            "endpoint": "OCR Endpoint",
-            "endpointDesc": "Only used if not using local OCR",
-            "token": "OCR API Token",
-            "concurrency": "Concurrency",
-            "concurrencyDesc": "Maximum number of concurrent OCR requests"
-        },
-        "vlm": {
-            "title": "VLM Settings",
-            "description": "Configure Vision Language Model settings",
-            "modelName": "Model Name",
-            "modelNameDesc": "Vision language model for image description",
-            "endpoint": "VLM Endpoint",
-            "token": "VLM API Token",
-            "concurrency": "Concurrency",
-            "concurrencyDesc": "Maximum number of concurrent requests",
-            "forceJpeg": "Force JPEG",
-            "forceJpegDesc": "Some models may not support WebP format",
-            "prompt": "VLM Prompt",
-            "promptDesc": "Text prompt for generating image descriptions"
-        },
-        "embedding": {
-            "title": "Embedding Settings",
-            "description": "Configure embedding model settings",
-            "changeWarningPrefix": "Changing the embedding model or dimensions requires restarting services and reindexing. After changes, run",
-            "useLocal": "Use Local Embedding",
-            "useModelscope": "Use ModelScope",
-            "useModelScopeDesc": "Pull model from ModelScope instead of Hugging Face",
-            "model": "Embedding Model",
-            "modelDesc": "Model name for generating text embeddings",
-            "dimensions": "Number of Dimensions",
-            "dimensionsDesc": "This field is typically related to the embedding model; please set it according to the model documentation.",
-            "endpoint": "Embedding Endpoint",
-            "endpointDesc": "Only used if not using local embedding",
-            "token": "Embedding API Token"
-        },
-        "sensitiveConfig": {
-            "title": "Warning: Sensitive Configuration Change",
-            "confirm": "Confirm Change",
-            "cancel": "Cancel"
-        }
+    "watch": {
+      "title": "Watch Configuration",
+      "description": "Settings for the watch component",
+      "rateWindowSize": "Rate Window Size",
+      "rateWindowSizeDesc": "Number of recent events to consider when calculating processing rates.",
+      "sparsityFactor": "Sparsity Factor",
+      "sparsityFactorDesc": "Controls file processing frequency. Higher value means less frequent processing. 1.0 means process every file.",
+      "processingInterval": "Processing Interval",
+      "processingIntervalDesc": "Initial processing interval for file processing. Process one file with plugins for every N files. Will be adjusted automatically based on processing rate.",
+      "idleTimeout": "Idle Timeout (seconds)",
+      "idleTimeoutDesc": "Number of seconds without new files before marking state as idle.",
+      "idleProcessStart": "Idle Process Start Time",
+      "idleProcessEnd": "Idle Process End Time",
+      "idleProcessDesc": "Time interval for processing skipped files when system is idle (HH:MM format)."
     },
-    "figure": {
-        "viewContext": "View Context"
+    "ocr": {
+      "title": "OCR Settings",
+      "description": "Configure Optical Character Recognition settings",
+      "useLocal": "Use Local OCR",
+      "forceJpeg": "Force JPEG",
+      "forceJpegDesc": "Convert images to JPEG format before OCR",
+      "endpoint": "OCR Endpoint",
+      "endpointDesc": "Only used if not using local OCR",
+      "token": "OCR API Token",
+      "concurrency": "Concurrency",
+      "concurrencyDesc": "Maximum number of concurrent OCR requests"
+    },
+    "vlm": {
+      "title": "VLM Settings",
+      "description": "Configure Vision Language Model settings",
+      "modelName": "Model Name",
+      "modelNameDesc": "Vision language model for image description",
+      "endpoint": "VLM Endpoint",
+      "token": "VLM API Token",
+      "concurrency": "Concurrency",
+      "concurrencyDesc": "Maximum number of concurrent requests",
+      "forceJpeg": "Force JPEG",
+      "forceJpegDesc": "Some models may not support WebP format",
+      "prompt": "VLM Prompt",
+      "promptDesc": "Text prompt for generating image descriptions"
+    },
+    "embedding": {
+      "title": "Embedding Settings",
+      "description": "Configure embedding model settings",
+      "changeWarningPrefix": "Changing the embedding model or dimensions requires restarting services and reindexing. After changes, run",
+      "useLocal": "Use Local Embedding",
+      "useModelscope": "Use ModelScope",
+      "useModelScopeDesc": "Pull model from ModelScope instead of Hugging Face",
+      "model": "Embedding Model",
+      "modelDesc": "Model name for generating text embeddings",
+      "dimensions": "Number of Dimensions",
+      "dimensionsDesc": "This field is typically related to the embedding model; please set it according to the model documentation.",
+      "endpoint": "Embedding Endpoint",
+      "endpointDesc": "Only used if not using local embedding",
+      "token": "Embedding API Token"
+    },
+    "sensitiveConfig": {
+      "title": "Warning: Sensitive Configuration Change",
+      "confirm": "Confirm Change",
+      "cancel": "Cancel"
     }
+  },
+  "figure": {
+    "viewContext": "View Context"
+  }
 }
