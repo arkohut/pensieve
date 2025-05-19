@@ -273,7 +273,7 @@ async def trigger_webhooks(
                     webhook_url,
                     json=entity.model_dump(mode="json"),
                     headers={"Location": location},
-                    timeout=60.0,
+                    timeout=300.0,
                 )
                 tasks.append((plugin.id, task))
 

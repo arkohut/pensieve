@@ -193,7 +193,7 @@ async def loop_files(library, folder, folder_path, force, plugins, batch_size):
     deleted_file_count = 0
     semaphore = asyncio.Semaphore(batch_size)
 
-    async with httpx.AsyncClient(timeout=60) as client:
+    async with httpx.AsyncClient(timeout=300) as client:
         # 1. Collect candidate files
         candidate_files = await collect_candidate_files(folder_path)
         scanned_files = set(candidate_files)
@@ -307,7 +307,7 @@ async def add_entity(
                         if plugins
                         else {"update_index": "true"}
                     ),
-                    timeout=60,
+                    timeout=300,
                 )
                 if 200 <= post_response.status_code < 300:
                     return new_entity["filepath"], FileStatus.ADDED, True, post_response
@@ -350,7 +350,7 @@ async def update_entity(
                         "force": str(force).lower(),
                         **({"plugins": plugins} if plugins else {}),
                     },
-                    timeout=60,
+                    timeout=300,
                 )
                 if 200 <= update_response.status_code < 300:
                     return (
@@ -467,7 +467,7 @@ def reindex(
                             batch_response = client.post(
                                 f"{BASE_URL}/api/entities/batch-index",
                                 json={"entity_ids": batch_ids},
-                                timeout=60,
+                                timeout=300,
                             )
                             if batch_response.status_code != 204:
                                 print(
@@ -656,7 +656,7 @@ def sync(
                     "update_index": "true",
                     "force": str(force).lower(),
                 },
-                timeout=60,
+                timeout=300,
             )
             if update_response.status_code == 200:
                 if force:
@@ -679,7 +679,7 @@ def sync(
                     "update_index": "true",
                     "force": "false",
                 },
-                timeout=60,
+                timeout=300,
             )
             if update_response.status_code == 200:
                 # Assume plugins may have been processed, since server-side will process any pending plugins
@@ -712,7 +712,7 @@ def sync(
                     "trigger_webhooks_flag": str(not without_webhooks).lower(),
                     "update_index": "true",
                 },
-                timeout=60,
+                timeout=300,
             )
 
             if create_response.status_code == 200:
@@ -1632,7 +1632,7 @@ async def check_deleted_files(
                     "offset": offset,
                     "path_prefix": str(folder_path),
                 },
-                timeout=60,
+                timeout=300,
             )
 
             if existing_files_response.status_code != 200:
