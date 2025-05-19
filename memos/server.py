@@ -22,6 +22,7 @@ import json
 import cv2
 from PIL import Image
 import logging
+from urllib.parse import quote
 
 from .config import settings, load_config, save_config, apply_config_updates, restart_processes
 from memos.plugins.vlm import main as vlm_main
@@ -821,9 +822,14 @@ async def get_thumbnail(file_path: str, width: int = 200, height: int = 200):
     # Generate the thumbnail
     thumb_path = generate_thumbnail(full_path, (width, height))
     if thumb_path:
+        filename = f"thumb_{full_path.name}"
+        # Use RFC 6266/5987 for UTF-8 filename support
+        disposition = (
+            f"inline; filename=thumb.png; filename*=UTF-8''{quote(filename)}"
+        )
         return FileResponse(
             thumb_path,
-            headers={"Content-Disposition": f"inline; filename=thumb_{full_path.name}"},
+            headers={"Content-Disposition": disposition},
         )
     else:
         # Fallback to original file if thumbnail generation fails
@@ -889,15 +895,11 @@ async def search_entities_v2(
                 filepath=entity.filepath,
                 filename=entity.filename,
                 size=entity.size,
-                file_created_at=int(entity.file_created_at.timestamp()),
-                file_last_modified_at=int(entity.file_last_modified_at.timestamp()),
+                file_created_at=entity.file_created_at,
+                file_last_modified_at=entity.file_last_modified_at,
                 file_type=entity.file_type,
                 file_type_group=entity.file_type_group,
-                last_scan_at=(
-                    int(entity.last_scan_at.timestamp())
-                    if entity.last_scan_at
-                    else None
-                ),
+                last_scan_at=entity.last_scan_at if entity.last_scan_at else None,
                 library_id=entity.library_id,
                 folder_id=entity.folder_id,
                 tags=[tag.name for tag in entity.tags],

@@ -225,14 +225,14 @@ class EntitySearchResult(BaseModel):
     filepath: str
     filename: str
     size: int
-    file_created_at: int = Field(..., description="Unix timestamp")
+    file_created_at: datetime
     created_date: Optional[str] = None
     created_month: Optional[str] = None
     created_year: Optional[str] = None
-    file_last_modified_at: int = Field(..., description="Unix timestamp")
+    file_last_modified_at: datetime
     file_type: str
     file_type_group: str
-    last_scan_at: Optional[int] = Field(None, description="Unix timestamp")
+    last_scan_at: Optional[datetime] = None
     library_id: int
     folder_id: int
     tags: List[str]
