@@ -81,7 +81,7 @@ async def fetch(endpoint: str, client, request_data, headers: Optional[dict] = N
             response = await client.post(
                 f"{endpoint}/v1/chat/completions",
                 json=request_data,
-                timeout=60,
+                timeout=300,
                 headers=headers,
             )
             response.raise_for_status()
