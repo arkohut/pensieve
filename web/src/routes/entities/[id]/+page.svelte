@@ -128,10 +128,10 @@
 
 {#snippet HomeButton()}
   <button 
-    class="p-2 rounded-full hover:bg-gray-100 flex items-center gap-2 text-indigo-600 mr-2"
+    class="p-2 rounded-full hover:bg-gray-100 flex items-center gap-2 text-indigo-600 -ml-2"
     onclick={goToHome}
   >
-    <Home size={18} class="text-indigo-600" />
+    <Home size={24} class="text-indigo-600" />
   </button>
 {/snippet}
 
