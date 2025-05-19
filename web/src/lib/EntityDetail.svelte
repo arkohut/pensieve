@@ -41,6 +41,10 @@
           entry.key !== 'active_app' &&
           entry.key !== 'active_window')
         .sort((a: any, b: any) => {
+          // Put 'screen_name' first
+          if (a.key === 'screen_name') return -1;
+          if (b.key === 'screen_name') return 1;
+          // Then put 'ocr_result' last
           if (a.key === 'ocr_result') return 1;
           if (b.key === 'ocr_result') return -1;
           return 0;
