@@ -117,3 +117,33 @@ export function translateAppName(appName: string): string | undefined {
 	// If no match is found, return undefined
 	return iconName;
 }
+
+export function formatDate(dateStr: string): string {
+	if (!dateStr) return '';
+	try {
+		const utcDate = dateStr.endsWith('Z') ? dateStr : dateStr + 'Z';
+		const date = new Date(utcDate);
+		return date.toLocaleString(undefined, {
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit',
+			hour: '2-digit',
+			minute: '2-digit',
+			hour12: false
+		});
+	} catch (e) {
+		try {
+			const date = new Date(dateStr);
+			return date.toLocaleString(undefined, {
+				year: 'numeric',
+				month: '2-digit',
+				day: '2-digit',
+				hour: '2-digit',
+				minute: '2-digit',
+				hour12: false
+			});
+		} catch (innerError) {
+			return dateStr;
+		}
+	}
+}
