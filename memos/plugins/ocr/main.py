@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 from typing import Optional
 import httpx
 import json
@@ -9,7 +8,6 @@ from PIL import Image
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-import yaml
 import io
 import platform
 import cpuinfo
@@ -230,28 +228,20 @@ def init_plugin(config):
     semaphore = asyncio.Semaphore(concurrency)
     
     if use_local:
-        config_path = os.path.join(os.path.dirname(__file__), "ppocr.yaml")
-        
-        # Load and update the config file with absolute model paths
-        with open(config_path, 'r') as f:
-            ocr_config = yaml.safe_load(f)
-        
-        model_dir = os.path.join(os.path.dirname(__file__), "models")
-        ocr_config['Det']['model_path'] = os.path.join(model_dir, os.path.basename(ocr_config['Det']['model_path']))
-        ocr_config['Cls']['model_path'] = os.path.join(model_dir, os.path.basename(ocr_config['Cls']['model_path']))
-        ocr_config['Rec']['model_path'] = os.path.join(model_dir, os.path.basename(ocr_config['Rec']['model_path']))
-        
-        # Save the updated config to a temporary file with strings wrapped in double quotes
-        temp_config_path = os.path.join(os.path.dirname(__file__), "temp_ppocr.yaml")
-        with open(temp_config_path, 'w') as f:
-            yaml.safe_dump(ocr_config, f)
+        from rapidocr import RapidOCR
+        config_params = {
+            "Global.width_height_ratio": 40,
+            "Global.lang_det": "ch_mobile", 
+            "Global.lang_rec": "ch_mobile"
+        }        
         
         if platform.system() == 'Windows' and 'Intel' in cpuinfo.get_cpu_info()['brand_raw']:
-            from rapidocr_openvino import RapidOCR
-            ocr = RapidOCR(config_path=temp_config_path)
+            config_params["Global.with_openvino"] = True
+            ocr = RapidOCR(params=config_params)
         else:
-            from rapidocr_onnxruntime import RapidOCR
-            ocr = RapidOCR(config_path=temp_config_path)
+            config_params["Global.with_onnx"] = True
+            ocr = RapidOCR(params=config_params)
+            
         thread_pool = ThreadPoolExecutor(max_workers=concurrency)
 
     logger.info("OCR plugin initialized")
