@@ -578,11 +578,14 @@ def sync(
         "file_type_group": file_type_group,
     }
 
-    # Handle metadata
+    # Handle image metadata
     is_thumbnail = False
+    metadata_timestamp = None  # Default: no timestamp from metadata
     if file_type_group == "image":
         metadata = get_image_metadata(file_path)
         if metadata:
+            # Use parse_timestamp_from_metadata to get the timestamp
+            metadata_timestamp = parse_timestamp_from_metadata(metadata)
             if "active_window" in metadata and "active_app" not in metadata:
                 metadata["active_app"] = metadata["active_window"].split(" - ")[0]
             new_entity["metadata_entries"] = [
@@ -604,6 +607,10 @@ def sync(
             if is_thumbnail:
                 typer.echo(f"Skipping thumbnail file: {file_path}")
                 return
+
+    # If metadata_timestamp is set, use it for file_created_at
+    if metadata_timestamp is not None:
+        new_entity["file_created_at"] = format_timestamp(metadata_timestamp)
 
     if response.status_code == 200:
         # File exists, update it
@@ -1365,9 +1372,12 @@ async def prepare_entity(file_path: str, folder_id: int) -> Dict[str, Any]:
 
     # Handle image metadata
     is_thumbnail = False
+    metadata_timestamp = None  # Default: no timestamp from metadata
     if file_type_group == "image":
         metadata = get_image_metadata(file_path)
         if metadata:
+            # Use parse_timestamp_from_metadata to get the timestamp
+            metadata_timestamp = parse_timestamp_from_metadata(metadata)
             if "active_window" in metadata and "active_app" not in metadata:
                 metadata["active_app"] = metadata["active_window"].split(" - ")[0]
             new_entity["metadata_entries"] = [
@@ -1385,6 +1395,14 @@ async def prepare_entity(file_path: str, folder_id: int) -> Dict[str, Any]:
             if "active_app" in metadata:
                 new_entity.setdefault("tags", []).append(metadata["active_app"])
             is_thumbnail = metadata.get(IS_THUMBNAIL, False)
+
+            if is_thumbnail:
+                typer.echo(f"Skipping thumbnail file: {file_path}")
+                return
+
+    # If metadata_timestamp is set, use it for file_created_at
+    if metadata_timestamp is not None:
+        new_entity["file_created_at"] = format_timestamp(metadata_timestamp)
 
     new_entity["is_thumbnail"] = is_thumbnail
     return new_entity
@@ -1662,4 +1680,19 @@ async def check_deleted_files(
             offset += limit
 
     return deleted_count
+
+
+def parse_timestamp_from_metadata(metadata: dict) -> float | str | None:
+    """
+    Parse the 'timestamp' field from metadata if present, in 'YYYYMMDD-HHMMSS' UTC format.
+    Returns a float timestamp (seconds since epoch) if successful, otherwise the original value or None.
+    """
+    ts = metadata.get("timestamp")
+    if not ts:
+        return None
+    try:
+        dt = datetime.strptime(ts, "%Y%m%d-%H%M%S").replace(tzinfo=timezone.utc)
+        return dt.timestamp()
+    except Exception:
+        return ts
 
