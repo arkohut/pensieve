@@ -21,6 +21,8 @@ This project draws heavily from two other projects: one called [Rewind](https://
 - 🚀 Simple installation: just install dependencies via pip to get started
 - 🔒 Complete data control: all data is stored locally, allowing for full local operation and self-managed data processing
 - 🔍 Full-text and vector search support
+- 📊 Interactive entity detail view with chronological context navigation
+- 🌐 Smart metadata capture including browser URL retrieval for web activities
 - 🤖 Integrates with Ollama, using it as the machine learning engine for Pensieve
 - 🌐 Compatible with any OpenAI API models (e.g., OpenAI, Azure OpenAI, vLLM, etc.)
 - 💻 Supports Mac and Windows (Linux support is in development)
@@ -28,6 +30,8 @@ This project draws heavily from two other projects: one called [Rewind](https://
 
 ## 📰 Latest News
 
+- **Enhanced Entity Detail View**: Version `v0.29.0` introduces a new entity detail page with interactive context navigation, allowing you to browse through screenshots chronologically with improved visual context and metadata display.
+- **OCR Processing Upgrade**: Updated RapidOCR version to use default models, reducing package size (~15MB reduction).
 - **Configuration Management UI**: Version `v0.27.0` introduces an intuitive configuration management interface that allows you to easily configure all Pensieve settings through the web interface.
 - **API Structure Optimization**: All API endpoints now use a standard `/api` prefix for improved consistency and maintainability.
 - **Intelligent Idle Processing Strategy**: Starting from version `v0.26.0`, Pensieve introduces an intelligent idle processing strategy that automatically processes pending files during system idle time. This feature maximizes screenshot processing while minimizing performance impact during active system use. For more details, please refer to the [Idle Processing Strategy](#idle-processing-strategy) section.
@@ -235,6 +239,17 @@ memos migrate ^
 ```
 
 ## User Guide
+
+### Enhanced Entity Detail View
+
+Pensieve v0.29.0 introduces a comprehensive entity detail view that provides deeper insights into your screenshots:
+
+1. **Interactive Context Navigation**: Click on any search result to open the detailed entity view with chronological context navigation
+2. **Context Bar**: Navigate through screenshots using the horizontal context bar at the bottom, showing previous and next screenshots in chronological order
+3. **Rich Metadata Display**: View comprehensive metadata including browser URLs, application names, timestamps, and extracted text
+4. **Enhanced Visual Context**: Get better understanding of your digital activities with improved metadata capture
+
+The new entity view makes it easier to reconstruct your digital timeline and find related content around specific moments.
 
 ### Using the Configuration Management UI
 
