@@ -231,16 +231,11 @@ def init_plugin(config):
         from rapidocr import RapidOCR
         config_params = {
             "Global.width_height_ratio": 40,
-            "Global.lang_det": "ch_mobile", 
-            "Global.lang_rec": "ch_mobile"
         }        
         
-        if platform.system() == 'Windows' and 'Intel' in cpuinfo.get_cpu_info()['brand_raw']:
-            config_params["Global.with_openvino"] = True
-            ocr = RapidOCR(params=config_params)
-        else:
-            config_params["Global.with_onnx"] = True
-            ocr = RapidOCR(params=config_params)
+        # Initialize RapidOCR with simplified configuration
+        # The library will use default values for detection, classification, and recognition
+        ocr = RapidOCR(params=config_params)
             
         thread_pool = ThreadPoolExecutor(max_workers=concurrency)
 
