@@ -74,7 +74,10 @@
       "title": "Record Configuration",
       "description": "Settings for the record component",
       "interval": "Record Interval (seconds)",
-      "intervalDesc": "Time between screenshot captures. Shorter intervals mean denser data capture, reducing missed data but increasing storage costs."
+      "intervalDesc": "Time between screenshot captures. Shorter intervals mean denser data capture, reducing missed data but increasing storage costs.",
+      "appBlacklist": "Application Blacklist",
+      "appBlacklistDesc": "List of application names to exclude from recording. Screenshots will be skipped when these applications are active. Enter one application name per line.",
+      "appBlacklistPlaceholder": "Enter application names (one per line)\nExample:\nSlack\nZoom\nPrivate Browser"
     },
     "watch": {
       "title": "Watch Configuration",

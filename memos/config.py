@@ -124,6 +124,9 @@ class Settings(BaseSettings):
 
     record_interval: int = 4
 
+    # App blacklist for recording
+    app_blacklist: List[str] = []
+
     watch: WatchSettings = WatchSettings()
 
     @classmethod
@@ -309,6 +312,7 @@ def categorize_settings_by_restart():
         
         # Configuration affecting only the recording service
         "record_interval": ["record"],  # Changes to the recording interval
+        "app_blacklist": ["record"],    # Changes to the app blacklist
         
         # Configuration affecting only the monitoring service
         "watch.rate_window_size": ["watch"],

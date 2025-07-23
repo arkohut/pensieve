@@ -329,8 +329,24 @@ def is_screen_locked():
         return user32.GetForegroundWindow() == 0
 
 
+def is_app_blacklisted(app_name):
+    """Check if the current app is in the blacklist"""
+    if not app_name or not settings.app_blacklist:
+        return False
+    
+    app_name_lower = app_name.lower()
+    for blacklisted_app in settings.app_blacklist:
+        if blacklisted_app.lower() in app_name_lower:
+            return True
+    return False
+
+
 def run_screen_recorder_once(threshold, base_dir, previous_hashes):
     if not is_screen_locked():
+        # Check if current app is blacklisted before taking screenshot
+        app_name, _, _ = get_active_window_info()
+        if is_app_blacklisted(app_name):
+            logging.info(f"App '{app_name}' is blacklisted, but --once command will ignore blacklist and continue.")
         date = time.strftime("%Y%m%d")
         timestamp = time.strftime("%Y%m%d-%H%M%S")
         screen_sequences = load_screen_sequences(base_dir, date)
@@ -348,19 +364,24 @@ def run_screen_recorder(threshold, base_dir, previous_hashes):
     while True:
         try:
             if not is_screen_locked():
-                date = time.strftime("%Y%m%d")
-                timestamp = time.strftime("%Y%m%d-%H%M%S")
-                screen_sequences = load_screen_sequences(base_dir, date)
-                screenshot_files = take_screenshot(
-                    base_dir,
-                    previous_hashes,
-                    threshold,
-                    screen_sequences,
-                    date,
-                    timestamp,
-                )
-                for screenshot_file in screenshot_files:
-                    logging.info(f"Screenshot saved: {screenshot_file}")
+                # Check if current app is blacklisted before taking screenshot
+                app_name, _, _ = get_active_window_info()
+                if is_app_blacklisted(app_name):
+                    logging.info(f"App '{app_name}' is blacklisted. Skipping screenshot.")
+                else:
+                    date = time.strftime("%Y%m%d")
+                    timestamp = time.strftime("%Y%m%d-%H%M%S")
+                    screen_sequences = load_screen_sequences(base_dir, date)
+                    screenshot_files = take_screenshot(
+                        base_dir,
+                        previous_hashes,
+                        threshold,
+                        screen_sequences,
+                        date,
+                        timestamp,
+                    )
+                    for screenshot_file in screenshot_files:
+                        logging.info(f"Screenshot saved: {screenshot_file}")
             else:
                 logging.info("Screen is locked. Skipping screenshot.")
         except Exception as e:
