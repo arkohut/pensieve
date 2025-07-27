@@ -783,6 +783,11 @@ class LibraryFileHandler(FileSystemEventHandler):
         self.last_battery_check = 0
         self.battery_check_interval = self.BATTERY_CHECK_INTERVAL
 
+        # Add blacklist checking
+        self.app_blacklist_check_interval = 5  # Check every 5 seconds
+        self.last_blacklist_check = 0
+        self.is_app_blacklisted_flag = False
+
         # State tracking
         self.state = "busy"
         self.last_activity_time = time.time()
@@ -815,6 +820,40 @@ class LibraryFileHandler(FileSystemEventHandler):
 
         return self.idle_process_start <= current_time <= self.idle_process_end
 
+    def is_app_blacklisted(self, app_name):
+        """Check if the current app is in the blacklist"""
+        if not app_name or not settings.app_blacklist:
+            return False
+        
+        app_name_lower = app_name.lower()
+        for blacklisted_app in settings.app_blacklist:
+            if blacklisted_app.lower() in app_name_lower:
+                return True
+        return False
+
+    def check_app_blacklist_status(self):
+        """Check if current active app is blacklisted"""
+        current_time = time.time()
+        if current_time - self.last_blacklist_check < self.app_blacklist_check_interval:
+            return self.is_app_blacklisted_flag
+            
+        try:
+            # Import get_active_window_info from record module
+            from .record import get_active_window_info
+            app_name, _, _ = get_active_window_info()
+            self.is_app_blacklisted_flag = self.is_app_blacklisted(app_name)
+            self.last_blacklist_check = current_time
+            
+            if self.is_app_blacklisted_flag:
+                self.logger.info(f"App '{app_name}' is blacklisted. Pausing file processing.", 
+                               extra={"log_type": "bg"})
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to check active app: {e}", extra={"log_type": "bg"})
+            self.is_app_blacklisted_flag = False
+            
+        return self.is_app_blacklisted_flag
+
     def handle_event(self, event):
         if not event.is_directory and self.is_valid_file(event.src_path):
             current_time = time.time()
@@ -837,6 +876,18 @@ class LibraryFileHandler(FileSystemEventHandler):
     def check_state(self):
         """Check and update the current state based on activity"""
         current_time = time.time()
+        
+        # Check if current app is blacklisted
+        if self.check_app_blacklist_status():
+            # If app is blacklisted, pause processing
+            if self.state != "blacklisted":
+                self.state = "blacklisted"
+                self.logger.info("State changed to blacklisted (active app is in blacklist)", 
+                               extra={"log_type": "bg"})
+                # Stop processing skipped files when app is blacklisted
+                self.is_processing_skipped = False
+            return
+        
         with self.lock:
             is_idle = (current_time - self.last_activity_time) > self.idle_timeout
             current_in_process_window = self.is_within_process_interval()
@@ -890,6 +941,12 @@ class LibraryFileHandler(FileSystemEventHandler):
         if self.is_processing_skipped:
             return
 
+        # Check if app is blacklisted before starting background processing
+        if self.check_app_blacklist_status():
+            self.logger.info("Not processing unprocessed files while blacklisted app is active", 
+                           extra={"log_type": "bg"})
+            return
+
         if is_on_battery():
             self.logger.info("Not processing unprocessed files while on battery", extra={"log_type": "bg"})
             return
@@ -915,6 +972,13 @@ class LibraryFileHandler(FileSystemEventHandler):
                 if not self.is_processing_skipped:
                     self.logger.info("Background processing stopped: processing_skipped flag cleared", 
                                    extra={"log_type": "bg"})
+                    break
+
+                # Check if app is blacklisted
+                if self.check_app_blacklist_status():
+                    self.logger.info("Background processing stopped: blacklisted app is active", 
+                                   extra={"log_type": "bg"})
+                    self.is_processing_skipped = False
                     break
 
                 if is_on_battery():
@@ -1080,6 +1144,12 @@ class LibraryFileHandler(FileSystemEventHandler):
         self.executor.submit(process_files)
 
     def process_pending_files(self):
+        # Check if app is blacklisted before processing real-time files
+        if self.check_app_blacklist_status():
+            # Don't process files when blacklisted app is active, but still update state
+            self.check_state()
+            return
+
         current_time = time.time()
         files_to_process_with_plugins = []
         files_to_process_without_plugins = []
