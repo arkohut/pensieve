@@ -29,6 +29,7 @@ from memos.config import settings
 from memos.utils import get_image_metadata
 from memos.schemas import MetadataSource
 from memos.logging_config import LOGGING_CONFIG
+from memos.record import is_app_blacklisted, get_active_window_info
 
 
 logging.config.dictConfig(LOGGING_CONFIG)
@@ -816,6 +817,12 @@ class LibraryFileHandler(FileSystemEventHandler):
         return self.idle_process_start <= current_time <= self.idle_process_end
 
     def handle_event(self, event):
+        app_name, _, _ = get_active_window_info()
+        if is_app_blacklisted(app_name):
+            self.logger.info(f"App '{app_name}' is blacklisted. Ignoring file event for {event.src_path}", 
+                             extra={"log_type": "bg"})
+            return False
+            
         if not event.is_directory and self.is_valid_file(event.src_path):
             current_time = time.time()
             with self.lock:
@@ -1305,8 +1312,18 @@ def watch(
     try:
         while True:
             time.sleep(5)
-            for handler in handlers:
-                handler.process_pending_files()
+            app_name, _, _ = get_active_window_info()
+            if is_app_blacklisted(app_name):
+                # If app is blacklisted, clear all pending files from handlers
+                for handler in handlers:
+                    with handler.lock:
+                        if handler.pending_files:
+                            handler.logger.info(f"App '{app_name}' is blacklisted. Clearing {len(handler.pending_files)} pending files", 
+                                                extra={"log_type": "bg"})
+                            handler.pending_files.clear()
+            else:
+                for handler in handlers:
+                    handler.process_pending_files()
     except KeyboardInterrupt:
         observer.stop()
         for handler in handlers:
