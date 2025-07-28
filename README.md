@@ -30,6 +30,7 @@ This project draws heavily from two other projects: one called [Rewind](https://
 
 ## 📰 Latest News
 
+- **Application Blacklist Feature**: Version `v0.30.0` introduces an application blacklist feature that allows you to exclude specific applications from screenshot recording. This feature includes blacklist checking in both recording and file watching processes, with an enhanced UI for blacklist management in the configuration panel.
 - **Enhanced Entity Detail View**: Version `v0.29.0` introduces a new entity detail page with interactive context navigation, allowing you to browse through screenshots chronologically with improved visual context and metadata display.
 - **OCR Processing Upgrade**: Updated RapidOCR version to use default models, reducing package size (~15MB reduction).
 - **Configuration Management UI**: Version `v0.27.0` introduces an intuitive configuration management interface that allows you to easily configure all Pensieve settings through the web interface.
