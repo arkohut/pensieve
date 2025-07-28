@@ -32,6 +32,7 @@
   let servicesRestarting = $state(false);
   
   let vlmPromptTextarea = $state<HTMLTextAreaElement | null>(null);
+  let appBlacklistTextarea = $state<HTMLTextAreaElement | null>(null);
 
   let uiState = $state({
     inputsDisabled: {
@@ -324,22 +325,39 @@
   
   // Add a function to automatically adjust the height of the textarea
   function adjustTextareaHeight(textarea: HTMLTextAreaElement) {
-    // Set the minimum height (3 rows)
-    const minHeight = 24 * 3; // Assuming each row is 24px tall
+    if (!textarea) return;
     
-    // Reset height to get the actual content height
+    const minHeight = 72; // Minimum height in pixels
     textarea.style.height = 'auto';
     
-    // Calculate the new height (the larger of the content height and the minimum height)
+    // Calculate the new height based on content
     const newHeight = Math.max(textarea.scrollHeight, minHeight);
     
     // Set the new height
     textarea.style.height = newHeight + 'px';
   }
 
+  // Helper function to convert app_blacklist array to string for textarea
+  function getAppBlacklistString() {
+    const blacklist = getEffectiveConfigValue(['app_blacklist']);
+    if (Array.isArray(blacklist)) {
+      return blacklist.join('\n');
+    }
+    return blacklist || '';
+  }
+
+  // Helper function to convert string to array for app_blacklist
+  function handleAppBlacklistChange(value: string) {
+    const lines = value.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    handleChange(['app_blacklist'], lines);
+  }
+
   $effect(() => {
     if (config && !loading && vlmPromptTextarea) {
       adjustTextareaHeight(vlmPromptTextarea);
+    }
+    if (config && !loading && appBlacklistTextarea) {
+      adjustTextareaHeight(appBlacklistTextarea);
     }
   });
 </script>
@@ -756,6 +774,28 @@
                   />
                   <p class="text-sm text-muted-foreground mt-1">
                     {$_('config.record.intervalDesc')}
+                  </p>
+                </div>
+
+                <div>
+                  <Label for="app-blacklist">{$_('config.record.appBlacklist')}</Label>
+                  <div class="relative">
+                    <Textarea
+                      id="app-blacklist"
+                      bind:ref={appBlacklistTextarea}
+                      class="font-mono resize-none overflow-hidden w-full min-h-[72px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      value={getAppBlacklistString()}
+                      placeholder={$_('config.record.appBlacklistPlaceholder')}
+                      oninput={(e) => {
+                        handleAppBlacklistChange(e.currentTarget.value);
+                        if (appBlacklistTextarea) {
+                          adjustTextareaHeight(appBlacklistTextarea);
+                        }
+                      }}
+                    ></Textarea>
+                  </div>
+                  <p class="text-sm text-muted-foreground mt-1">
+                    {$_('config.record.appBlacklistDesc')}
                   </p>
                 </div>
               </div>
@@ -1246,4 +1286,4 @@
       </Collapsible>
     </div>
   {/if}
-</div> 
+</div>

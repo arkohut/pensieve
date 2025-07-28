@@ -74,7 +74,10 @@
       "title": "记录配置",
       "description": "记录组件的设置",
       "interval": "记录间隔（秒）",
-      "intervalDesc": "截图捕获之间的时间间隔。间隔越短，数据捕获越密集，减少丢失数据的可能，但会增加存储成本。"
+      "intervalDesc": "截图捕获之间的时间间隔。间隔越短，数据捕获越密集，减少丢失数据的可能，但会增加存储成本。",
+      "appBlacklist": "应用程序黑名单",
+      "appBlacklistDesc": "要从记录中排除的应用程序名称列表。当这些应用程序处于活动状态时，将跳过截图。每行输入一个应用程序名称。",
+      "appBlacklistPlaceholder": "输入应用程序名称（每行一个）\n示例：\nSlack\nZoom\n隐私浏览器"
     },
     "watch": {
       "title": "监控配置",

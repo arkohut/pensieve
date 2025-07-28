@@ -119,8 +119,9 @@
   <!-- Display app_name if present in metadata -->
   {#if entity?.metadata_entries?.some((entry: any) => entry.key === 'active_app')}
     <div class="uppercase tracking-wide text-sm text-indigo-600 font-bold mt-6">APP NAME</div>
-    <div class="text-base text-gray-700 mb-4">
+    <div class="text-base text-gray-700 mb-4 flex items-center">
       {entity.metadata_entries.find((entry: any) => entry.key === 'active_app')?.value || 'unknown'}
+      <CopyToClipboard text={entity.metadata_entries.find((entry: any) => entry.key === 'active_app')?.value || ''} />
     </div>
   {/if}
-</ScrollArea> 
+</ScrollArea>
