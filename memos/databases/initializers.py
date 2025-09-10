@@ -38,16 +38,23 @@ def recreate_fts_and_vec_tables(settings):
     return initializer.recreate_index_tables()
 
 
-def initialize_default_plugins(session):
-    """Initialize default plugins in the database."""
-    default_plugins = [
-        PluginModel(
+def initialize_default_plugins(session, settings):
+    """Initialize default plugins in the database based on configuration."""
+    # Define all available plugins
+    available_plugins = {
+        "builtin_vlm": PluginModel(
             name="builtin_vlm", description="VLM Plugin", webhook_url="/api/plugins/vlm"
         ),
-        PluginModel(
+        "builtin_ocr": PluginModel(
             name="builtin_ocr", description="OCR Plugin", webhook_url="/api/plugins/ocr"
         ),
-    ]
+    }
+    
+    # Only initialize plugins that are in the default_plugins configuration
+    default_plugins = []
+    for plugin_name in settings.default_plugins:
+        if plugin_name in available_plugins:
+            default_plugins.append(available_plugins[plugin_name])
 
     for plugin in default_plugins:
         existing_plugin = session.query(PluginModel).filter_by(name=plugin.name).first()
@@ -157,7 +164,7 @@ class DatabaseInitializer:
             # Initialize default data
             Session = sessionmaker(bind=self.engine)
             with Session() as session:
-                default_plugins = initialize_default_plugins(session)
+                default_plugins = initialize_default_plugins(session, self.settings)
                 init_default_libraries(session, default_plugins, self.settings)
 
             return True
