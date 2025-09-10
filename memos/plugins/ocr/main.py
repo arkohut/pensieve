@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from typing import Optional
 import httpx
 import json
@@ -110,17 +111,67 @@ def convert_ocr_data(ocr_data):
 
 def predict_local(img_path):
     try:
-        if platform.system() == 'Darwin':  # Check if the OS is macOS
+        # Check if we should force RapidOCR for testing (set environment variable FORCE_RAPIDOCR=1)
+        force_rapidocr = os.environ.get('FORCE_RAPIDOCR', '0') == '1'
+        
+        if platform.system() == 'Darwin' and not force_rapidocr:
             from ocrmac import ocrmac
-            result = ocrmac.OCR(img_path, language_preference=['zh-Hans']).recognize(px=True)
-            return convert_ocr_data(result)
+            ocr_result = ocrmac.OCR(img_path, language_preference=['zh-Hans']).recognize(px=True)
+            return convert_ocr_data(ocr_result)
         else:
             with Image.open(img_path) as img:
                 img = img.convert("RGB")
                 img.thumbnail(MAX_THUMBNAIL_SIZE)
                 img_array = np.array(img)
-            results, _ = ocr(img_array)
-            return convert_ocr_results(results)
+            
+            # Call RapidOCR and handle different return formats
+            ocr_output = ocr(img_array)
+            
+            # Handle different RapidOCR return formats
+            if isinstance(ocr_output, tuple) and len(ocr_output) == 2:
+                # Old format: (results, elapsed_time)
+                ocr_results, _ = ocr_output
+                logger.debug("Using old tuple format")
+            elif hasattr(ocr_output, '__dict__') and 'boxes' in ocr_output.__dict__ and 'txts' in ocr_output.__dict__:
+                # New format: RapidOCROutput object with boxes, txts, scores attributes
+                boxes = ocr_output.boxes
+                txts = ocr_output.txts
+                scores = ocr_output.scores if hasattr(ocr_output, 'scores') else []
+                
+                # Convert to the expected format: list of (box, text, score) tuples
+                ocr_results = []
+                for box, text, score in zip(boxes, txts, scores):
+                    if score > 0.5:  # Filter by confidence
+                        ocr_results.append((box, text, score))
+            elif hasattr(ocr_output, 'get') and callable(ocr_output.get):
+                # New format: RapidOCROutput object - try different possible keys
+                for key in ['results', 'boxes', 'texts', 'data', 'content']:
+                    try:
+                        value = ocr_output.get(key, None)
+                        if value is not None:
+                            ocr_results = value
+                            break
+                    except Exception:
+                        continue
+                else:
+                    # If no key worked, try empty list
+                    ocr_results = []
+            elif hasattr(ocr_output, '__iter__') and not isinstance(ocr_output, (str, dict, bytes)):
+                # New format: RapidOCROutput object is iterable
+                try:
+                    ocr_results = list(ocr_output)
+                except Exception:
+                    ocr_results = []
+            elif hasattr(ocr_output, 'results'):
+                # Fallback: try to access results attribute
+                ocr_results = ocr_output.results
+            else:
+                # Last resort: try to convert to list or return empty
+                try:
+                    ocr_results = list(ocr_output) if ocr_output else []
+                except Exception:
+                    ocr_results = []
+            return convert_ocr_results(ocr_results)
     except Exception as e:
         logger.error(f"Error processing image {img_path}: {str(e)}")
         return None
