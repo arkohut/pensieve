@@ -148,6 +148,11 @@ async def predict_remote(
         "temperature": 0.1,
         "repetition_penalty": 1.1,
         "top_p": 0.8,
+        "extra_body": {
+            "chat_template_kwargs": {
+                "enable_thinking": False
+            }
+        }
     }
     async with httpx.AsyncClient() as client:
         headers = {}
