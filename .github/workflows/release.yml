@@ -13,17 +13,14 @@ jobs:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
-    - name: Set up Python 3.10
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.10"
+    - name: Install uv
+      uses: astral-sh/setup-uv@v4
+    - name: Set up Python
+      run: uv python install 3.10
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '20'
-    - name: Install dependencies
-      run: |
-        pip install build tomli tomli-w
     - name: Build web assets
       run: |
         cd web
@@ -32,12 +29,12 @@ jobs:
     - name: Build Python packages
       run: |
         # Build original memos package
-        python -m build
+        uv build
         # Create and build pensiev package
-        python create_pensiev_toml.py
+        uv run --with tomli --with tomli-w python create_pensiev_toml.py
         cp pyproject_pensiev.toml pyproject.toml
         mkdir pensiev_dist
-        python -m build --outdir pensiev_dist
+        uv build --out-dir pensiev_dist
         # Restore original pyproject.toml
         git checkout pyproject.toml
     - name: Upload memos dist
