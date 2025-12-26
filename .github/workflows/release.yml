@@ -30,11 +30,11 @@ jobs:
       run: |
         # Build original memos package
         uv build
-        # Create and build pensiev package
-        uv run --with tomli --with tomli-w python create_pensiev_toml.py
-        cp pyproject_pensiev.toml pyproject.toml
-        mkdir pensiev_dist
-        uv build --out-dir pensiev_dist
+        # # Create and build pensiev package
+        # uv run --with tomli --with tomli-w python create_pensiev_toml.py
+        # cp pyproject_pensiev.toml pyproject.toml
+        # mkdir pensiev_dist
+        # uv build --out-dir pensiev_dist
         # Restore original pyproject.toml
         git checkout pyproject.toml
     - name: Upload memos dist
@@ -42,11 +42,11 @@ jobs:
       with:
         name: memos-dist
         path: dist/*
-    - name: Upload pensiev dist
-      uses: actions/upload-artifact@v4
-      with:
-        name: pensiev-dist
-        path: pensiev_dist/*
+    # - name: Upload pensiev dist
+    #   uses: actions/upload-artifact@v4
+    #   with:
+    #     name: pensiev-dist
+    #     path: pensiev_dist/*
 
   release:
     needs: build
