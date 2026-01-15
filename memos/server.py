@@ -835,6 +835,48 @@ async def get_thumbnail(file_path: str, width: int = 200, height: int = 200):
         # Fallback to original file if thumbnail generation fails
         return FileResponse(full_path)
 
+@api_router.get("/entities/{entity_id}/thumbnail", tags=["files", "entity"])
+async def get_entity_thumbnail(
+    entity_id: int, width: int = 200, height: int = 200, db: Session = Depends(get_db)
+):
+    """Get thumbnail for an entity by entity ID"""
+    entity = crud.get_entity_by_id(entity_id, db)
+    if entity is None:
+        return JSONResponse(
+            content={"detail": "Entity not found"}, status_code=status.HTTP_404_NOT_FOUND
+        )
+
+    full_path = Path(entity.filepath)
+
+    # Check if the file exists and is a file
+    if not full_path.is_file():
+        return JSONResponse(
+            content={"detail": "File not found"}, status_code=status.HTTP_404_NOT_FOUND
+        )
+
+    # Only generate thumbnails for images
+    if not is_image(full_path):
+        return JSONResponse(
+            content={"detail": "Thumbnails only supported for images"},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Generate the thumbnail
+    thumb_path = generate_thumbnail(full_path, (width, height))
+    if thumb_path:
+        filename = f"thumb_{full_path.name}"
+        # Use RFC 6266/5987 for UTF-8 filename support
+        disposition = (
+            f"inline; filename=thumb.png; filename*=UTF-8''{quote(filename)}"
+        )
+        return FileResponse(
+            thumb_path,
+            headers={"Content-Disposition": disposition},
+        )
+    else:
+        # Fallback to original file if thumbnail generation fails
+        return FileResponse(full_path)
+
 @api_router.get("/search", response_model=SearchResult, tags=["search"])
 async def search_entities_v2(
     q: str,
