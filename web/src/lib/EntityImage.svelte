@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { PUBLIC_API_ENDPOINT } from '$env/static/public';
   import { IndentIncrease, Library, Folder, Hash, FileClock } from '@lucide/svelte';
   import LucideIcon from './components/LucideIcon.svelte';
@@ -14,6 +15,8 @@
   // Compute title and app_name from entity if not explicitly provided
   let displayTitle = $derived(entity ? getEntityTitle(entity) : 'unknown');
   let displayAppName = $derived(entity ? getAppName(entity) : 'unknown');
+  let formattedCreatedAt = $state('');
+  let isMounted = $state(false);
   
   // API基础路径
   const apiEndpoint = (typeof PUBLIC_API_ENDPOINT !== 'undefined' ? PUBLIC_API_ENDPOINT : window.location.origin) + '/api';
@@ -41,6 +44,20 @@
     }
   }
 
+  function updateFormattedCreatedAt() {
+    formattedCreatedAt = entity?.file_created_at ? formatDate(entity.file_created_at) : '';
+  }
+
+  onMount(() => {
+    isMounted = true;
+    updateFormattedCreatedAt();
+  });
+
+  $effect(() => {
+    if (!isMounted) return;
+    updateFormattedCreatedAt();
+  });
+
   $inspect(entity);
 </script>
 
@@ -63,7 +80,7 @@
             {#if !showDetails}
             <span class="inline-flex items-center text-sm text-gray-500 font-mono pl-4">
               <FileClock size={16} class="mr-1 text-gray-500" />
-              {entity?.file_created_at ? formatDate(entity.file_created_at) : ''}
+              {formattedCreatedAt}
             </span>
             {/if}
           </div>
@@ -115,7 +132,7 @@
             size={16}
             class="uppercase tracking-wide text-sm text-indigo-600 font-bold mr-1 font-mono"
           />
-          {entity?.file_created_at ? formatDate(entity.file_created_at) : ''}
+          {formattedCreatedAt}
         </span>
       </span>
 
