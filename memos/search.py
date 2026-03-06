@@ -700,6 +700,10 @@ class SqliteSearchProvider(SearchProvider):
             # Update FTS index
             tags, fts_metadata = self.prepare_fts_data(entity)
             db.execute(
+                text("DELETE FROM entities_fts WHERE id = :id"),
+                {"id": entity.id},
+            )
+            db.execute(
                 text(
                     """
                     INSERT OR REPLACE INTO entities_fts(id, filepath, tags, metadata)
@@ -894,6 +898,12 @@ class SqliteSearchProvider(SearchProvider):
                     )
 
             # Update FTS index for all entities
+            db.execute(
+                text("DELETE FROM entities_fts WHERE id IN :ids").bindparams(
+                    bindparam("ids", expanding=True)
+                ),
+                {"ids": tuple(entity.id for entity in entities)},
+            )
             for entity in entities:
                 tags, fts_metadata = self.prepare_fts_data(entity)
                 db.execute(

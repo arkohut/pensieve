@@ -11,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 from pathlib import Path
 
 
-from memos.server import app, get_db
+from memos.server import app, api_router, get_db
 from memos.schemas import (
     NewPluginParam,
     NewLibraryParam,
@@ -29,6 +29,7 @@ from memos.models import Base
 from memos.databases.initializers import SQLiteInitializer
 from memos.config import settings
 from memos.search import create_search_provider
+import memos.search as search_module
 
 
 # Create a test settings object by copying the original settings
@@ -62,6 +63,16 @@ def override_get_db():
 
 
 app.dependency_overrides[get_db] = override_get_db
+api_router.dependency_overrides[get_db] = override_get_db
+
+
+def _fake_embeddings(texts):
+    return [[1.0] + [0.0] * (test_settings.embedding.num_dim - 1) for _ in texts]
+
+
+@pytest.fixture(autouse=True)
+def stub_embeddings(monkeypatch):
+    monkeypatch.setattr(search_module, "get_embeddings", _fake_embeddings)
 
 
 # Setup a fixture for the FastAPI test client
@@ -82,6 +93,11 @@ def client():
         conn.execute(text("DROP TABLE IF EXISTS entities_fts"))
         conn.execute(text("DROP TABLE IF EXISTS entities_vec_v2"))
         conn.commit()
+
+    app.dependency_overrides.clear()
+    api_router.dependency_overrides.clear()
+    app.dependency_overrides[get_db] = override_get_db
+    api_router.dependency_overrides[get_db] = override_get_db
 
 
 def load_fixture(filename):
@@ -779,6 +795,13 @@ def test_patch_entity_metadata_entries(client):
         for entry in updated_entity_data["metadata_entries"]
     )
 
+    with test_engine.connect() as conn:
+        indexed_metadata = conn.execute(
+            text("SELECT metadata FROM entities_fts WHERE id = :id"),
+            {"id": entity_id},
+        ).scalar_one()
+    assert "author: John Doe" in indexed_metadata
+
     # Add a new attribute "media_type" with value "book"
     new_metadata_entry = {
         "key": "media_type",
@@ -810,3 +833,52 @@ def test_patch_entity_metadata_entries(client):
         entry["key"] == "media_type" and entry["value"] == "book"
         for entry in updated_entity_data["metadata_entries"]
     )
+
+    with test_engine.connect() as conn:
+        indexed_metadata = conn.execute(
+            text("SELECT metadata FROM entities_fts WHERE id = :id"),
+            {"id": entity_id},
+        ).scalar_one()
+    assert "media_type: book" in indexed_metadata
+
+
+def test_find_entities_by_ids_preserves_input_order(client):
+    # Setup data: Create a new library with a folder
+    new_library = NewLibraryParam(
+        name="Library for Ordered Search Results",
+        folders=[
+            NewFolderParam(
+                path="/tmp", last_modified_at=datetime.now(), type=FolderType.DEFAULT
+            )
+        ],
+    )
+    library_response = client.post(
+        "/api/libraries", json=new_library.model_dump(mode="json")
+    )
+    folder_id = library_response.json()["folders"][0]["id"]
+
+    created_ids = []
+    for idx in range(3):
+        new_entity = NewEntityParam(
+            filename=f"ordered_{idx}.txt",
+            filepath=f"/tmp/ordered_{idx}.txt",
+            size=100 + idx,
+            file_created_at="2023-01-01T00:00:00",
+            file_last_modified_at="2023-01-01T00:00:00",
+            file_type="txt",
+            file_type_group="text",
+            folder_id=folder_id,
+        )
+        entity_response = client.post(
+            f"/api/libraries/{library_response.json()['id']}/entities",
+            json=new_entity.model_dump(mode="json"),
+        )
+        created_ids.append(entity_response.json()["id"])
+
+    from memos.crud import find_entities_by_ids
+
+    requested_order = [created_ids[2], created_ids[0], created_ids[1]]
+    with TestingSessionLocal() as db:
+        entities = find_entities_by_ids(requested_order, db)
+
+    assert [entity.id for entity in entities] == requested_order
