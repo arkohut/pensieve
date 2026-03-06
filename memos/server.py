@@ -548,6 +548,7 @@ def patch_entity_metadata(
     entity_id: int,
     update_metadata: UpdateEntityMetadataParam,
     db: Session = Depends(get_db),
+    search_provider=Depends(lambda: app.state.search_provider),
 ):
     with logfire.span("fetch entity {entity_id=}", entity_id=entity_id):
         entity = crud.get_entity_by_id(entity_id, db)
@@ -561,6 +562,7 @@ def patch_entity_metadata(
     entity = crud.update_entity_metadata_entries(
         entity_id, update_metadata.metadata_entries, db
     )
+    search_provider.update_entity_index(entity.id, db)
     return entity
 
 @api_router.delete(

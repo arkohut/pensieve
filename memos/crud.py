@@ -364,7 +364,13 @@ def find_entities_by_ids(entity_ids: List[int], db: Session) -> List[Entity]:
         .filter(EntityModel.id.in_(entity_ids))
         .all()
     )
-    return [Entity.model_validate(entity, from_attributes=True) for entity in db_entities]
+    entity_by_id = {entity.id: entity for entity in db_entities}
+    ordered_entities = [
+        Entity.model_validate(entity_by_id[entity_id], from_attributes=True)
+        for entity_id in entity_ids
+        if entity_id in entity_by_id
+    ]
+    return ordered_entities
 
 
 def update_entity(
