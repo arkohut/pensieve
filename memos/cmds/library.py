@@ -745,6 +745,10 @@ class LibraryFileHandler(FileSystemEventHandler):
     MAX_RETRIES = 3
     BATTERY_CHECK_INTERVAL = 60  # seconds
     BUFFER_TIME = 2  # seconds
+    MAX_CONSECUTIVE_BG_ERRORS = 5
+    BG_RESTART_COOLDOWN = 300  # seconds
+    ERROR_RETRY_BASE_WAIT = 30  # seconds
+    ERROR_RETRY_MAX_WAIT = 300  # seconds
 
     def __init__(
         self,
@@ -793,7 +797,7 @@ class LibraryFileHandler(FileSystemEventHandler):
         ).time()
         self.idle_process_end = datetime.strptime(
             settings.watch.idle_process_interval[1], "%H:%M"
-        ).time()
+        ).time().replace(second=59)
 
         # Track retry attempts for failed files
         self.failed_retries = defaultdict(int)
@@ -802,6 +806,13 @@ class LibraryFileHandler(FileSystemEventHandler):
 
         # Track the last processing window state
         self.last_in_process_window = self.is_within_process_interval()
+
+        self.last_bg_restart_attempt = 0
+
+    def _refresh_battery_cache_if_needed(self, current_time: float) -> None:
+        if current_time - self.last_battery_check > self.battery_check_interval:
+            self.last_battery_check = current_time
+            is_on_battery.cache_clear()
 
     def is_within_process_interval(self) -> bool:
         """Check if current time is within the idle process interval"""
@@ -844,6 +855,7 @@ class LibraryFileHandler(FileSystemEventHandler):
     def check_state(self):
         """Check and update the current state based on activity"""
         current_time = time.time()
+        self._refresh_battery_cache_if_needed(current_time)
         with self.lock:
             is_idle = (current_time - self.last_activity_time) > self.idle_timeout
             current_in_process_window = self.is_within_process_interval()
@@ -887,6 +899,19 @@ class LibraryFileHandler(FileSystemEventHandler):
                         extra={"log_type": "bg"}
                     )
                     self.process_unprocessed_files()
+                elif (
+                    not self.is_processing_skipped
+                    and current_in_process_window
+                    and not is_on_battery()
+                    and (current_time - self.last_bg_restart_attempt) > self.BG_RESTART_COOLDOWN
+                ):
+                    # Background processing has stopped (e.g. due to error) while still idle
+                    self.last_bg_restart_attempt = current_time
+                    self.logger.info(
+                        "Restarting stopped background processing while still idle",
+                        extra={"log_type": "bg"}
+                    )
+                    self.process_unprocessed_files()
             else:
                 if self.state != "busy":
                     self.state = "busy"
@@ -917,6 +942,7 @@ class LibraryFileHandler(FileSystemEventHandler):
         })
 
         def process_files():
+            consecutive_errors = 0
             while True:
                 # Check state conditions at the start of each iteration
                 if not self.is_processing_skipped:
@@ -988,6 +1014,7 @@ class LibraryFileHandler(FileSystemEventHandler):
                         for entity in entities:
                             # Re-check conditions before processing each entity
                             if not self.is_processing_skipped or is_on_battery() or not self.is_within_process_interval() or self.state != "idle":
+                                self.is_processing_skipped = False
                                 return
 
                             filepath = entity["filepath"]
@@ -1074,14 +1101,32 @@ class LibraryFileHandler(FileSystemEventHandler):
                         })
                         time.sleep(60)
 
+                    consecutive_errors = 0
+
                 except Exception as e:
-                    self.logger.error("Error in background processing", extra={
-                        "event": "background_processing_error",
-                        "error": str(e),
-                        "log_type": "bg"
-                    })
-                    self.is_processing_skipped = False
-                    return
+                    consecutive_errors += 1
+                    self.logger.error(
+                        f"Error in background processing (attempt {consecutive_errors}/{self.MAX_CONSECUTIVE_BG_ERRORS}): {e}",
+                        extra={
+                            "event": "background_processing_error",
+                            "error": str(e),
+                            "consecutive_errors": consecutive_errors,
+                            "log_type": "bg"
+                        }
+                    )
+                    if consecutive_errors >= self.MAX_CONSECUTIVE_BG_ERRORS:
+                        self.logger.error(
+                            f"Too many consecutive errors ({consecutive_errors}), stopping background processing",
+                            extra={"log_type": "bg"}
+                        )
+                        self.is_processing_skipped = False
+                        return
+                    wait_time = min(self.ERROR_RETRY_BASE_WAIT * (2 ** (consecutive_errors - 1)), self.ERROR_RETRY_MAX_WAIT)
+                    self.logger.info(
+                        f"Retrying background processing in {wait_time} seconds",
+                        extra={"log_type": "bg"}
+                    )
+                    time.sleep(wait_time)
 
         # Start processing in a separate thread
         self.executor.submit(process_files)
@@ -1186,9 +1231,7 @@ class LibraryFileHandler(FileSystemEventHandler):
                 new_processing_interval = max(1, math.ceil(self.sparsity_factor * rate))
 
                 current_time = time.time()
-                if current_time - self.last_battery_check > self.battery_check_interval:
-                    self.last_battery_check = current_time
-                    is_on_battery.cache_clear()  # Clear the cache to get fresh battery status
+                self._refresh_battery_cache_if_needed(current_time)
                 if is_on_battery():
                     new_processing_interval *= 2
                     self.logger.info(
