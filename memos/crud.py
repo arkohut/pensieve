@@ -293,8 +293,11 @@ def get_entities_of_folder(
     return entities, total_count
 
 
-def get_entity_by_filepath(filepath: str, db: Session) -> Entity | None:
-    return db.query(EntityModel).filter(EntityModel.filepath == filepath).first()
+def get_entity_by_filepath(filepath: str, db: Session, library_id: int = None) -> Entity | None:
+    query = db.query(EntityModel).filter(EntityModel.filepath == filepath)
+    if library_id is not None:
+        query = query.filter(EntityModel.library_id == library_id)
+    return query.first()
 
 
 def get_entities_by_filepaths(filepaths: List[str], db: Session) -> List[Entity]:

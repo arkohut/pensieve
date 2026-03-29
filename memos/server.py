@@ -380,8 +380,8 @@ def list_entities_in_folder(
 def get_entity_by_filepath(
     library_id: int, filepath: str, db: Session = Depends(get_db)
 ):
-    entity = crud.get_entity_by_filepath(filepath, db)
-    if entity is None or entity.library_id != library_id:
+    entity = crud.get_entity_by_filepath(filepath, db, library_id=library_id)
+    if entity is None:
         return JSONResponse(
             content={"detail": "Entity not found"},
             status_code=status.HTTP_404_NOT_FOUND,
