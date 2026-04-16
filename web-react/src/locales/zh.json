@@ -14,11 +14,11 @@
     "month": "最近一个月",
     "threeMonths": "最近三个月",
     "custom": "自定义",
-    "customRange": "{start} - {end}"
+    "customRange": "{{start}} - {{end}}"
   },
   "searchPlaceholder": "输入关键词搜索或直接按回车键显示最新记录",
   "loading": "加载中...",
-  "searchSummary": "✨ 找到 {found} 个结果 - 在 {time} 毫秒内搜索了 {outOf} 个记录。",
+  "searchSummary": "✨ 找到 {{found}} 个结果 - 在 {{time}} 毫秒内搜索了 {{outOf}} 个记录。",
   "noResults": "未找到结果。",
   "copyright": "© 2024 Arkohut 漆妮妮 保留所有权利",
   "github": "GitHub",

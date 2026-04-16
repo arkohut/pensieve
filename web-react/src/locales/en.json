@@ -14,11 +14,11 @@
     "month": "Last month",
     "threeMonths": "Last 3 months",
     "custom": "Custom",
-    "customRange": "{start} - {end}"
+    "customRange": "{{start}} - {{end}}"
   },
   "searchPlaceholder": "Input keyword to search or press Enter to show latest records",
   "loading": "Loading...",
-  "searchSummary": "✨ {found} results found - Searched {outOf} recipes in {time}ms.",
+  "searchSummary": "✨ {{found}} results found - Searched {{outOf}} recipes in {{time}}ms.",
   "noResults": "No results found.",
   "copyright": "© 2024 Arkohut Qinini. All rights reserved.",
   "github": "GitHub",
