@@ -8,10 +8,11 @@ import { Skeleton } from '$/components/ui/skeleton';
 import { Logo } from '$/components/common/Logo';
 import { ErrorState } from '$/components/common/ErrorState';
 import { HitCard } from '$/components/search/HitCard';
+import { FacetFilter } from '$/components/search/FacetFilter';
 import { LibraryFilter } from '$/components/search/LibraryFilter';
 import { TimeFilter } from '$/components/search/TimeFilter';
 import { searchSchema, type SearchParams } from '$/lib/search-params';
-import { useSearch } from '$/lib/api/search';
+import { useFacets, useSearch } from '$/lib/api/search';
 
 export const Route = createFileRoute('/')({
   validateSearch: searchSchema,
@@ -25,6 +26,20 @@ function HomePage() {
   const [localQuery, setLocalQuery] = useState(search.q);
   const [, setSelectedIndex] = useState<number | null>(null);
   const { data, isLoading, isError, error, refetch } = useSearch(search);
+  const { data: facets } = useFacets({
+    submitted_q: search.submitted_q,
+    library_ids: search.library_ids,
+    start: search.start,
+    end: search.end,
+  });
+  const appFacet = facets?.find((f) => f.field_name === 'app_names');
+
+  function toggleApp(name: string, checked: boolean) {
+    const next = checked
+      ? [...search.app_names, name]
+      : search.app_names.filter((x) => x !== name);
+    void navigate({ search: (s: SearchParams) => ({ ...s, app_names: next }) });
+  }
 
   useEffect(() => {
     document.title = search.q ? `Pensieve - ${search.q}` : 'Pensieve';
@@ -95,7 +110,22 @@ function HomePage() {
 
       <main className="flex-grow">
         <div className="mx-auto flex flex-col sm:flex-row">
-          <div className="w-full">
+          {appFacet && appFacet.counts.length > 0 && (
+            <aside className="pr-4 sm:w-full md:w-1/5 lg:w-1/6 xl:w-[14.28%]">
+              <FacetFilter
+                facet={appFacet}
+                selected={search.app_names}
+                onToggle={toggleApp}
+              />
+            </aside>
+          )}
+          <div
+            className={
+              appFacet && appFacet.counts.length > 0
+                ? 'md:w-4/5 lg:w-5/6 xl:w-[85.72%]'
+                : 'w-full'
+            }
+          >
             {isLoading ? (
               <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
                 {Array.from({ length: 8 }).map((_, i) => (
