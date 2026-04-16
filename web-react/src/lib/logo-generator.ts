@@ -1,0 +1,82 @@
+function seededRandom(seed: number): number {
+  const x = Math.sin(seed++) * 10000;
+  return x - Math.floor(x);
+}
+
+function prepareMatrixFromRandomColors(withBorder: boolean): string[][] {
+  const colors = ['#d0e8ff', '#a1d2ff', '#64b5f6', '#1565c0', '#0d47a1'];
+  const mShape = withBorder
+    ? [
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
+        [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0],
+        [0, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 0],
+        [0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0],
+        [0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0],
+        [0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0],
+        [0, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 0],
+        [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0],
+        [0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
+        [0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      ]
+    : [
+        [0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+        [1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1],
+        [1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1],
+        [1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1],
+        [1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1],
+        [1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+        [1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
+        [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+        [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+      ];
+
+  const gridSize = withBorder ? 13 : 11;
+  let seed = 42;
+  const matrix: string[][] = [];
+
+  for (let row = 0; row < gridSize; row++) {
+    const rowColors: string[] = [];
+    for (let col = 0; col < gridSize; col++) {
+      let colorIndex;
+      if (mShape[row][col] === 1) {
+        colorIndex = Math.floor(seededRandom(seed++) * 2) + 3;
+      } else {
+        colorIndex = Math.floor(seededRandom(seed++) * 2);
+      }
+      rowColors.push(colors[colorIndex]);
+    }
+    matrix.push(rowColors);
+  }
+
+  return matrix;
+}
+
+function generateSvg(matrix: string[][], size: number, hasGap: boolean): string {
+  const gridSize = matrix.length;
+  const cellSize = 1;
+  const rectSize = hasGap ? 0.85 : 1;
+  const offset = hasGap ? 0.075 : 0;
+
+  let svgContent = `<svg width="${size}" height="${size}" viewBox="0 0 ${gridSize} ${gridSize}" xmlns="http://www.w3.org/2000/svg" opacity="1">\n`;
+
+  for (let row = 0; row < gridSize; row++) {
+    for (let col = 0; col < gridSize; col++) {
+      svgContent += `  <rect x="${col * cellSize + offset}" y="${
+        row * cellSize + offset
+      }" width="${rectSize}" height="${rectSize}" rx="${hasGap ? 0.15 : 0}" ry="${hasGap ? 0.15 : 0}" fill="${matrix[row][col]}" />\n`;
+    }
+  }
+
+  svgContent += `</svg>`;
+  return svgContent;
+}
+
+export function generateLogo(size: number, withBorder: boolean, hasGap: boolean): string {
+  const matrix = prepareMatrixFromRandomColors(withBorder);
+  return generateSvg(matrix, size, hasGap);
+}
