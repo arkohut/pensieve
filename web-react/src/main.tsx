@@ -8,6 +8,7 @@ import { Toaster } from 'sonner';
 import { ThemeProvider } from '$/components/common/ThemeProvider';
 import { routeTree } from './routeTree.gen';
 import './styles/globals.css';
+import './lib/i18n';
 
 const queryClient = new QueryClient({
   defaultOptions: {
