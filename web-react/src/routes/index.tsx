@@ -8,6 +8,7 @@ import { Skeleton } from '$/components/ui/skeleton';
 import { Logo } from '$/components/common/Logo';
 import { ErrorState } from '$/components/common/ErrorState';
 import { HitCard } from '$/components/search/HitCard';
+import { TimeFilter } from '$/components/search/TimeFilter';
 import { searchSchema, type SearchParams } from '$/lib/search-params';
 import { useSearch } from '$/lib/api/search';
 
@@ -69,6 +70,15 @@ function HomePage() {
               placeholder={t('searchPlaceholder')}
               autoFocus
               className="w-full border-gray-500 text-lg"
+            />
+          </div>
+          <div className="mt-2 flex w-full justify-start gap-2 px-2">
+            <TimeFilter
+              start={search.start}
+              end={search.end}
+              onChange={({ start, end }) =>
+                void navigate({ search: (s: SearchParams) => ({ ...s, start, end }) })
+              }
             />
           </div>
         </div>
