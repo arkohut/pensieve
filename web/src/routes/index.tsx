@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Settings } from 'lucide-react';
 import { Button } from '$/components/ui/button';
@@ -14,11 +14,29 @@ import { TimeFilter } from '$/components/search/TimeFilter';
 import { Figure } from '$/components/entity/Figure';
 import { searchSchema, type SearchParams } from '$/lib/search-params';
 import { useFacets, useSearch } from '$/lib/api/search';
+import { cn } from '$/lib/utils';
 
 export const Route = createFileRoute('/')({
   validateSearch: searchSchema,
   component: HomePage,
 });
+
+const LOADING_SKELETON = (
+  <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+    {Array.from({ length: 8 }).map((_, i) => (
+      <div key={i} className="overflow-hidden rounded-lg border border-gray-300 bg-white">
+        <div className="px-4 pt-4">
+          <Skeleton className="mb-2 h-4 w-3/4" />
+          <Skeleton className="h-4 w-1/2" />
+          <Skeleton className="mt-2 h-3 w-1/4" />
+        </div>
+        <div className="px-4 pb-4 pt-4">
+          <Skeleton className="h-48 w-full" />
+        </div>
+      </div>
+    ))}
+  </div>
+);
 
 function HomePage() {
   const { t } = useTranslation();
@@ -26,7 +44,21 @@ function HomePage() {
   const navigate = useNavigate({ from: Route.fullPath });
   const [localQuery, setLocalQuery] = useState(search.q);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [isScrolled, setIsScrolled] = useState(false);
   const { data, isLoading, isError, error, refetch } = useSearch(search);
+
+  useEffect(() => {
+    function handleScroll() {
+      const y = window.scrollY;
+      setIsScrolled((prev) => {
+        if (y > 100) return true;
+        if (y < 20) return false;
+        return prev;
+      });
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
   const { data: facets } = useFacets({
     submitted_q: search.submitted_q,
     library_ids: search.library_ids,
@@ -39,16 +71,25 @@ function HomePage() {
     setLocalQuery(search.q);
   }, [search.q]);
 
-  function toggleApp(name: string, checked: boolean) {
-    const next = checked ? [...search.app_names, name] : search.app_names.filter((x) => x !== name);
-    void navigate({ search: (s: SearchParams) => ({ ...s, app_names: next }) });
-  }
-
   useEffect(() => {
     document.title = search.q ? `Pensieve - ${search.q}` : 'Pensieve';
   }, [search.q]);
 
-  function submitQuery() {
+  const toggleApp = useCallback(
+    (name: string, checked: boolean) => {
+      void navigate({
+        search: (s: SearchParams) => ({
+          ...s,
+          app_names: checked
+            ? [...s.app_names, name]
+            : s.app_names.filter((x) => x !== name),
+        }),
+      });
+    },
+    [navigate],
+  );
+
+  const submitQuery = useCallback(() => {
     void navigate({
       search: (s: SearchParams) => ({
         ...s,
@@ -57,7 +98,35 @@ function HomePage() {
         app_names: [],
       }),
     });
-  }
+  }, [navigate, localQuery]);
+
+  const handleLibraryChange = useCallback(
+    (ids: number[]) => {
+      void navigate({ search: (s: SearchParams) => ({ ...s, library_ids: ids }) });
+    },
+    [navigate],
+  );
+
+  const handleTimeChange = useCallback(
+    ({ start, end }: { start?: number; end?: number }) => {
+      void navigate({ search: (s: SearchParams) => ({ ...s, start, end }) });
+    },
+    [navigate],
+  );
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setLocalQuery(e.target.value);
+  }, []);
+
+  const handleInputKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        submitQuery();
+      }
+    },
+    [submitQuery],
+  );
 
   const closeFigure = useCallback(() => setSelectedIndex(null), []);
   const showNextFigure = useCallback(() => {
@@ -73,6 +142,13 @@ function HomePage() {
     });
   }, [data?.hits.length]);
 
+  const filterButtons = (
+    <>
+      <LibraryFilter selectedLibraryIds={search.library_ids} onChange={handleLibraryChange} />
+      <TimeFilter start={search.start} end={search.end} onChange={handleTimeChange} />
+    </>
+  );
+
   return (
     <div className="flex min-h-screen flex-col">
       <div className="w-full border-b">
@@ -86,44 +162,43 @@ function HomePage() {
         </div>
       </div>
 
-      <header className="sticky top-0 z-10">
-        <div className="mx-auto flex max-w-screen-lg flex-col items-center justify-between p-4">
-          <Logo size={128} withBorder hasGap className="mr-4" />
-          <div className="mt-4 flex w-full p-2">
-            <Input
-              type="text"
-              value={localQuery}
-              onChange={(e) => setLocalQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  submitQuery();
-                }
-              }}
-              placeholder={t('searchPlaceholder')}
-              autoFocus
-              className="w-full border-gray-500 text-lg"
-            />
-          </div>
-          <div className="mt-2 flex w-full justify-start gap-2 px-2">
-            <LibraryFilter
-              selectedLibraryIds={search.library_ids}
-              onChange={(ids) =>
-                void navigate({
-                  search: (s: SearchParams) => ({ ...s, library_ids: ids }),
-                })
-              }
-            />
-            <TimeFilter
-              start={search.start}
-              end={search.end}
-              onChange={({ start, end }) =>
-                void navigate({ search: (s: SearchParams) => ({ ...s, start, end }) })
-              }
-            />
-          </div>
+      <header className="mx-auto flex w-full max-w-screen-lg flex-col items-center justify-between px-4 py-4">
+        <Logo size={128} withBorder hasGap className="mr-4" />
+        <div className="mt-4 flex w-full p-2">
+          <Input
+            type="text"
+            value={localQuery}
+            onChange={handleInputChange}
+            onKeyDown={handleInputKeyDown}
+            placeholder={t('searchPlaceholder')}
+            autoFocus
+            className="w-full border-gray-500 text-lg"
+          />
         </div>
+        <div className="mt-2 flex w-full justify-start gap-2 px-2">{filterButtons}</div>
       </header>
+
+      <div
+        className={cn(
+          'fixed inset-x-0 top-0 z-20 border-b bg-background shadow-sm transition-opacity duration-200',
+          isScrolled ? 'opacity-100' : 'pointer-events-none opacity-0',
+        )}
+        aria-hidden={!isScrolled}
+      >
+        <div className="mx-auto flex max-w-screen-lg items-center gap-4 px-4 py-2">
+          <Logo size={32} withBorder={false} hasGap={false} />
+          <Input
+            type="text"
+            value={localQuery}
+            onChange={handleInputChange}
+            onKeyDown={handleInputKeyDown}
+            placeholder={t('searchPlaceholder')}
+            tabIndex={isScrolled ? 0 : -1}
+            className="w-full border-gray-500"
+          />
+          <div className="flex flex-shrink-0 gap-2">{filterButtons}</div>
+        </div>
+      </div>
 
       <main className="flex-grow">
         <div className="mx-auto flex flex-col sm:flex-row">
@@ -138,23 +213,7 @@ function HomePage() {
             }
           >
             {isLoading ? (
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="overflow-hidden rounded-lg border border-gray-300 bg-white"
-                  >
-                    <div className="px-4 pt-4">
-                      <Skeleton className="mb-2 h-4 w-3/4" />
-                      <Skeleton className="h-4 w-1/2" />
-                      <Skeleton className="mt-2 h-3 w-1/4" />
-                    </div>
-                    <div className="px-4 pb-4 pt-4">
-                      <Skeleton className="h-48 w-full" />
-                    </div>
-                  </div>
-                ))}
-              </div>
+              LOADING_SKELETON
             ) : isError ? (
               <ErrorState error={error} onRetry={() => void refetch()} />
             ) : data && data.hits.length > 0 ? (
