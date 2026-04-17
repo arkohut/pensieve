@@ -98,7 +98,10 @@ api_router = FastAPI()
 current_dir = os.path.dirname(__file__)
 
 app.mount(
-    "/_app", StaticFiles(directory=os.path.join(current_dir, "static/_app"), html=True)
+    "/assets", StaticFiles(directory=os.path.join(current_dir, "static/assets"), html=True)
+)
+app.mount(
+    "/logos", StaticFiles(directory=os.path.join(current_dir, "static/logos"), html=True)
 )
 
 # Mount API router with prefix
@@ -164,17 +167,17 @@ async def favicon_ico():
 
 @app.get("/")
 async def serve_spa():
-    return FileResponse(os.path.join(current_dir, "static/app.html"))
+    return FileResponse(os.path.join(current_dir, "static/index.html"))
 
 # Add catch-all route for SPA
 @app.get("/{full_path:path}")
 async def catch_all(full_path: str):
-    # Skip if the path starts with /api or /_app
-    if full_path.startswith(("api/", "_app/")):
+    # Skip if the path starts with /api, /assets, or /logos
+    if full_path.startswith(("api/", "assets/", "logos/")):
         raise HTTPException(status_code=404, detail="Not found")
-    
+
     # For all other paths, serve the SPA
-    return FileResponse(os.path.join(current_dir, "static/app.html"))
+    return FileResponse(os.path.join(current_dir, "static/index.html"))
 
 def get_db():
     db = SessionLocal()
