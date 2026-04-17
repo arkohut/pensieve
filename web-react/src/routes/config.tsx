@@ -1,9 +1,11 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { Config } from '$/components/config/Config';
 
 export const Route = createFileRoute('/config')({
   component: ConfigPage,
 });
 
 function ConfigPage() {
-  return <div className="p-4">Config page placeholder (Task 24)</div>;
+  const navigate = useNavigate();
+  return <Config onBack={() => void navigate({ to: '/' })} />;
 }
