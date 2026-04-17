@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
 import { Button } from '$/components/ui/button';
@@ -54,15 +54,10 @@ export function TimeFilter({ start, end, onChange }: Props) {
     to: end ? new Date(end * 1000) : undefined,
   });
 
-  useEffect(() => {
-    if (preset !== 'custom') {
-      setCustomRange({ from: undefined, to: undefined });
-    }
-  }, [preset]);
-
   function pickPreset(p: Preset) {
     setPreset(p);
     if (p !== 'custom') {
+      setCustomRange({ from: undefined, to: undefined });
       const nowSec = Math.floor(Date.now() / 1000);
       onChange(presetSeconds(p, nowSec));
     }

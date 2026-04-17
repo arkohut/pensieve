@@ -11,6 +11,7 @@ import { HitCard } from '$/components/search/HitCard';
 import { FacetFilter } from '$/components/search/FacetFilter';
 import { LibraryFilter } from '$/components/search/LibraryFilter';
 import { TimeFilter } from '$/components/search/TimeFilter';
+import { Figure } from '$/components/entity/Figure';
 import { searchSchema, type SearchParams } from '$/lib/search-params';
 import { useFacets, useSearch } from '$/lib/api/search';
 
@@ -24,7 +25,7 @@ function HomePage() {
   const search = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
   const [localQuery, setLocalQuery] = useState(search.q);
-  const [, setSelectedIndex] = useState<number | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const { data, isLoading, isError, error, refetch } = useSearch(search);
   const { data: facets } = useFacets({
     submitted_q: search.submitted_q,
@@ -175,6 +176,17 @@ function HomePage() {
           </div>
         </div>
       </main>
+
+      {data && selectedIndex != null && data.hits[selectedIndex] && (
+        <Figure
+          entity={data.hits[selectedIndex].document}
+          onClose={() => setSelectedIndex(null)}
+          onNext={() => setSelectedIndex((selectedIndex + 1) % data.hits.length)}
+          onPrevious={() =>
+            setSelectedIndex((selectedIndex - 1 + data.hits.length) % data.hits.length)
+          }
+        />
+      )}
     </div>
   );
 }
