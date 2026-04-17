@@ -54,10 +54,10 @@ export function EntityDetail({ entity }: Props) {
     <ScrollArea className="mt-4 max-h-[calc(100vh-180px)] overflow-y-auto md:ml-6 md:mt-0 md:w-1/2">
       {entity.tags && entity.tags.length > 0 && (
         <div className="mb-4">
-          <div className="text-sm font-bold uppercase tracking-wide text-indigo-600">TAGS</div>
-          <div className="text-gray-600">
+          <div className="text-sm font-bold uppercase tracking-wide text-primary">TAGS</div>
+          <div className="text-muted-foreground">
             {entity.tags.map((tag, i) => (
-              <span key={i} className="mr-2 inline-block text-base text-gray-500">
+              <span key={i} className="mr-2 inline-block text-base text-muted-foreground">
                 {typeof tag === 'string' ? tag : ((tag as { name?: string }).name ?? '')}
               </span>
             ))}
@@ -65,8 +65,8 @@ export function EntityDetail({ entity }: Props) {
         </div>
       )}
 
-      <div className="text-sm font-bold uppercase tracking-wide text-indigo-600">METADATA</div>
-      <div className="mt-2 pb-4 text-gray-600">
+      <div className="text-sm font-bold uppercase tracking-wide text-primary">METADATA</div>
+      <div className="mt-2 pb-4 text-muted-foreground">
         {displayEntries.map((entry) => {
           const isObject = typeof entry.value === 'object' && entry.value !== null;
           const copyText = isObject ? JSON.stringify(entry.value) : String(entry.value);
@@ -80,7 +80,7 @@ export function EntityDetail({ entity }: Props) {
                 isValidOCRDataStructure(entry.value) ? (
                   <OCRTable ocrData={entry.value} />
                 ) : (
-                  <pre className="max-h-80 overflow-y-auto rounded bg-gray-100 p-2">
+                  <pre className="max-h-80 overflow-y-auto rounded bg-muted p-2">
                     {JSON.stringify(entry.value, null, 2)}
                   </pre>
                 )
@@ -91,7 +91,7 @@ export function EntityDetail({ entity }: Props) {
                   </ReactMarkdown>
                 </div>
               )}
-              <span className="text-sm text-gray-500">({entry.source})</span>
+              <span className="text-sm text-muted-foreground">({entry.source})</span>
             </div>
           );
         })}
@@ -99,10 +99,10 @@ export function EntityDetail({ entity }: Props) {
 
       {appNameEntry && (
         <>
-          <div className="mt-6 text-sm font-bold uppercase tracking-wide text-indigo-600">
+          <div className="mt-6 text-sm font-bold uppercase tracking-wide text-primary">
             APP NAME
           </div>
-          <div className="mb-4 flex items-center text-base text-gray-700">
+          <div className="mb-4 flex items-center text-base text-foreground">
             {appNameEntry.value || 'unknown'}
             <CopyToClipboard text={appNameEntry.value || ''} />
           </div>

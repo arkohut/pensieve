@@ -102,7 +102,7 @@ function EntityPage() {
 
   if (isLoading) {
     return (
-      <div className="fixed inset-0 z-40 flex h-full w-full items-center justify-center bg-gray-600/50">
+      <div className="fixed inset-0 z-40 flex h-full w-full items-center justify-center bg-black/50">
         <Loader size={36} className="animate-spin text-primary" />
       </div>
     );
@@ -114,17 +114,17 @@ function EntityPage() {
     <button
       type="button"
       onClick={goToHome}
-      className="-ml-2 flex items-center gap-2 rounded-full p-2 text-indigo-600 hover:bg-gray-100"
+      className="-ml-2 flex items-center gap-2 rounded-full p-2 text-primary hover:bg-accent"
       aria-label="Home"
     >
-      <Home size={24} className="text-indigo-600" />
+      <Home size={24} className="text-primary" />
     </button>
   );
 
   return (
-    <div className="fixed inset-0 z-40 flex h-full w-full flex-col bg-gray-600/50">
+    <div className="fixed inset-0 z-40 flex h-full w-full flex-col bg-black/50">
       <div className="flex flex-grow flex-col">
-        <div className="relative mx-auto mt-6 flex h-[calc(100vh-180px)] w-11/12 max-w-[95vw] flex-col overflow-hidden rounded-t-md bg-white">
+        <div className="relative mx-auto mt-6 flex h-[calc(100vh-180px)] w-11/12 max-w-[95vw] flex-col overflow-hidden rounded-t-md bg-background">
           <div className="flex-grow overflow-hidden">
             <div className="h-full px-10 py-4">
               <div className="flex h-full flex-col md:flex-row">
@@ -141,7 +141,7 @@ function EntityPage() {
         </div>
       </div>
 
-      <div className="h-[180px] w-full border-t bg-gray-50 shadow-inner">
+      <div className="h-[180px] w-full border-t bg-muted/50 shadow-inner">
         <div className="mx-auto h-full py-3">
           {contextData && (
             <ContextNavigationBar

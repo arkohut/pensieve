@@ -53,26 +53,26 @@ export function Figure({ entity, onClose, onNext, onPrevious }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-40 flex h-full w-full items-center justify-center bg-gray-600/50"
+      className="fixed inset-0 z-40 flex h-full w-full items-center justify-center bg-black/50"
       id="my-modal"
     >
-      <div className="group relative mx-auto h-[95vh] w-11/12 max-w-[95vw] rounded-md border bg-white shadow-lg">
+      <div className="group relative mx-auto h-[95vh] w-11/12 max-w-[95vw] rounded-md border bg-background shadow-lg">
         <div className="absolute inset-0 px-10 py-4">
           <button
             type="button"
             onClick={onPrevious}
-            className="absolute left-2 top-1/2 z-[51] flex -translate-y-1/2 rounded-full border bg-white/80 p-2 opacity-0 transition-all duration-200 hover:bg-gray-100 group-hover:opacity-100"
+            className="absolute left-2 top-1/2 z-[51] flex -translate-y-1/2 rounded-full border bg-background/80 p-2 opacity-0 transition-all duration-200 hover:bg-accent group-hover:opacity-100"
             aria-label="Previous"
           >
-            <ChevronLeft size={24} className="text-indigo-600" />
+            <ChevronLeft size={24} className="text-primary" />
           </button>
           <button
             type="button"
             onClick={onNext}
-            className="absolute right-2 top-1/2 z-[51] flex -translate-y-1/2 rounded-full border bg-white/80 p-2 opacity-0 transition-all duration-200 hover:bg-gray-100 group-hover:opacity-100"
+            className="absolute right-2 top-1/2 z-[51] flex -translate-y-1/2 rounded-full border bg-background/80 p-2 opacity-0 transition-all duration-200 hover:bg-accent group-hover:opacity-100"
             aria-label="Next"
           >
-            <ChevronRight size={24} className="text-indigo-600" />
+            <ChevronRight size={24} className="text-primary" />
           </button>
 
           <div className="relative flex h-full flex-col md:flex-row">
@@ -88,10 +88,10 @@ export function Figure({ entity, onClose, onNext, onPrevious }: Props) {
             <button
               type="button"
               onClick={onClose}
-              className="rounded-full bg-white/80 p-2 opacity-0 transition-all duration-200 hover:bg-gray-100 group-hover:opacity-100"
+              className="rounded-full bg-background/80 p-2 opacity-0 transition-all duration-200 hover:bg-accent group-hover:opacity-100"
               aria-label="Close"
             >
-              <X size={24} className="text-indigo-600" />
+              <X size={24} className="text-primary" />
             </button>
           </div>
 
@@ -99,7 +99,7 @@ export function Figure({ entity, onClose, onNext, onPrevious }: Props) {
             <button
               type="button"
               onClick={goToDetail}
-              className="pointer-events-auto rounded-full border border-indigo-200 bg-white/80 px-4 py-2 text-sm font-semibold text-indigo-700 shadow-lg transition hover:bg-indigo-100"
+              className="pointer-events-auto rounded-full border bg-background/80 px-4 py-2 text-sm font-semibold text-primary shadow-lg transition hover:bg-accent"
             >
               {t('figure.viewContext', { defaultValue: 'View Context' })}
             </button>

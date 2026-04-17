@@ -68,7 +68,7 @@ export function ContextNavigationBar({ entity, contextData, onSelectEntity }: Pr
               </div>
             ))}
 
-            <div className="h-28 w-28 flex-none overflow-hidden rounded-lg border-2 border-indigo-500 shadow-md">
+            <div className="h-28 w-28 flex-none overflow-hidden rounded-lg border-2 border-primary shadow-md">
               <Tooltip>
                 <TooltipTrigger className="h-full w-full">
                   <img

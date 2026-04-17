@@ -25,7 +25,7 @@ export const Route = createFileRoute('/')({
 const LOADING_SKELETON = (
   <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
     {Array.from({ length: 8 }).map((_, i) => (
-      <div key={i} className="overflow-hidden rounded-lg border border-gray-300 bg-white">
+      <div key={i} className="overflow-hidden rounded-lg border bg-card">
         <div className="px-4 pt-4">
           <Skeleton className="mb-2 h-4 w-3/4" />
           <Skeleton className="h-4 w-1/2" />
@@ -172,7 +172,7 @@ function HomePage() {
             onKeyDown={handleInputKeyDown}
             placeholder={t('searchPlaceholder')}
             autoFocus
-            className="w-full border-gray-500 text-lg"
+            className="w-full border-border text-lg"
           />
         </div>
         <div className="mt-2 flex w-full justify-start gap-2 px-2">{filterButtons}</div>
@@ -194,7 +194,7 @@ function HomePage() {
             onKeyDown={handleInputKeyDown}
             placeholder={t('searchPlaceholder')}
             tabIndex={isScrolled ? 0 : -1}
-            className="w-full border-gray-500"
+            className="w-full border-border"
           />
           <div className="flex flex-shrink-0 gap-2">{filterButtons}</div>
         </div>
