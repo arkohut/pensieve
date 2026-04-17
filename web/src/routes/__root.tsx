@@ -4,6 +4,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Github } from 'lucide-react';
 import { LanguageSwitcher } from '$/components/common/LanguageSwitcher';
+import { ThemeToggle } from '$/components/common/ThemeToggle';
 
 interface RouterContext {
   queryClient: QueryClient;
@@ -25,21 +26,23 @@ function RootLayout() {
         </div>
         <footer className="mx-auto mt-8 w-full">
           <div className="container mx-auto">
-            <div className="border-t border-slate-900/5 py-10 text-center">
-              <p className="mt-2 text-sm leading-6 text-slate-500">{t('slogan')}</p>
-              <p className="mt-2 text-sm leading-6 text-slate-500">{t('copyright')}</p>
-              <div className="mt-2 flex items-center justify-center space-x-4 text-sm font-semibold leading-6 text-slate-700">
+            <div className="border-t py-10 text-center">
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{t('slogan')}</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{t('copyright')}</p>
+              <div className="mt-2 flex items-center justify-center space-x-4 text-sm font-semibold leading-6 text-foreground">
                 <a
                   href="https://github.com/arkohut/pensieve"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="transition-colors hover:text-slate-900"
+                  className="transition-colors hover:text-primary"
                   aria-label={t('github')}
                 >
                   <Github size={16} />
                 </a>
-                <div className="h-4 w-px bg-slate-500/20" />
+                <div className="h-4 w-px bg-border" />
                 <LanguageSwitcher />
+                <div className="h-4 w-px bg-border" />
+                <ThemeToggle />
               </div>
             </div>
           </div>

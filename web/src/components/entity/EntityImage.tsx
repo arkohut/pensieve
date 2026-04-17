@@ -44,8 +44,8 @@ export function EntityImage({ entity, showDetails, toggleDetails, leftIcon }: Pr
                 <LucideIcon name={translateAppName(displayAppName) ?? 'Image'} size={24} />
                 <p className="max-w-[500px] truncate">{displayTitle}</p>
                 {!showDetails && formattedCreatedAt && (
-                  <span className="inline-flex items-center pl-4 font-mono text-sm text-gray-500">
-                    <FileClock size={16} className="mr-1 text-gray-500" />
+                  <span className="inline-flex items-center pl-4 font-mono text-sm text-muted-foreground">
+                    <FileClock size={16} className="mr-1 text-muted-foreground" />
                     {formattedCreatedAt}
                   </span>
                 )}
@@ -53,13 +53,13 @@ export function EntityImage({ entity, showDetails, toggleDetails, leftIcon }: Pr
             </div>
             <button
               type="button"
-              className="flex-none rounded-full p-2 transition-colors hover:bg-gray-100"
+              className="flex-none rounded-full p-2 transition-colors hover:bg-accent"
               onClick={toggleDetails}
               aria-label="Toggle details"
             >
               <IndentIncrease
                 size={24}
-                className={showDetails ? 'text-indigo-600' : 'text-gray-400'}
+                className={showDetails ? 'text-primary' : 'text-muted-foreground'}
               />
             </button>
           </div>
@@ -67,39 +67,39 @@ export function EntityImage({ entity, showDetails, toggleDetails, leftIcon }: Pr
       </div>
 
       {showDetails && entity && (
-        <div className="mb-2 mr-2 border-b border-gray-300 pb-2">
-          <span className="mt-1 font-mono text-sm font-medium leading-tight text-gray-500">
+        <div className="mb-2 mr-2 border-b pb-2">
+          <span className="mt-1 font-mono text-sm font-medium leading-tight text-muted-foreground">
             <span className="mr-4 inline-flex">
               <Library
                 size={16}
-                className="mr-1 text-sm font-bold uppercase tracking-wide text-indigo-600"
+                className="mr-1 text-sm font-bold uppercase tracking-wide text-primary"
               />
               {entity.library_id || ''}
             </span>
             <span className="mr-4 inline-flex">
               <Folder
                 size={16}
-                className="mr-1 text-sm font-bold uppercase tracking-wide text-indigo-600"
+                className="mr-1 text-sm font-bold uppercase tracking-wide text-primary"
               />
               {entity.folder_id || ''}
             </span>
             <span className="mr-4 inline-flex">
               <Hash
                 size={16}
-                className="mr-1 text-sm font-bold uppercase tracking-wide text-indigo-600"
+                className="mr-1 text-sm font-bold uppercase tracking-wide text-primary"
               />
               {entity.id || ''}
             </span>
             <span className="mr-4 inline-flex">
               <FileClock
                 size={16}
-                className="mr-1 font-mono text-sm font-bold uppercase tracking-wide text-indigo-600"
+                className="mr-1 font-mono text-sm font-bold uppercase tracking-wide text-primary"
               />
               {formattedCreatedAt}
             </span>
           </span>
           <div>
-            <span className="font-xs mt-1 font-mono text-xs leading-tight text-gray-500">
+            <span className="font-xs mt-1 font-mono text-xs leading-tight text-muted-foreground">
               {entity.filepath || ''}
             </span>
           </div>

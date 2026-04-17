@@ -261,9 +261,9 @@ export function Config({ onBack }: Props) {
 
       {showRestartConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+          <div className="mx-4 w-full max-w-md rounded-lg bg-background p-6 shadow-xl">
             <h3 className="mb-2 text-lg font-medium">{t('config.restartConfirmTitle')}</h3>
-            <p className="mb-4 text-gray-600">{t('config.restartConfirmMessage')}</p>
+            <p className="mb-4 text-muted-foreground">{t('config.restartConfirmMessage')}</p>
             <div className="flex justify-end space-x-2">
               <Button variant="outline" onClick={() => setShowRestartConfirm(false)}>
                 {t('config.cancel')}

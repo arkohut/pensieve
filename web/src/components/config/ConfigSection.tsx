@@ -15,7 +15,7 @@ export function ConfigSection({ title, description, open, onOpenChange, children
   return (
     <div className="mb-6">
       <Collapsible open={open} onOpenChange={onOpenChange}>
-        <div className="rounded-lg border bg-white">
+        <div className="rounded-lg border bg-card">
           <CollapsibleTrigger className="w-full">
             <div className="flex items-center justify-between p-4">
               <div className="space-y-1 text-left">
