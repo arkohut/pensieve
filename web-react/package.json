@@ -30,7 +30,6 @@
     "@tanstack/react-router": "^1.121.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "date-fns": "^3.6.0",
     "i18next": "^23.15.0",
     "lucide-react": "^0.454.0",
     "next-themes": "^0.3.0",

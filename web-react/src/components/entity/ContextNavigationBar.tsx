@@ -1,23 +1,14 @@
 import { useEffect, useRef } from 'react';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '$/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '$/components/ui/tooltip';
 import { formatDate } from '$/lib/utils';
-import { apiEndpoint } from '$/lib/api/client';
+import { entityThumbnailUrl } from '$/lib/api/entities';
 import type { Entity } from '$/lib/api/types';
 import type { EntityContext } from '$/lib/api/entities';
 
 interface Props {
   entity: Entity;
   contextData: EntityContext;
-  onSelectEntity: (id: number) => void;
-}
-
-function thumbUrl(e: Entity) {
-  return `${apiEndpoint}/thumbnails/${e.filepath.replace(/^\/+/, '')}`;
+  onSelectEntity: (entity: Entity) => void;
 }
 
 function tooltipText(e: Entity): string {
@@ -45,9 +36,9 @@ export function ContextNavigationBar({ entity, contextData, onSelectEntity }: Pr
     };
   }, []);
 
-  function handleClick(id: number, e: React.MouseEvent) {
+  function handleClick(contextEntity: Entity, e: React.MouseEvent) {
     e.preventDefault();
-    onSelectEntity(id);
+    onSelectEntity(contextEntity);
   }
 
   return (
@@ -61,11 +52,11 @@ export function ContextNavigationBar({ entity, contextData, onSelectEntity }: Pr
                   <TooltipTrigger className="h-full w-full">
                     <a
                       href={`/entities/${ce.id}`}
-                      onClick={(e) => handleClick(ce.id, e)}
+                      onClick={(e) => handleClick(ce, e)}
                       className="block h-full w-full cursor-pointer overflow-hidden rounded-lg opacity-70 transition-opacity hover:opacity-100"
                     >
                       <img
-                        src={thumbUrl(ce)}
+                        src={entityThumbnailUrl(ce)}
                         alt=""
                         loading="lazy"
                         className="h-full w-full object-cover"
@@ -81,7 +72,7 @@ export function ContextNavigationBar({ entity, contextData, onSelectEntity }: Pr
               <Tooltip>
                 <TooltipTrigger className="h-full w-full">
                   <img
-                    src={thumbUrl(entity)}
+                    src={entityThumbnailUrl(entity)}
                     alt=""
                     className="h-full w-full object-cover"
                   />
@@ -96,11 +87,11 @@ export function ContextNavigationBar({ entity, contextData, onSelectEntity }: Pr
                   <TooltipTrigger className="h-full w-full">
                     <a
                       href={`/entities/${ce.id}`}
-                      onClick={(e) => handleClick(ce.id, e)}
+                      onClick={(e) => handleClick(ce, e)}
                       className="block h-full w-full cursor-pointer overflow-hidden rounded-lg opacity-70 transition-opacity hover:opacity-100"
                     >
                       <img
-                        src={thumbUrl(ce)}
+                        src={entityThumbnailUrl(ce)}
                         alt=""
                         loading="lazy"
                         className="h-full w-full object-cover"

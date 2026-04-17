@@ -1,8 +1,6 @@
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { format } from 'date-fns';
 import { Button } from '$/components/ui/button';
-import { Calendar } from '$/components/ui/calendar';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,6 +14,10 @@ import {
   DropdownMenuTrigger,
 } from '$/components/ui/dropdown-menu';
 
+const LazyCalendar = lazy(() =>
+  import('$/components/ui/calendar').then((module) => ({ default: module.Calendar })),
+);
+
 type Preset = 'unlimited' | 'threeHours' | 'today' | 'week' | 'month' | 'threeMonths' | 'custom';
 
 interface Props {
@@ -26,6 +28,13 @@ interface Props {
 
 const HOUR = 60 * 60;
 const DAY = 24 * HOUR;
+
+function formatDateLabel(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 function presetSeconds(p: Preset, nowSec: number): { start?: number; end?: number } {
   switch (p) {
@@ -76,8 +85,8 @@ export function TimeFilter({ start, end, onChange }: Props) {
   const label = useMemo(() => {
     if (preset === 'custom' && customRange.from && customRange.to) {
       return t('timeFilter.customRange', {
-        start: format(customRange.from, 'yyyy-MM-dd'),
-        end: format(customRange.to, 'yyyy-MM-dd'),
+        start: formatDateLabel(customRange.from),
+        end: formatDateLabel(customRange.to),
       });
     }
     return t(`timeFilter.${preset}`);
@@ -98,7 +107,9 @@ export function TimeFilter({ start, end, onChange }: Props) {
         <DropdownMenuLabel>{t('timeFilter.label')}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuRadioGroup value={preset} onValueChange={(v) => pickPreset(v as Preset)}>
-          <DropdownMenuRadioItem value="unlimited">{t('timeFilter.unlimited')}</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="unlimited">
+            {t('timeFilter.unlimited')}
+          </DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="threeHours">
             {t('timeFilter.threeHours')}
           </DropdownMenuRadioItem>
@@ -111,12 +122,16 @@ export function TimeFilter({ start, end, onChange }: Props) {
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>{t('timeFilter.custom')}</DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
-              <Calendar
-                mode="range"
-                selected={customRange as never}
-                onSelect={(r) => applyCustom(r as { from?: Date; to?: Date })}
-                numberOfMonths={1}
-              />
+              <Suspense
+                fallback={<div className="p-3 text-sm text-muted-foreground">{t('loading')}</div>}
+              >
+                <LazyCalendar
+                  mode="range"
+                  selected={customRange as never}
+                  onSelect={(r) => applyCustom(r as { from?: Date; to?: Date })}
+                  numberOfMonths={1}
+                />
+              </Suspense>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
         </DropdownMenuRadioGroup>
