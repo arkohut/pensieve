@@ -7,6 +7,7 @@ import { Input } from '$/components/ui/input';
 import { Skeleton } from '$/components/ui/skeleton';
 import { Logo } from '$/components/common/Logo';
 import { ErrorState } from '$/components/common/ErrorState';
+import { PageHeader } from '$/components/common/PageHeader';
 import { HitCard } from '$/components/search/HitCard';
 import { FacetFilter } from '$/components/search/FacetFilter';
 import { LibraryFilter } from '$/components/search/LibraryFilter';
@@ -151,16 +152,15 @@ function HomePage() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <div className="w-full border-b">
-        <div className="mx-auto flex max-w-screen-lg items-center justify-between py-2">
-          <div />
+      <PageHeader
+        right={
           <Link to="/config">
             <Button variant="ghost" size="icon" title={t('config.title')}>
               <Settings size={20} />
             </Button>
           </Link>
-        </div>
-      </div>
+        }
+      />
 
       <header className="mx-auto flex w-full max-w-screen-lg flex-col items-center justify-between px-4 py-4">
         <Logo size={128} withBorder hasGap className="mr-4" />

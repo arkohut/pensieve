@@ -9,6 +9,7 @@ import { Checkbox } from '$/components/ui/checkbox';
 import { Textarea } from '$/components/ui/textarea';
 import { Alert, AlertDescription } from '$/components/ui/alert';
 import { HealthCheck } from '$/components/common/HealthCheck';
+import { PageHeader } from '$/components/common/PageHeader';
 import { ConfigSection } from './ConfigSection';
 import { apiEndpoint } from '$/lib/api/client';
 
@@ -211,40 +212,47 @@ export function Config({ onBack }: Props) {
   }
 
   return (
-    <div className="container mx-auto max-w-5xl p-4 pt-0">
+    <div className="flex min-h-screen flex-col">
       {servicesRestarting && (
         <HealthCheck onStatusChange={() => setServicesRestarting(false)} />
       )}
 
-      <header className="sticky top-0 z-10 mb-4 rounded-b-lg border bg-white transition-all duration-300">
-        <div className="flex items-center justify-between p-4">
-          <div className="flex items-center">
-            <Button variant="ghost" onClick={onBack} className="mr-4">
-              <ArrowLeft size={18} className="mr-2" />
+      <PageHeader
+        sticky
+        maxWidth="max-w-5xl"
+        left={
+          <>
+            <Button variant="ghost" size="sm" onClick={onBack}>
+              <ArrowLeft size={16} className="mr-2" />
               {t('back')}
             </Button>
-            <h1 className="text-3xl font-bold">{t('config.title')}</h1>
-          </div>
-          <div className="flex space-x-2">
+            <h1 className="text-xl font-bold">{t('config.title')}</h1>
+          </>
+        }
+        right={
+          <>
             <Button
               variant="outline"
+              size="sm"
               onClick={() => setShowRestartConfirm(true)}
               disabled={saving || servicesRestarting}
             >
-              <RotateCw size={18} className="mr-2" />
+              <RotateCw size={16} className="mr-2" />
               {t('config.restartServices')}
             </Button>
             <Button
+              size="sm"
               onClick={() => void saveConfig()}
               disabled={saving || servicesRestarting || !hasChanges}
             >
-              <Save size={18} className="mr-2" />
+              <Save size={16} className="mr-2" />
               {t('config.saveButton')}
             </Button>
-          </div>
-        </div>
-      </header>
+          </>
+        }
+      />
 
+      <div className="container mx-auto max-w-5xl p-4">
       {error && (
         <Alert variant="destructive" className="mb-4">
           <AlertDescription>{error}</AlertDescription>
@@ -592,6 +600,7 @@ export function Config({ onBack }: Props) {
           </ConfigSection>
         </>
       )}
+      </div>
     </div>
   );
 }
