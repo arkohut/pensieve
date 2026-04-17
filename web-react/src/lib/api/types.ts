@@ -2,6 +2,7 @@ export interface MetadataEntry {
   key: string;
   source: string;
   value: string;
+  data_type?: string;
 }
 
 export interface Entity {
