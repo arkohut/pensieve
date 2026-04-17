@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Settings } from 'lucide-react';
 import { Button } from '$/components/ui/button';
@@ -35,10 +35,12 @@ function HomePage() {
   });
   const appFacet = facets?.find((f) => f.field_name === 'app_names');
 
+  useEffect(() => {
+    setLocalQuery(search.q);
+  }, [search.q]);
+
   function toggleApp(name: string, checked: boolean) {
-    const next = checked
-      ? [...search.app_names, name]
-      : search.app_names.filter((x) => x !== name);
+    const next = checked ? [...search.app_names, name] : search.app_names.filter((x) => x !== name);
     void navigate({ search: (s: SearchParams) => ({ ...s, app_names: next }) });
   }
 
@@ -56,6 +58,20 @@ function HomePage() {
       }),
     });
   }
+
+  const closeFigure = useCallback(() => setSelectedIndex(null), []);
+  const showNextFigure = useCallback(() => {
+    setSelectedIndex((index) => {
+      if (index == null || !data?.hits.length) return index;
+      return (index + 1) % data.hits.length;
+    });
+  }, [data?.hits.length]);
+  const showPreviousFigure = useCallback(() => {
+    setSelectedIndex((index) => {
+      if (index == null || !data?.hits.length) return index;
+      return (index - 1 + data.hits.length) % data.hits.length;
+    });
+  }, [data?.hits.length]);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -113,18 +129,12 @@ function HomePage() {
         <div className="mx-auto flex flex-col sm:flex-row">
           {appFacet && appFacet.counts.length > 0 && (
             <aside className="pr-4 sm:w-full md:w-1/5 lg:w-1/6 xl:w-[14.28%]">
-              <FacetFilter
-                facet={appFacet}
-                selected={search.app_names}
-                onToggle={toggleApp}
-              />
+              <FacetFilter facet={appFacet} selected={search.app_names} onToggle={toggleApp} />
             </aside>
           )}
           <div
             className={
-              appFacet && appFacet.counts.length > 0
-                ? 'md:w-4/5 lg:w-5/6 xl:w-[85.72%]'
-                : 'w-full'
+              appFacet && appFacet.counts.length > 0 ? 'md:w-4/5 lg:w-5/6 xl:w-[85.72%]' : 'w-full'
             }
           >
             {isLoading ? (
@@ -160,11 +170,7 @@ function HomePage() {
                 )}
                 <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
                   {data.hits.map((hit, i) => (
-                    <HitCard
-                      key={hit.document.id}
-                      hit={hit}
-                      onClick={() => setSelectedIndex(i)}
-                    />
+                    <HitCard key={hit.document.id} hit={hit} onClick={() => setSelectedIndex(i)} />
                   ))}
                 </div>
               </>
@@ -180,11 +186,9 @@ function HomePage() {
       {data && selectedIndex != null && data.hits[selectedIndex] && (
         <Figure
           entity={data.hits[selectedIndex].document}
-          onClose={() => setSelectedIndex(null)}
-          onNext={() => setSelectedIndex((selectedIndex + 1) % data.hits.length)}
-          onPrevious={() =>
-            setSelectedIndex((selectedIndex - 1 + data.hits.length) % data.hits.length)
-          }
+          onClose={closeFigure}
+          onNext={showNextFigure}
+          onPrevious={showPreviousFigure}
         />
       )}
     </div>

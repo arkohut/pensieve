@@ -2,7 +2,7 @@ import { type ReactNode, useMemo } from 'react';
 import { IndentIncrease, Library, Folder, Hash, FileClock } from 'lucide-react';
 import { LucideIcon } from '$/components/common/LucideIcon';
 import { translateAppName, formatDate, filename } from '$/lib/utils';
-import { apiEndpoint } from '$/lib/api/client';
+import { entityFileUrl, entityVideoUrl } from '$/lib/api/entities';
 import type { Entity } from '$/lib/api/types';
 
 interface Props {
@@ -30,12 +30,8 @@ export function EntityImage({ entity, showDetails, toggleDetails, leftIcon }: Pr
     () => (entity?.file_created_at ? formatDate(entity.file_created_at) : ''),
     [entity?.file_created_at],
   );
-  const videoUrl = entity?.filepath
-    ? `${apiEndpoint}/files/video/${entity.filepath.replace(/^\/+/, '')}`
-    : undefined;
-  const imageUrl = entity?.filepath
-    ? `${apiEndpoint}/files/${entity.filepath.replace(/^\/+/, '')}`
-    : '';
+  const videoUrl = entity?.filepath ? entityVideoUrl(entity) : undefined;
+  const imageUrl = entity?.filepath ? entityFileUrl(entity) : '';
 
   return (
     <div className={`flex h-full flex-none flex-col ${showDetails ? 'w-full md:w-1/2' : 'w-full'}`}>

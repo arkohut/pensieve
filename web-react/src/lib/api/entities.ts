@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { apiFetch } from './client';
+import { apiEndpoint, apiFetch } from './client';
 import type { Entity } from './types';
 
 export const entityKeys = {
@@ -17,23 +17,39 @@ export function useEntity(id: number) {
   });
 }
 
+export function entityFileUrl(entity: Pick<Entity, 'filepath'>): string {
+  return `${apiEndpoint}/files/${entity.filepath.replace(/^\/+/, '')}`;
+}
+
+export function entityThumbnailUrl(entity: Pick<Entity, 'filepath'>): string {
+  return `${apiEndpoint}/thumbnails/${entity.filepath.replace(/^\/+/, '')}`;
+}
+
+export function entityVideoUrl(entity: Pick<Entity, 'filepath'>): string {
+  return `${apiEndpoint}/files/video/${entity.filepath.replace(/^\/+/, '')}`;
+}
+
 export interface EntityContext {
   prev: Entity[];
   next: Entity[];
 }
 
-export function useEntityContext(
-  libraryId: number | undefined,
+export function fetchEntityContext(
+  libraryId: number,
   id: number,
   size: number = 12,
+  signal?: AbortSignal,
 ) {
+  return apiFetch<EntityContext>(
+    `/libraries/${libraryId}/entities/${id}/context?prev=${size}&next=${size}`,
+    { signal },
+  );
+}
+
+export function useEntityContext(libraryId: number | undefined, id: number, size: number = 12) {
   return useQuery({
     queryKey: entityKeys.context(libraryId ?? 0, id, size),
-    queryFn: ({ signal }) =>
-      apiFetch<EntityContext>(
-        `/libraries/${libraryId}/entities/${id}/context?prev=${size}&next=${size}`,
-        { signal },
-      ),
+    queryFn: ({ signal }) => fetchEntityContext(libraryId!, id, size, signal),
     enabled: Number.isFinite(id) && id > 0 && !!libraryId,
   });
 }

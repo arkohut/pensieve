@@ -1,11 +1,19 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Home, Loader } from 'lucide-react';
 import { EntityImage } from '$/components/entity/EntityImage';
 import { EntityDetail } from '$/components/entity/EntityDetail';
 import { ContextNavigationBar } from '$/components/entity/ContextNavigationBar';
 import { ErrorState } from '$/components/common/ErrorState';
-import { useEntity, useEntityContext } from '$/lib/api/entities';
+import {
+  entityFileUrl,
+  entityKeys,
+  fetchEntityContext,
+  useEntity,
+  useEntityContext,
+} from '$/lib/api/entities';
+import type { Entity } from '$/lib/api/types';
 
 export const Route = createFileRoute('/entities/$id')({
   component: EntityPage,
@@ -15,6 +23,7 @@ function EntityPage() {
   const { id } = Route.useParams();
   const entityId = Number(id);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const [showDetails, setShowDetails] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
@@ -24,6 +33,12 @@ function EntityPage() {
 
   const { data: entity, isLoading, isError, error, refetch } = useEntity(entityId);
   const { data: contextData } = useEntityContext(entity?.library_id, entityId);
+  const previousEntity = useMemo(() => contextData?.prev.at(-1), [contextData?.prev]);
+  const nextEntity = useMemo(() => contextData?.next[0], [contextData?.next]);
+  const adjacentEntities = useMemo(
+    () => [previousEntity, nextEntity].filter((item): item is Entity => Boolean(item)),
+    [nextEntity, previousEntity],
+  );
 
   function toggleDetails() {
     setShowDetails((prev) => {
@@ -33,9 +48,18 @@ function EntityPage() {
     });
   }
 
-  function goToEntity(targetId: number) {
-    void navigate({ to: '/entities/$id', params: { id: String(targetId) } });
-  }
+  const goToEntity = useCallback(
+    (target: Entity | number) => {
+      const targetId = typeof target === 'number' ? target : target.id;
+
+      if (typeof target !== 'number') {
+        queryClient.setQueryData(entityKeys.detail(targetId), target);
+      }
+
+      void navigate({ to: '/entities/$id', params: { id: String(targetId) } });
+    },
+    [navigate, queryClient],
+  );
 
   function goToHome() {
     void navigate({ to: '/' });
@@ -43,16 +67,38 @@ function EntityPage() {
 
   useEffect(() => {
     function handler(e: KeyboardEvent) {
-      if (e.key === 'ArrowLeft' && contextData?.prev?.length) {
-        goToEntity(contextData.prev[contextData.prev.length - 1].id);
-      } else if (e.key === 'ArrowRight' && contextData?.next?.length) {
-        goToEntity(contextData.next[0].id);
+      if (e.key === 'ArrowLeft' && previousEntity) {
+        goToEntity(previousEntity);
+      } else if (e.key === 'ArrowRight' && nextEntity) {
+        goToEntity(nextEntity);
       }
     }
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contextData]);
+  }, [goToEntity, nextEntity, previousEntity]);
+
+  useEffect(() => {
+    if (!contextData) return;
+
+    for (const contextEntity of [...contextData.prev, ...contextData.next]) {
+      queryClient.setQueryData(entityKeys.detail(contextEntity.id), contextEntity);
+    }
+  }, [contextData, queryClient]);
+
+  useEffect(() => {
+    for (const adjacentEntity of adjacentEntities) {
+      const image = document.createElement('img');
+      image.decoding = 'async';
+      image.src = entityFileUrl(adjacentEntity);
+      void image.decode().catch(() => undefined);
+
+      void queryClient.prefetchQuery({
+        queryKey: entityKeys.context(adjacentEntity.library_id, adjacentEntity.id, 12),
+        queryFn: ({ signal }) =>
+          fetchEntityContext(adjacentEntity.library_id, adjacentEntity.id, 12, signal),
+      });
+    }
+  }, [adjacentEntities, queryClient]);
 
   if (isLoading) {
     return (
