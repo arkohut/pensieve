@@ -34,25 +34,20 @@ class StructuredVLMSettings(BaseModel):
     The prompt is asset-versioned in code (memos/plugins/structured_vlm/prompt_v1.txt).
     Only the model + endpoint + tuning live here.
 
-    All three of modelname/endpoint/token are empty by default -- the user must
-    supply them in config.yaml. The plugin is also disabled by default
-    (enabled=False), so an unconfigured install is a no-op.
-
-    Example config.yaml entries (pick one):
-      modelname: qwen3.6-35b                                  # local vLLM
-      modelname: moonshotai/kimi-k2.6    max_tokens: 16000    # OpenRouter (reasoning model needs larger budget)
-      modelname: minicpm-v                                    # smaller local model
+    Defaults mirror VLMSettings — the typical setup has ollama (or compatible)
+    running on localhost:11434 with minicpm-v. Users override modelname/endpoint
+    in config.yaml to point at a different VLM.
     """
-    modelname: str = ""
-    endpoint: str = ""
+    modelname: str = "minicpm-v"
+    endpoint: str = "http://localhost:11434"
     token: SecretStr = SecretStr("")
-    concurrency: int = 4
+    concurrency: int = 8
     force_jpeg: bool = True
     # max_tokens must be high enough for reasoning models (e.g., 16000 for Kimi K2.6)
     max_tokens: int = 2048
     # Disable thinking mode for vLLM/qwen endpoints; OpenRouter/OpenAI ignore this
     disable_thinking: bool = True
-    enabled: bool = False  # off by default; user opts in
+    enabled: bool = True
 
 
 class OCRSettings(BaseModel):
