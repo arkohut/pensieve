@@ -1,6 +1,5 @@
 """Timezone helpers for converting between UTC (DB storage) and local time (UI/worklog)."""
 from __future__ import annotations
-import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -19,9 +18,14 @@ class LocalOffset:
 
     @classmethod
     def from_system(cls) -> "LocalOffset":
-        """Read the local TZ offset from the OS at call time."""
-        # time.timezone is in seconds, west of UTC, so negate
-        return cls(-time.timezone)
+        """Read the local TZ offset from the OS at call time.
+
+        Uses the current offset (including DST if active), not the standard-time
+        offset. This matters for users in DST regions — Task 6's backfill CLI
+        converts 'last N days local' to a UTC range and must use the offset that
+        was in effect at that moment.
+        """
+        return cls(int(datetime.now().astimezone().utcoffset().total_seconds()))
 
     def to_string(self) -> str:
         sign = "+" if self.seconds >= 0 else "-"
