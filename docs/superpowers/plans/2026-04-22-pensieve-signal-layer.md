@@ -4,7 +4,7 @@
 
 **Goal:** Per-screenshot structured metadata is reliably populated for new captures and backfilled for the last 30 days, so downstream layers can build on a clean signal.
 
-**Architecture:** Two extractors write into versioned metadata fields per entity. `title_regex_v1` runs at the recorder's plugin pipeline (cheap, deterministic). `structured_vlm_v1_qwen36_35b` runs as a FastAPI plugin similar to existing `vlm/`, with a versioned prompt and JSON output. A backfill CLI command processes existing screenshots in batches. Worklog format migrates to UTC to match DB.
+**Architecture:** Two extractors write into versioned metadata fields per entity. `title_regex_v1` runs at the recorder's plugin pipeline (cheap, deterministic). `structured_vlm_v1_qwen36_35b` runs as a FastAPI plugin similar to existing `vlm/`, with a versioned prompt and JSON output. It registers as a builtin plugin (like `builtin_ocr` / `builtin_vlm`), so new screenshots auto-process and the existing plugin-trigger pipeline handles historical reprocess. Worklog format migrates to UTC to match DB.
 
 **Tech Stack:** Python 3.10+, FastAPI plugin pattern (existing), pytest (new), httpx, Pydantic v2, psycopg2 (existing).
 
@@ -23,7 +23,6 @@ New files:
 - `tests/test_extractors_title_regex.py` — title regex unit tests (12 cases)
 - `tests/test_extractors_schema.py` — Pydantic schema tests
 - `tests/test_plugin_structured_vlm.py` — plugin unit + mocked-endpoint tests
-- `tests/test_cmd_backfill.py` — backfill CLI tests
 - `tests/test_worklog.py` — v2 format reader + writer tests
 - `tests/fixtures/screenshots/` — 5 representative `.webp` files copied from real entities (small subset of POC samples)
 - `tests/fixtures/vlm_responses/` — JSON responses for each test scenario
@@ -37,16 +36,15 @@ New files:
 - `memos/plugins/structured_vlm/prompt_v1.py` — wraps the asset
 - `memos/plugins/structured_vlm/prompt_v1.txt` — the structured-JSON prompt asset (copied from vlm_bench)
 - `memos/plugins/structured_vlm/requirements.txt` — `httpx`, `fastapi`, `pydantic`
-- `memos/cmds/backfill.py` — typer command group with `structured-vlm` subcommand
 - `memos/worklog.py` — v2 worklog reader/writer (extracted from `record.py`)
 
 Modified files:
 
 - `pyproject.toml` — add `[tool.pytest.ini_options]`, add `pytest`, `pytest-asyncio`, `respx` to optional `[project.optional-dependencies] test`
-- `memos/config.py` — add `StructuredVLMSettings` class; add `structured_vlm` field to top-level `Settings`
-- `memos/server.py` — wire `structured_vlm` plugin router after VLM init (~ line 1148)
+- `memos/config.py` — add `max_tokens` + `disable_thinking` fields to `VLMSettings` (shared with structured_vlm plugin)
+- `memos/server.py` — wire `structured_vlm` plugin router after VLM init (~ line 1148), reusing `settings.vlm`
+- `memos/databases/initializers.py` — register `builtin_structured_vlm` in `available_plugins`
 - `memos/record.py` — replace `worklog.write(...)` with `memos.worklog.write_entry(...)`; switch to UTC timestamps; add v2 header on file create
-- `memos/cmds/__init__.py` (or wherever `app = typer.Typer()` is composed) — register the new `backfill_app`
 
 Removed: nothing.
 
@@ -1224,53 +1222,29 @@ def init_plugin(config) -> None:
                 f"disable_thinking={disable_thinking}")
 ```
 
-- [ ] **Step 5.8: Add config schema**
+- [ ] **Step 5.8: Add max_tokens and disable_thinking to VLMSettings**
 
-Edit `memos/config.py` and add after the existing `VLMSettings` class (~line 28):
-
-```python
-class StructuredVLMSettings(BaseModel):
-    """Settings for the structured VLM plugin (Layer 1 extractor).
-
-    The prompt is asset-versioned in code (memos/plugins/structured_vlm/prompt_v1.txt).
-    Only the model + endpoint + tuning live here.
-
-    Defaults mirror VLMSettings — the typical setup has ollama (or compatible)
-    running on localhost:11434 with minicpm-v. Users override modelname/endpoint
-    in config.yaml to point at a different VLM.
-    """
-    modelname: str = "minicpm-v"
-    endpoint: str = "http://localhost:11434"
-    token: SecretStr = SecretStr("")
-    concurrency: int = 8
-    force_jpeg: bool = True
-    # max_tokens must be high enough for reasoning models (e.g., 16000 for Kimi K2.6)
-    max_tokens: int = 2048
-    # Disable thinking mode for vLLM/qwen endpoints; OpenRouter/OpenAI ignore this
-    disable_thinking: bool = True
-    enabled: bool = True
-```
-
-Then in the top-level `Settings` class (~line 112), add the field next to `vlm`:
+Edit `memos/config.py`, inside `class VLMSettings(BaseModel):`, add these fields just before `enabled`:
 
 ```python
-    vlm: VLMSettings = VLMSettings()
-    structured_vlm: StructuredVLMSettings = StructuredVLMSettings()
+max_tokens: int = 2048
+disable_thinking: bool = True
 ```
+
+These are used by the `structured_vlm` plugin; the existing prose VLM plugin ignores them. The structured_vlm plugin reuses the rest of VLMSettings directly (modelname / endpoint / token / concurrency / force_jpeg) — no separate config block.
 
 - [ ] **Step 5.9: Wire plugin router into server**
 
 Edit `memos/server.py` around line 1148 (after the VLM init block). Add:
 
 ```python
-    # Only add structured VLM plugin router if enabled
-    if settings.structured_vlm.enabled:
-        from memos.plugins.structured_vlm import main as structured_vlm_main
-        structured_vlm_main.init_plugin(settings.structured_vlm)
-        api_router.include_router(structured_vlm_main.router, prefix="/plugins/structured_vlm")
-        logging.info("structured_vlm plugin initialized and router added")
-    else:
-        logging.info("structured_vlm plugin disabled")
+    # structured_vlm plugin shares VLMSettings for endpoint/model/token/concurrency.
+    # Enable/disable is per-library via the plugin binding (default_plugins config
+    # controls which builtins get bound on init).
+    from memos.plugins.structured_vlm import main as structured_vlm_main
+    structured_vlm_main.init_plugin(settings.vlm)
+    api_router.include_router(structured_vlm_main.router, prefix="/plugins/structured_vlm")
+    logging.info("structured_vlm plugin initialized and router added")
 ```
 
 - [ ] **Step 5.10: Run tests, expect pass**
@@ -1293,402 +1267,129 @@ git commit -m "feat(plugin): add structured_vlm plugin with prompt v1"
 
 ---
 
-## Task 6: 30-day backfill CLI command
+## Task 6: Register structured_vlm as a builtin plugin
 
-A typer command that finds entities in a date range without
-`structured_vlm_v1_<model>` metadata, calls the plugin webhook for each,
-and reports progress. Idempotent (rerun = skip processed).
+Pensieve has a builtin plugin pattern (see `memos/databases/initializers.py:initialize_default_plugins`). Third plugins like OCR and VLM auto-register on `memos init` when listed in `settings.default_plugins`. We do the same for structured_vlm instead of writing a new CLI.
 
-**Files:**
-- Create: `memos/cmds/backfill.py`
-- Create: `tests/test_cmd_backfill.py`
-- Modify: `memos/cmds/__init__.py` (or wherever the typer app composition lives)
+**Files:** `memos/databases/initializers.py` only.
 
-- [ ] **Step 6.1: Locate typer app composition**
+- [ ] **Step 6.1: Add builtin_structured_vlm to available_plugins**
 
-Run: `grep -rn 'typer.Typer\|add_typer' memos/cmds/ memos/__main__.py 2>/dev/null`
-Note the file where `app = typer.Typer()` is created and sub-apps are mounted.
-
-- [ ] **Step 6.2: Write failing backfill test**
-
-Create `tests/test_cmd_backfill.py`:
+In `initialize_default_plugins()`, add a third entry to the `available_plugins` dict:
 
 ```python
-import json
-from unittest.mock import patch, MagicMock, AsyncMock
-import pytest
-
-from memos.cmds.backfill import (
-    list_unprocessed_entity_ids,
-    process_one_entity,
-    run_backfill,
-)
-
-
-@pytest.mark.asyncio
-async def test_list_unprocessed_filters_already_processed():
-    """Entities that already have the target metadata field are excluded."""
-    # Two entities exist; entity 1 already has metadata, entity 2 does not.
-    fake_conn = MagicMock()
-    fake_cur = MagicMock()
-    fake_cur.fetchall.return_value = [(2,)]  # SQL returns only entity 2
-    fake_conn.cursor.return_value.__enter__.return_value = fake_cur
-    with patch("memos.cmds.backfill._open_conn", return_value=fake_conn):
-        ids = list(list_unprocessed_entity_ids(
-            field="structured_vlm_v1_qwen3_6_35b",
-            utc_start="20260321-160000", utc_end="20260420-160000",
-        ))
-    assert ids == [2]
-    # Verify the SQL filtered correctly (loose check on text)
-    sql = fake_cur.execute.call_args[0][0]
-    assert "structured_vlm_v1_qwen3_6_35b" in sql
-    assert "NOT EXISTS" in sql.upper() or "LEFT JOIN" in sql.upper()
-
-
-@pytest.mark.asyncio
-async def test_process_one_entity_calls_plugin_webhook():
-    """process_one_entity POSTs the entity to the plugin webhook URL."""
-    fake_client = AsyncMock()
-    fake_client.post = AsyncMock(return_value=MagicMock(status_code=200))
-
-    await process_one_entity(
-        client=fake_client,
-        plugin_url="http://localhost:8839/api/plugins/structured_vlm/",
-        entity_url="http://localhost:8839/api/libraries/1/entities/42",
-    )
-
-    fake_client.post.assert_awaited_once()
-    args, kwargs = fake_client.post.call_args
-    # Plugin webhook receives the entity URL via Location header
-    assert kwargs["headers"]["Location"].endswith("/entities/42")
-
-
-@pytest.mark.asyncio
-async def test_run_backfill_processes_each_entity_once():
-    with patch("memos.cmds.backfill.list_unprocessed_entity_ids", return_value=[10, 11, 12]), \
-         patch("memos.cmds.backfill.process_one_entity", new=AsyncMock()) as proc:
-        await run_backfill(
-            field="structured_vlm_v1_qwen3_6_35b",
-            utc_start="20260321-160000", utc_end="20260420-160000",
-            base_url="http://localhost:8839",
-            library_id=1,
-            concurrency=2,
-        )
-    assert proc.await_count == 3
+"builtin_structured_vlm": PluginModel(
+    name="builtin_structured_vlm",
+    description="Structured VLM Plugin (Layer 1 extractor, JSON output)",
+    webhook_url="/api/plugins/structured_vlm",
+),
 ```
 
-- [ ] **Step 6.3: Run test, expect failure**
-
-Run: `pytest tests/test_cmd_backfill.py -v`
-Expected: ImportError on `memos.cmds.backfill`.
-
-- [ ] **Step 6.4: Implement backfill module**
-
-Create `memos/cmds/backfill.py`:
-
-```python
-"""Backfill CLI commands. Currently: structured_vlm extractor.
-
-Usage:
-  memos backfill structured-vlm --days 30 --concurrency 8
-"""
-from __future__ import annotations
-import asyncio
-import logging
-from typing import Iterator, Optional
-
-import httpx
-import typer
-
-from memos.config import settings
-from memos.tz_utils import LocalOffset, local_date_to_utc_range
-from memos.plugins.structured_vlm.main import metadata_field_name as svlm_field_name
-
-logger = logging.getLogger(__name__)
-
-backfill_app = typer.Typer(help="Backfill commands for derived metadata.")
-
-
-def _open_conn():
-    """Open a psycopg2 connection. Imported lazily so test environments without
-    psycopg2 still load the module."""
-    import psycopg2
-    # Parse the SQLAlchemy URL into psycopg2 args
-    url = settings.database_url
-    if url.startswith("postgresql://"):
-        url = url[len("postgresql://"):]
-    user_pw, host_db = url.split("@", 1)
-    user, pw = user_pw.split(":", 1)
-    host_port, db = host_db.split("/", 1)
-    if ":" in host_port:
-        host, port = host_port.split(":", 1)
-    else:
-        host, port = host_port, "5432"
-    return psycopg2.connect(host=host, port=port, user=user, password=pw, dbname=db)
-
-
-def list_unprocessed_entity_ids(field: str, utc_start: str, utc_end: str) -> Iterator[int]:
-    """Yield entity IDs in [utc_start, utc_end) that do NOT yet have the given metadata field."""
-    conn = _open_conn()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(f"""
-                SELECT e.id FROM entities e
-                JOIN metadata_entries m_ts ON m_ts.entity_id = e.id AND m_ts.key = 'timestamp'
-                WHERE m_ts.value >= %s AND m_ts.value < %s
-                  AND NOT EXISTS (
-                    SELECT 1 FROM metadata_entries m
-                    WHERE m.entity_id = e.id AND m.key = %s
-                  )
-                ORDER BY m_ts.value;
-            """, (utc_start, utc_end, field))
-            for (eid,) in cur.fetchall():
-                yield eid
-    finally:
-        conn.close()
-
-
-async def process_one_entity(client, plugin_url: str, entity_url: str) -> None:
-    """POST to the plugin webhook with Location header pointing at the entity."""
-    try:
-        r = await client.post(plugin_url,
-                              headers={"Location": entity_url},
-                              json={},  # plugin loads entity via location
-                              timeout=300.0)
-        if r.status_code != 200:
-            logger.warning(f"Plugin returned {r.status_code} for {entity_url}: {r.text[:200]}")
-    except Exception as e:
-        logger.warning(f"Backfill failed for {entity_url}: {e}")
-
-
-async def run_backfill(field: str, utc_start: str, utc_end: str,
-                       base_url: str, library_id: int, concurrency: int) -> None:
-    plugin_url = f"{base_url}/api/plugins/structured_vlm/"
-    ids = list(list_unprocessed_entity_ids(field=field, utc_start=utc_start, utc_end=utc_end))
-    total = len(ids)
-    print(f"To process: {total} entities. Concurrency: {concurrency}.")
-    if total == 0:
-        return
-    sem = asyncio.Semaphore(concurrency)
-    done = 0
-
-    async def one(eid: int):
-        nonlocal done
-        entity_url = f"{base_url}/api/libraries/{library_id}/entities/{eid}"
-        async with sem:
-            await process_one_entity(client, plugin_url, entity_url)
-            done += 1
-            if done % 50 == 0 or done == total:
-                print(f"  [{done}/{total}] processed")
-
-    async with httpx.AsyncClient() as client:
-        await asyncio.gather(*(one(eid) for eid in ids))
-    print(f"Done: {done}/{total} processed.")
-
-
-@backfill_app.command("structured-vlm")
-def cmd_structured_vlm(
-    days: int = typer.Option(30, "--days", help="How many days back from today (local) to backfill."),
-    concurrency: int = typer.Option(4, "--concurrency", help="Concurrent webhook requests."),
-    library_id: int = typer.Option(1, "--lib", help="Library ID for entity URL composition."),
-    base_url: Optional[str] = typer.Option(None, "--base-url",
-        help=f"Server base URL (defaults to settings.server_endpoint)."),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Print count of unprocessed and exit."),
-):
-    """Run structured_vlm extraction on screenshots from the last N local days."""
-    from datetime import datetime, timedelta
-    offset = LocalOffset.from_system()
-    today_local = datetime.now()
-    end_local = today_local.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
-    start_local = end_local - timedelta(days=days)
-    utc_start, _ = local_date_to_utc_range(start_local.strftime("%Y%m%d"), offset)
-    _, utc_end = local_date_to_utc_range((end_local - timedelta(days=1)).strftime("%Y%m%d"), offset)
-
-    field = svlm_field_name(modelname=settings.structured_vlm.modelname)
-    base = base_url or settings.server_endpoint
-
-    print(f"Backfill: field={field}, UTC range [{utc_start}, {utc_end}), base_url={base}")
-    if dry_run:
-        ids = list(list_unprocessed_entity_ids(field=field, utc_start=utc_start, utc_end=utc_end))
-        print(f"DRY RUN: {len(ids)} entities would be processed.")
-        return
-
-    asyncio.run(run_backfill(field=field, utc_start=utc_start, utc_end=utc_end,
-                             base_url=base, library_id=library_id, concurrency=concurrency))
-```
-
-- [ ] **Step 6.5: Mount backfill_app on the main typer app**
-
-Find the typer composition (Step 6.1 located it). Add:
-
-```python
-from memos.cmds.backfill import backfill_app
-app.add_typer(backfill_app, name="backfill")
-```
-
-- [ ] **Step 6.6: Run tests, expect pass**
-
-Run: `pytest tests/test_cmd_backfill.py -v`
-Expected: 3 passed.
-
-- [ ] **Step 6.7: Smoke test the CLI command**
-
-Run: `memos backfill structured-vlm --days 30 --dry-run`
-Expected: prints `DRY RUN: <N> entities would be processed.` (likely several thousand for an active 30-day window).
-
-- [ ] **Step 6.8: Commit**
+- [ ] **Step 6.2: Commit**
 
 ```bash
-git add memos/cmds/backfill.py tests/test_cmd_backfill.py memos/cmds/__init__.py
-git commit -m "feat(cmd): add backfill structured-vlm command"
+git add memos/databases/initializers.py
+git commit -m "feat(plugins): register builtin_structured_vlm"
 ```
+
+The user activates it by adding `builtin_structured_vlm` to `default_plugins` in config.yaml and running `memos init` (or restart — upsert is idempotent).
 
 ---
 
-## Task 7: Run the actual 30-day backfill and verify
+## Task 7: Enable structured_vlm and verify 30-day coverage
 
-Now actually run the backfill against the real DB and validate results match
-the POC bench (same prompt, same model, same images → same outputs within
-sampling noise).
+Now actually turn on the builtin plugin and validate that both new screenshots
+and the last 30 days of existing screenshots get processed. Exact reprocess
+invocation is left for the user to determine empirically — Pensieve already
+has a plugin-trigger pipeline (`trigger_webhooks` + `crud.get_pending_plugins`
+idempotency); this task only specifies the config-edit and verification, not
+any new CLI.
 
 **Files:** none new; this task validates production data.
 
 - [ ] **Step 7.1: Enable structured_vlm in user config**
 
-Edit `~/.memos/config.yaml`. Add the section:
+Edit `~/.memos/config.yaml`:
+
+1. Add `builtin_structured_vlm` to the `default_plugins` list.
+2. Configure the `vlm` section (modelname / endpoint / token / concurrency are
+   already set if you use the prose VLM plugin). For reasoning models, bump
+   `vlm.max_tokens` to ~16000.
+
+Example:
 
 ```yaml
-structured_vlm:
-  enabled: true
+default_plugins:
+  - builtin_ocr
+  - builtin_vlm
+  - builtin_structured_vlm
+
+vlm:
   modelname: qwen3.6-35b
-  endpoint: https://aisensiy-vycpv1a7wiky.serv-c1.openbayes.net
-  token: sk-4i1rvtly17cfx805nva8q6ibfd5qvaar
+  endpoint: https://your-vlm-endpoint
+  token: sk-...
   concurrency: 8
   force_jpeg: true
   max_tokens: 2048
   disable_thinking: true
 ```
 
-- [ ] **Step 7.2: Restart the Pensieve server**
+- [ ] **Step 7.2: Register the builtin plugin and restart**
 
-Restart however you currently run it (e.g., `~/.memos/launch.sh restart` or
-`memos serve`). Confirm the structured_vlm plugin is initialized:
+```bash
+memos init   # upserts builtin_structured_vlm + binds to default library
+```
+
+Restart the server. Confirm:
 
 ```bash
 grep -i structured_vlm ~/.memos/logs/memos.log | head -3
 ```
-Expected: line "structured_vlm plugin initialized and router added".
+Expected: "structured_vlm plugin initialized and router added".
 
 - [ ] **Step 7.3: Smoke test plugin endpoint**
 
 ```bash
 curl -s http://localhost:8839/api/plugins/structured_vlm/ | jq .
 ```
-Expected: `{"healthy": true, "plugin": "structured_vlm", "model": "qwen3.6-35b", "prompt_version": "v1"}`
+Expected: `{"healthy": true, "plugin": "structured_vlm", "model": "...", "prompt_version": "v1"}`
 
-- [ ] **Step 7.4: Backfill the most recent 1 day first (canary)**
+- [ ] **Step 7.4: Confirm new screenshots auto-process**
 
-```bash
-memos backfill structured-vlm --days 1 --concurrency 4
-```
-Expected: `[N/N] processed.` Usually ~2-5k entities; should complete in 20-40 minutes.
-
-Verify a few entities have the new metadata:
+Wait a few minutes for new captures. Check:
 
 ```bash
-PGPASSWORD=mysecretpassword psql -h localhost -U postgres -d postgres -c \
-  "SELECT count(*) FROM metadata_entries WHERE key = 'structured_vlm_v1_qwen3_6_35b';"
+PGPASSWORD=... psql -h localhost -U postgres -d postgres -c \
+  "SELECT count(*) FROM metadata_entries WHERE key LIKE 'structured_vlm_v1_%';"
 ```
 
-- [ ] **Step 7.5: Cross-check 3 sample entities against POC bench**
+Count should grow as new screenshots arrive.
 
-Pick 3 entity IDs from `docs/superpowers/experiments/vlm_bench/samples.jsonl`
-that fall in the last day. For each, compare backfill output to POC output:
+- [ ] **Step 7.5: Reprocess the last 30 days**
 
-```bash
-PGPASSWORD=mysecretpassword psql -h localhost -U postgres -d postgres -t -c \
-  "SELECT value FROM metadata_entries WHERE entity_id = <ID> \
-   AND key = 'structured_vlm_v1_qwen3_6_35b';" | jq .
-```
+Pensieve already has a mechanism for re-triggering plugins on existing
+entities via `crud.get_pending_plugins` + `trigger_webhooks`. The exact
+invocation (likely via `memos lib …` commands or a short script that walks
+entities in the date range and POSTs to the plugin webhook) is left for the
+user to determine empirically during this step — this plan does not specify
+a new CLI for it.
 
-Compare with `docs/superpowers/experiments/vlm_bench/results/qwen3.6-35b.jsonl`.
-Expect: `primary.workspace`, `primary.app`, `primary.title_or_topic` fields
-match within VLM sampling noise. Document any structural mismatch (not just
-phrasing differences) as an issue.
+- [ ] **Step 7.6: Spot-check workspace fill rate**
 
-- [ ] **Step 7.6: Run the full 30-day backfill**
+Per spec §10.2 evaluation gate (workspace fill-rate ≥ 50% on real-world data):
 
 ```bash
-memos backfill structured-vlm --days 30 --concurrency 8
-```
-Expected runtime: 8-12 hours (per spec §10.1). Run in a long-lived shell or
-under `nohup`. Check progress periodically:
-
-```bash
-PGPASSWORD=mysecretpassword psql -h localhost -U postgres -d postgres -c \
-  "SELECT count(*) FROM metadata_entries WHERE key = 'structured_vlm_v1_qwen3_6_35b';"
-```
-
-- [ ] **Step 7.7: Final validation queries**
-
-After completion, sanity check:
-
-```bash
-# Count of entities in the last 30 days that have the new metadata
-PGPASSWORD=mysecretpassword psql -h localhost -U postgres -d postgres -c "
-  WITH em AS (
-    SELECT e.id, MAX(CASE WHEN m.key='timestamp' THEN m.value END) AS ts
-    FROM entities e JOIN metadata_entries m ON m.entity_id=e.id
-    WHERE m.key='timestamp' GROUP BY e.id
-  )
-  SELECT count(*) FROM em
-  JOIN metadata_entries svlm ON svlm.entity_id=em.id AND svlm.key='structured_vlm_v1_qwen3_6_35b'
-  WHERE em.ts >= '20260322-160000';
-"
-```
-
-Expected: matches the count from Step 6.7's `--dry-run` (within a small margin
-for failed individual VLM calls).
-
-- [ ] **Step 7.8: Spot-check workspace fill rate**
-
-Run a quick aggregation to confirm spec-§10.2 evaluation gate ("workspace
-fill-rate ~70%+"):
-
-```bash
-PGPASSWORD=mysecretpassword psql -h localhost -U postgres -d postgres -c "
+PGPASSWORD=... psql -h localhost -U postgres -d postgres -c "
   SELECT
     count(*) FILTER (WHERE value::jsonb->'primary'->>'workspace' IS NOT NULL) AS with_ws,
     count(*) AS total
   FROM metadata_entries
-  WHERE key='structured_vlm_v1_qwen3_6_35b';
+  WHERE key LIKE 'structured_vlm_v1_%';
 "
 ```
 
-Expected: `with_ws / total >= 0.5` (50%+ acceptable for a real-world full
-day, vs the 75% on the curated POC sample). If significantly lower than 50%,
-investigate prompt drift or model issues before declaring success.
-
-- [ ] **Step 7.9: Document the run**
-
-Append to `docs/superpowers/experiments/backfill_log.md` (create if absent):
-
-```markdown
-# Backfill log
-
-## 2026-04-XX: structured_vlm_v1_qwen3_6_35b — last 30 days
-- Entities processed: <count>
-- Workspace fill rate: <pct>
-- Avg time/entity: <sec>
-- Issues found: <none | list>
-```
-
-- [ ] **Step 7.10: Commit any spec/doc updates**
-
-```bash
-git add docs/superpowers/experiments/backfill_log.md
-git commit -m "docs(backfill): record 30-day structured_vlm backfill results"
-```
+If significantly lower than 50%, investigate prompt drift or model issues
+before declaring success.
 
 ---
 
@@ -1701,9 +1402,9 @@ git commit -m "docs(backfill): record 30-day structured_vlm backfill results"
 | §5.2 Versioned prompt asset | Task 5 (prompt_v1.txt + prompt_v1.py) |
 | §5.3 Plugin extractor pattern | Task 5 |
 | §5.4 VLM as visual truth (overrides recorder) | Schema in Task 2; merge logic deferred to Plan 2 (Layer 2 access time) |
-| §10.1 Phase 1 last-30-days backfill | Task 6, Task 7 |
-| §10.2 Evaluation gate | Task 7 (Step 7.8 spot-check) |
-| §10.4 Prompt versioning | Task 5 (`structured_vlm_<version>_<model>` field name) |
+| §10.1 Phase 1 last-30-days backfill | Task 6 (builtin registration), Task 7 (enablement + reprocess via existing pipeline) |
+| §10.2 Evaluation gate | Task 7 (Step 7.6 spot-check) |
+| §10.3 Prompt versioning | Task 5 (`structured_vlm_<version>_<model>` field name) |
 
 **Out of scope for Plan 1** (deferred to later plans, per spec §0):
 - Layer 2 aggregation (TaskSession/AttentionMoment/AttentionTick) — Plan 2
