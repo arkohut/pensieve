@@ -1149,6 +1149,15 @@ def run_server():
     else:
         logging.info("VLM plugin disabled")
 
+    # Only add structured VLM plugin router if enabled
+    if settings.structured_vlm.enabled:
+        from memos.plugins.structured_vlm import main as structured_vlm_main
+        structured_vlm_main.init_plugin(settings.structured_vlm)
+        api_router.include_router(structured_vlm_main.router, prefix="/plugins/structured_vlm")
+        logging.info("structured_vlm plugin initialized and router added")
+    else:
+        logging.info("structured_vlm plugin disabled")
+
     # Only add OCR plugin router if enabled
     if settings.ocr.enabled:
         ocr_main.init_plugin(settings.ocr)

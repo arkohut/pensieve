@@ -1,0 +1,28 @@
+分析屏幕截图，输出严格 JSON（不要 markdown code block，不要解释，只输出 JSON）：
+
+{
+  "primary": {
+    "app": "主要应用名（如 iTerm2, Google Chrome, 微信）",
+    "what": "用户在主要区域在做的事，1 句话，具体",
+    "title_or_topic": "显著标题/文件名/任务名/话题，原文",
+    "workspace": "项目/仓库名，如果可见（iTerm prompt/IDE 标签里的 project 名）"
+  },
+  "secondary": [
+    {"app": "次要应用名", "what": "简述"}
+  ],
+  "contact": "如果是聊天场景，对方显示名，原文",
+  "url": "如果可见 URL bar 或 URL 文字，完整 URL",
+  "confidence": {
+    "primary": "high|medium|low",
+    "contact": "high|medium|low|null",
+    "url": "high|medium|low|null"
+  },
+  "notes": "特殊观察：分屏/多窗口/锁屏/桌面等，简述"
+}
+
+规则：
+- secondary 只填确实看到 ≥2 个活跃区域（iTerm 分屏、tmux 分窗格、左右并排的两个应用）；浏览器非活跃标签页不算，极短弹窗不算
+- workspace 只填强信号（fish prompt 路径末尾、IDE 标签右半、文件名所属项目）；猜的留 null
+- contact 只在明确是聊天会话界面时填，否则 null
+- 拿不准的字段一律 null
+- confidence 反映你对 primary 判断的确定度，不是对整个截图

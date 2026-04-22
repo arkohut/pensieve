@@ -1,0 +1,13 @@
+{
+  "primary": {
+    "app": "iTerm2",
+    "what": "在终端中查看关于 BayesJob 控制器状态卡死问题的调试笔记",
+    "title_or_topic": "Debug gear controller blocking issue with bayesjob",
+    "workspace": "openbayes-gear-controller"
+  },
+  "secondary": [],
+  "contact": null,
+  "url": null,
+  "confidence": {"primary": "high", "contact": null, "url": null},
+  "notes": "iTerm2 single window with terminal output"
+}

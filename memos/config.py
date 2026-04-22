@@ -28,6 +28,33 @@ class VLMSettings(BaseModel):
     enabled: bool = True
 
 
+class StructuredVLMSettings(BaseModel):
+    """Settings for the structured VLM plugin (Layer 1 extractor).
+
+    The prompt is asset-versioned in code (memos/plugins/structured_vlm/prompt_v1.txt).
+    Only the model + endpoint + tuning live here.
+
+    All three of modelname/endpoint/token are empty by default -- the user must
+    supply them in config.yaml. The plugin is also disabled by default
+    (enabled=False), so an unconfigured install is a no-op.
+
+    Example config.yaml entries (pick one):
+      modelname: qwen3.6-35b                                  # local vLLM
+      modelname: moonshotai/kimi-k2.6    max_tokens: 16000    # OpenRouter (reasoning model needs larger budget)
+      modelname: minicpm-v                                    # smaller local model
+    """
+    modelname: str = ""
+    endpoint: str = ""
+    token: SecretStr = SecretStr("")
+    concurrency: int = 4
+    force_jpeg: bool = True
+    # max_tokens must be high enough for reasoning models (e.g., 16000 for Kimi K2.6)
+    max_tokens: int = 2048
+    # Disable thinking mode for vLLM/qwen endpoints; OpenRouter/OpenAI ignore this
+    disable_thinking: bool = True
+    enabled: bool = False  # off by default; user opts in
+
+
 class OCRSettings(BaseModel):
     # will by ignored if use_local is True
     endpoint: str = "http://localhost:5555/predict"
@@ -110,6 +137,7 @@ class Settings(BaseSettings):
 
     # VLM plugin settings
     vlm: VLMSettings = VLMSettings()
+    structured_vlm: StructuredVLMSettings = StructuredVLMSettings()
 
     # OCR plugin settings
     ocr: OCRSettings = OCRSettings()
