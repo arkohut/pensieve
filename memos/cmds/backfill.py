@@ -21,21 +21,17 @@ backfill_app = typer.Typer(help="Backfill commands for derived metadata.")
 
 
 def _open_conn():
-    """Open a psycopg2 connection. Imported lazily so test environments without
-    psycopg2 still load the module."""
+    """Open a psycopg2 connection from the configured database URL.
+
+    psycopg2 accepts full DSN/URL strings natively, so no manual parsing needed.
+    Lazy-imported so tests without psycopg2 still load the module.
+    """
     import psycopg2
-    # Parse the SQLAlchemy URL into psycopg2 args
     url = settings.database_url
+    # psycopg2 accepts postgres:// and postgresql://; normalize the SQLAlchemy variant
     if url.startswith("postgresql://"):
-        url = url[len("postgresql://"):]
-    user_pw, host_db = url.split("@", 1)
-    user, pw = user_pw.split(":", 1)
-    host_port, db = host_db.split("/", 1)
-    if ":" in host_port:
-        host, port = host_port.split(":", 1)
-    else:
-        host, port = host_port, "5432"
-    return psycopg2.connect(host=host, port=port, user=user, password=pw, dbname=db)
+        url = "postgres://" + url[len("postgresql://"):]
+    return psycopg2.connect(url)
 
 
 def list_unprocessed_entity_ids(field: str, utc_start: str, utc_end: str) -> Iterator[int]:
@@ -116,13 +112,19 @@ def cmd_structured_vlm(
     """Run structured_vlm extraction on screenshots from the last N local days."""
     from datetime import datetime, timedelta
     offset = LocalOffset.from_system()
+    modelname = settings.structured_vlm.modelname
+    if not modelname:
+        raise typer.BadParameter(
+            "structured_vlm.modelname is not configured. Set it in ~/.memos/config.yaml "
+            "(e.g., modelname: qwen3.6-35b)."
+        )
     today_local = datetime.now()
     end_local = today_local.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
     start_local = end_local - timedelta(days=days)
     utc_start, _ = local_date_to_utc_range(start_local.strftime("%Y%m%d"), offset)
     _, utc_end = local_date_to_utc_range((end_local - timedelta(days=1)).strftime("%Y%m%d"), offset)
 
-    field = svlm_field_name(modelname=settings.structured_vlm.modelname)
+    field = svlm_field_name(modelname=modelname)
     base = base_url or settings.server_endpoint
 
     print(f"Backfill: field={field}, UTC range [{utc_start}, {utc_end}), base_url={base}")
