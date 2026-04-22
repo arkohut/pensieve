@@ -19,6 +19,7 @@ import platform
 
 from .cmds.plugin import plugin_app
 from .cmds.library import lib_app
+from .cmds.backfill import backfill_app
 
 import psutil
 import signal
@@ -76,6 +77,7 @@ app = typer.Typer(context_settings={"help_option_names": ["-h", "--help"]})
 
 app.add_typer(plugin_app, name="plugin")
 app.add_typer(lib_app, name="lib", callback=callback)
+app.add_typer(backfill_app, name="backfill")
 
 
 @app.command()
