@@ -23,10 +23,15 @@ async def test_list_unprocessed_filters_already_processed():
             utc_start="20260321-160000", utc_end="20260420-160000",
         ))
     assert ids == [2]
-    # Verify the SQL filtered correctly (loose check on text)
+    # Verify the SQL filtered correctly
     sql = fake_cur.execute.call_args[0][0]
-    assert "structured_vlm_v1_qwen3_6_35b" in sql or "%s" in sql
+    assert "metadata_entries" in sql.lower()
     assert "NOT EXISTS" in sql.upper() or "LEFT JOIN" in sql.upper()
+    # Field name appears in the params, not the SQL text
+    params = fake_cur.execute.call_args[0][1]
+    assert "structured_vlm_v1_qwen3_6_35b" in params
+    assert "20260321-160000" in params
+    assert "20260420-160000" in params
 
 
 @pytest.mark.asyncio
