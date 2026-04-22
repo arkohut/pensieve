@@ -11,6 +11,8 @@ from memos.utils import write_image_metadata
 import ctypes
 from mss import mss
 from memos.config import settings
+from memos.worklog import write_entry as worklog_write_entry
+from memos.tz_utils import LocalOffset, local_ts_to_utc
 import datetime
 
 # Import platform-specific modules
@@ -279,40 +281,43 @@ def take_screenshot(
     os.makedirs(os.path.join(base_dir, date), exist_ok=True)
     worklog_path = os.path.join(base_dir, date, "worklog")
 
-    with open(worklog_path, "a") as worklog:
-        if platform.system() == "Darwin":
-            screenshot_generator = take_screenshot_macos(
-                base_dir,
-                previous_hashes,
-                threshold,
-                screen_sequences,
-                date,
-                timestamp,
-                app_name,
-                window_title,
-                url,
-            )
-        elif platform.system() == "Windows":
-            screenshot_generator = take_screenshot_windows(
-                base_dir,
-                previous_hashes,
-                threshold,
-                screen_sequences,
-                date,
-                timestamp,
-                app_name,
-                window_title,
-            )
-        else:
-            raise NotImplementedError(
-                f"Unsupported operating system: {platform.system()}"
-            )
+    offset = LocalOffset.from_system()
+    utc_ts = local_ts_to_utc(timestamp, offset)
 
-        screenshots = []
-        for screen_name, screenshot_file, status in screenshot_generator:
-            worklog.write(f"{timestamp} - {screen_name} - {status}\n")
-            if screenshot_file:
-                screenshots.append(screenshot_file)
+    if platform.system() == "Darwin":
+        screenshot_generator = take_screenshot_macos(
+            base_dir,
+            previous_hashes,
+            threshold,
+            screen_sequences,
+            date,
+            timestamp,
+            app_name,
+            window_title,
+            url,
+        )
+    elif platform.system() == "Windows":
+        screenshot_generator = take_screenshot_windows(
+            base_dir,
+            previous_hashes,
+            threshold,
+            screen_sequences,
+            date,
+            timestamp,
+            app_name,
+            window_title,
+        )
+    else:
+        raise NotImplementedError(
+            f"Unsupported operating system: {platform.system()}"
+        )
+
+    screenshots = []
+    for screen_name, screenshot_file, status in screenshot_generator:
+        saved = (status == "Saved")
+        worklog_write_entry(worklog_path, utc_ts, screen_name, saved, offset)
+        if screenshot_file:
+            screenshots.append(screenshot_file)
 
     return screenshots
 
