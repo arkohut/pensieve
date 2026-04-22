@@ -24,29 +24,11 @@ class VLMSettings(BaseModel):
     force_jpeg: bool = True
     # prompt for vlm to extract caption
     prompt: str = "请帮描述这个图片中的内容，包括画面格局、出现的视觉元素等"
-    # whether to enable the VLM plugin
-    enabled: bool = True
-
-
-class StructuredVLMSettings(BaseModel):
-    """Settings for the structured VLM plugin (Layer 1 extractor).
-
-    The prompt is asset-versioned in code (memos/plugins/structured_vlm/prompt_v1.txt).
-    Only the model + endpoint + tuning live here.
-
-    Defaults mirror VLMSettings — the typical setup has ollama (or compatible)
-    running on localhost:11434 with minicpm-v. Users override modelname/endpoint
-    in config.yaml to point at a different VLM.
-    """
-    modelname: str = "minicpm-v"
-    endpoint: str = "http://localhost:11434"
-    token: SecretStr = SecretStr("")
-    concurrency: int = 8
-    force_jpeg: bool = True
-    # max_tokens must be high enough for reasoning models (e.g., 16000 for Kimi K2.6)
+    # Used by structured_vlm plugin. Existing VLM plugin ignores these.
+    # For reasoning models (Kimi K2.6 etc), bump max_tokens to ~16000.
     max_tokens: int = 2048
-    # Disable thinking mode for vLLM/qwen endpoints; OpenRouter/OpenAI ignore this
     disable_thinking: bool = True
+    # whether to enable the VLM plugin
     enabled: bool = True
 
 
@@ -132,7 +114,6 @@ class Settings(BaseSettings):
 
     # VLM plugin settings
     vlm: VLMSettings = VLMSettings()
-    structured_vlm: StructuredVLMSettings = StructuredVLMSettings()
 
     # OCR plugin settings
     ocr: OCRSettings = OCRSettings()
