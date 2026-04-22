@@ -48,6 +48,11 @@ def initialize_default_plugins(session, settings):
         "builtin_ocr": PluginModel(
             name="builtin_ocr", description="OCR Plugin", webhook_url="/api/plugins/ocr"
         ),
+        "builtin_structured_vlm": PluginModel(
+            name="builtin_structured_vlm",
+            description="Structured VLM Plugin (Layer 1 extractor, JSON output)",
+            webhook_url="/api/plugins/structured_vlm",
+        ),
     }
     
     # Only initialize plugins that are in the default_plugins configuration
