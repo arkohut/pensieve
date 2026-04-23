@@ -29,6 +29,33 @@ OC_TOPIC_RE = re.compile(r"^OC\s*\|\s*(.+)$")
 # Bare CLI tool names that indicate idle state (no task identity available).
 TUI_IDLE_TITLES = {"Claude Code", "claude", "codex", "OpenCode", "tig", "tmux"}
 
+# Claude Code occasionally echoes its own internal message envelopes (system
+# reminders, slash-command metadata, hook-injected text, etc.) into the TUI,
+# which can then leak into iTerm2's window title. When spinner-stripping leaves
+# one of these markers as the "task title", treat the tick as no-identity so
+# it does NOT create a junk TaskSession in Layer 2.
+#
+# Matched case-insensitively against the *start* of the cleaned title.
+POLLUTION_PREFIXES = (
+    "<local-command-caveat>",
+    "<system-reminder>",
+    "<command-name>",
+    "<command-message>",
+    "<command-args>",
+    "<user-prompt-submit-hook>",
+    "<stdout>",
+    "<stderr>",
+    "caveat: the messages below",
+)
+
+
+def is_polluted_title(cleaned: str) -> bool:
+    """True when `cleaned` (spinner-stripped) starts with a known CC system-message marker."""
+    if not cleaned:
+        return False
+    lead = cleaned.lstrip().lower()
+    return any(lead.startswith(p) for p in POLLUTION_PREFIXES)
+
 
 def strip_spinner(s: str) -> str:
     """Remove leading spinner characters + whitespace. Deterministic.
@@ -55,6 +82,11 @@ def extract(active_app: Optional[str], active_window: Optional[str]) -> Extracte
 
     # Bare tool name (idle) → no identity
     if cleaned in TUI_IDLE_TITLES:
+        return _minimal(active_app)
+
+    # CC system-message pollution → no identity (would otherwise create a
+    # junk TaskSession named e.g. "<local-command-caveat>Caveat:...")
+    if is_polluted_title(cleaned):
         return _minimal(active_app)
 
     # OpenCode: `OC | <topic>`
