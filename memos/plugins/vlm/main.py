@@ -203,10 +203,11 @@ async def vlm(entity: Entity, request: Request):
 
     vlm_result = await predict(endpoint, modelname, entity.filepath, token=token)
 
-    logger.info(f"VLM result: {vlm_result[:100]}...")
     if not vlm_result:
         logger.info(f"No VLM result found for file: {entity.filepath}")
         return {metadata_field_name: "{}"}
+
+    logger.info(f"VLM result: {vlm_result[:100]}...")
 
     async with httpx.AsyncClient() as client:
         response = await client.patch(
