@@ -12,11 +12,6 @@
   ],
   "contact": "如果是聊天场景，对方显示名，原文",
   "url": "如果可见 URL bar 或 URL 文字，完整 URL",
-  "confidence": {
-    "primary": "high|medium|low",
-    "contact": "high|medium|low|null",
-    "url": "high|medium|low|null"
-  },
   "notes": "特殊观察：分屏/多窗口/锁屏/桌面等，简述"
 }
 
@@ -25,4 +20,3 @@
 - workspace 只填强信号（fish prompt 路径末尾、IDE 标签右半、文件名所属项目）；猜的留 null
 - contact 只在明确是聊天会话界面时填，否则 null
 - 拿不准的字段一律 null
-- confidence 反映你对 primary 判断的确定度，不是对整个截图

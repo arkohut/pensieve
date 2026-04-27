@@ -174,8 +174,10 @@ async def handle_entity(entity: Entity, request: Request):
         )
 
     if result is None:
-        logger.info(f"No structured VLM result for {entity.filepath}")
-        return {field: ""}
+        raise HTTPException(
+            status_code=502,
+            detail=f"structured VLM call or parse failed for {entity.filepath}",
+        )
 
     value = result.model_dump_json()
     patch_url = f"{location_url}/metadata"
