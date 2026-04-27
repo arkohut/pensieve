@@ -1,9 +1,7 @@
 import json
-import pytest
-from pydantic import ValidationError
 
 from memos.extractors.schema import (
-    ExtractedFields, PrimaryRegion, SecondaryRegion, Confidence
+    ExtractedFields, PrimaryRegion, SecondaryRegion,
 )
 
 
@@ -37,7 +35,6 @@ def test_full_extraction_round_trip():
         secondary=[SecondaryRegion(app="iTerm2", what="git diff in adjacent pane")],
         contact=None,
         url="http://localhost:5174/",
-        confidence=Confidence(primary="high", contact=None, url="high"),
         notes="iTerm2 split-pane: top pane Claude Code, bottom pane shell",
     )
     j = e.model_dump_json()
@@ -67,7 +64,6 @@ def test_parse_from_vlm_json_response():
         "secondary": [],
         "contact": None,
         "url": None,
-        "confidence": {"primary": "high", "contact": None, "url": None},
         "notes": "macOS, iTerm2 single window",
     })
     parsed = json.loads(raw)
@@ -76,11 +72,13 @@ def test_parse_from_vlm_json_response():
     assert e.primary.tool is None  # VLM didn't specify; leave null
 
 
-def test_confidence_value_constraints():
-    """Confidence values must be in {high, medium, low, null}."""
-    Confidence(primary="high")  # ok
-    Confidence(primary="medium")  # ok
-    Confidence(primary="low")  # ok
-    Confidence(primary=None)  # ok
-    with pytest.raises(ValidationError):
-        Confidence(primary="extreme")  # not in enum
+def test_legacy_confidence_field_is_ignored():
+    """Old VLM responses still include `confidence`; pydantic should ignore extras."""
+    raw = json.dumps({
+        "primary": {"app": "Google Chrome"},
+        "confidence": {"primary": "high", "contact": "null", "url": "high"},
+    })
+    parsed = json.loads(raw)
+    e = ExtractedFields(extractor="structured_vlm_v1_qwen36_35b", **parsed)
+    assert e.primary.app == "Google Chrome"
+    assert not hasattr(e, "confidence")
