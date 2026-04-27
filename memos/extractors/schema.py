@@ -5,7 +5,10 @@ from pydantic import BaseModel, Field
 
 
 class PrimaryRegion(BaseModel):
-    app: str
+    # app is Optional: lock screens, VDI welcome screens, and other "no visible
+    # app" surfaces should be representable. Downstream falls back to the
+    # recorder's active_app or treats the tick as idle.
+    app: Optional[str] = None
     tool: Optional[str] = None
     what: Optional[str] = None
     title_or_topic: Optional[str] = None
