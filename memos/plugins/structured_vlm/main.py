@@ -25,6 +25,16 @@ from memos.schemas import Entity, MetadataType
 logger = logging.getLogger(__name__)
 PLUGIN_NAME = "structured_vlm"
 
+# Failure categories for log triage. Server-side (transient): http_5xx, network.
+# Client/data-side (terminal): image_load, http_4xx, empty, json_parse, schema.
+FAIL_IMAGE_LOAD = "image_load"
+FAIL_HTTP_4XX = "http_4xx"
+FAIL_HTTP_5XX = "http_5xx"
+FAIL_NETWORK = "network"
+FAIL_EMPTY = "empty"
+FAIL_JSON_PARSE = "json_parse"
+FAIL_SCHEMA = "schema_validation"
+
 router = APIRouter(tags=[PLUGIN_NAME], responses={404: {"description": "Not found"}})
 
 # Module-level config, populated by init_plugin()
@@ -84,15 +94,25 @@ def _parse_json_loose(text: str) -> Optional[dict]:
     return None
 
 
-def parse_vlm_response_to_extracted(raw_text: str, modelname: str) -> Optional[ExtractedFields]:
+def parse_vlm_response_to_extracted(
+    raw_text: str, modelname: str, log_ctx: str = "",
+) -> Optional[ExtractedFields]:
     """Parse the VLM's text response into an ExtractedFields. Returns None if unrecoverable."""
+    if not raw_text or not raw_text.strip():
+        logger.warning(f"VLM fail category={FAIL_EMPTY} {log_ctx}")
+        return None
     parsed = _parse_json_loose(raw_text)
-    if not parsed:
+    if parsed is None:
+        logger.warning(
+            f"VLM fail category={FAIL_JSON_PARSE} raw={raw_text[:200]!r} {log_ctx}"
+        )
         return None
     try:
         return ExtractedFields(extractor=metadata_field_name(modelname), **parsed)
     except Exception as e:
-        logger.warning(f"VLM JSON does not match ExtractedFields schema: {e}; raw: {raw_text[:200]}")
+        logger.warning(
+            f"VLM fail category={FAIL_SCHEMA} err={e} raw={raw_text[:200]!r} {log_ctx}"
+        )
         return None
 
 
@@ -100,11 +120,25 @@ async def predict_structured(
     endpoint: str, modelname: str, img_path: str,
     token: Optional[object] = None, max_tokens: int = 2048,
     disable_thinking: bool = True,
+    entity_id: Optional[int] = None,
+    max_retries: int = 3,
+    retry_base_delay: float = 0.5,
 ) -> Optional[ExtractedFields]:
-    """Call VLM endpoint, return ExtractedFields or None on failure."""
+    """Call VLM endpoint, return ExtractedFields or None on failure.
+
+    Retries on transient errors only (5xx and network/timeout). 4xx, image-load,
+    and parse failures are terminal and return None immediately. Every failure
+    path emits one structured warning with `category=...` so log triage can
+    distinguish server-side (http_5xx, network) from data/client-side (image_load,
+    http_4xx, empty, json_parse, schema_validation) issues.
+    """
+    log_ctx = f"entity_id={entity_id} path={img_path}"
+
     img_b64 = _image_to_base64(img_path)
     if not img_b64:
+        logger.warning(f"VLM fail category={FAIL_IMAGE_LOAD} {log_ctx}")
         return None
+
     request_data = {
         "model": modelname,
         "messages": [{
@@ -123,25 +157,65 @@ async def predict_structured(
         request_data["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
     headers = {"Content-Type": "application/json"}
     if token is not None:
-        # Token may be a SecretStr (pydantic) or plain str
         token_str = token.get_secret_value() if hasattr(token, "get_secret_value") else str(token)
         if token_str:
             headers["Authorization"] = f"Bearer {token_str}"
 
-    async with httpx.AsyncClient() as client:
+    url = f"{endpoint.rstrip('/')}/v1/chat/completions"
+    raw_text: Optional[str] = None
+    for attempt in range(max_retries):
         try:
-            r = await client.post(
-                f"{endpoint.rstrip('/')}/v1/chat/completions",
-                headers=headers, json=request_data, timeout=180.0,
-            )
-            r.raise_for_status()
-            data = r.json()
-            raw_text = data["choices"][0]["message"]["content"]
-        except Exception as e:
-            logger.warning(f"VLM call failed for {img_path}: {e}")
+            async with httpx.AsyncClient() as client:
+                r = await client.post(url, headers=headers, json=request_data, timeout=180.0)
+        except (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError) as e:
+            if attempt < max_retries - 1:
+                delay = retry_base_delay * (2 ** attempt)
+                logger.info(
+                    f"VLM transient network error, retry {attempt+1}/{max_retries} "
+                    f"after {delay:.1f}s err={e} {log_ctx}"
+                )
+                await asyncio.sleep(delay)
+                continue
+            logger.warning(f"VLM fail category={FAIL_NETWORK} err={e} {log_ctx}")
             return None
 
-    return parse_vlm_response_to_extracted(raw_text, modelname)
+        if r.status_code == 200:
+            try:
+                data = r.json()
+                raw_text = data["choices"][0]["message"]["content"]
+            except Exception as e:
+                logger.warning(
+                    f"VLM fail category={FAIL_EMPTY} err=malformed_envelope:{e} "
+                    f"body={r.text[:200]!r} {log_ctx}"
+                )
+                return None
+            break
+        if 500 <= r.status_code < 600:
+            if attempt < max_retries - 1:
+                delay = retry_base_delay * (2 ** attempt)
+                logger.info(
+                    f"VLM transient {r.status_code}, retry {attempt+1}/{max_retries} "
+                    f"after {delay:.1f}s body={r.text[:200]!r} {log_ctx}"
+                )
+                await asyncio.sleep(delay)
+                continue
+            logger.warning(
+                f"VLM fail category={FAIL_HTTP_5XX} status={r.status_code} "
+                f"body={r.text[:200]!r} {log_ctx}"
+            )
+            return None
+        # 4xx is terminal — no point retrying auth / payload errors.
+        logger.warning(
+            f"VLM fail category={FAIL_HTTP_4XX} status={r.status_code} "
+            f"body={r.text[:200]!r} {log_ctx}"
+        )
+        return None
+
+    if raw_text is None:
+        logger.warning(f"VLM fail category={FAIL_NETWORK} err=exhausted_retries {log_ctx}")
+        return None
+
+    return parse_vlm_response_to_extracted(raw_text, modelname, log_ctx=log_ctx)
 
 
 @router.get("/")
@@ -171,12 +245,15 @@ async def handle_entity(entity: Entity, request: Request):
             endpoint=endpoint, modelname=modelname,
             img_path=entity.filepath, token=token,
             max_tokens=max_tokens, disable_thinking=disable_thinking,
+            entity_id=entity.id,
         )
 
     if result is None:
+        # Failure category was already logged by predict_structured. Tail the
+        # plugin log (`grep "VLM fail category="`) to triage server vs. client.
         raise HTTPException(
             status_code=502,
-            detail=f"structured VLM call or parse failed for {entity.filepath}",
+            detail=f"structured VLM failed for entity_id={entity.id} (see plugin log)",
         )
 
     value = result.model_dump_json()
