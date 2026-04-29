@@ -29,6 +29,7 @@ semaphore = None
 use_local = False
 ocr = None
 thread_pool = None
+languages = ["zh-Hans", "en-US"]
 
 # Configure logger
 logging.basicConfig(level=logging.INFO)
@@ -116,7 +117,7 @@ def predict_local(img_path):
         
         if platform.system() == 'Darwin' and not force_rapidocr:
             from ocrmac import ocrmac
-            ocr_result = ocrmac.OCR(img_path, language_preference=['zh-Hans']).recognize(px=True)
+            ocr_result = ocrmac.OCR(img_path, language_preference=languages).recognize(px=True)
             return convert_ocr_data(ocr_result)
         else:
             with Image.open(img_path) as img:
@@ -271,11 +272,12 @@ async def ocr(entity: Entity, request: Request):
 
 
 def init_plugin(config):
-    global endpoint, token, concurrency, semaphore, use_local, ocr, thread_pool
+    global endpoint, token, concurrency, semaphore, use_local, ocr, thread_pool, languages
     endpoint = config.endpoint
     token = config.token
     concurrency = config.concurrency
     use_local = config.use_local
+    languages = list(getattr(config, "languages", None) or ["zh-Hans", "en-US"])
     semaphore = asyncio.Semaphore(concurrency)
     
     if use_local:
@@ -297,3 +299,5 @@ def init_plugin(config):
     logger.info(f"Use local: {use_local}")
     if use_local:
         logger.info(f"OCR library: {'rapidocr_openvino' if platform.system() == 'Windows' and 'Intel' in cpuinfo.get_cpu_info()['brand_raw'] else 'rapidocr_onnxruntime'}")
+        if platform.system() == 'Darwin':
+            logger.info(f"Apple Vision languages: {languages}")
