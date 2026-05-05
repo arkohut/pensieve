@@ -13,3 +13,9 @@ db/
 memos/plugins/ocr/temp_ppocr.yaml
 demo/images/
 .env
+
+# OS / IDE / agent metadata
+.DS_Store
+.claude/
+.cursor/
+.opencode/
