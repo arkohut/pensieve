@@ -124,7 +124,7 @@ class Settings(BaseSettings):
     auth_username: str = ""
     auth_password: SecretStr = SecretStr("")
 
-    default_plugins: List[str] = ["builtin_ocr"]
+    default_plugins: List[str] = ["builtin_ocr", "builtin_structured_vlm"]
 
     record_interval: int = 4
 
