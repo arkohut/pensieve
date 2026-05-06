@@ -16,7 +16,10 @@
 }
 
 规则：
+- 顶层结构必须是 `{"primary": {...}, "secondary": [...], "contact": ..., "url": ..., "notes": ...}`。`app`/`what`/`title_or_topic`/`workspace` 必须放在 `primary` 对象里，不要扁平到顶层
 - secondary 只填确实看到 ≥2 个活跃区域（iTerm 分屏、tmux 分窗格、左右并排的两个应用）；浏览器非活跃标签页不算，极短弹窗不算
 - workspace 只填强信号（fish prompt 路径末尾、IDE 标签右半、文件名所属项目）；猜的留 null
 - contact 只在明确是聊天会话界面时填，否则 null
+- url 字段最多 200 字符，过长就只保留 `<scheme>://<host><path>` 部分，把 query string 砍掉。绝对不要重复同一段字符填充长度
+- 任何字段里不要把同一个 20 字符以上的子串连续重复 3 次以上 —— 那是模型死循环，识别到就停下，该字段写 null
 - 拿不准的字段一律 null
