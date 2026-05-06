@@ -25,8 +25,11 @@ class VLMSettings(BaseModel):
     # prompt for vlm to extract caption
     prompt: str = "请帮描述这个图片中的内容，包括画面格局、出现的视觉元素等"
     # Used by structured_vlm plugin. Existing VLM plugin ignores these.
-    # For reasoning models (Kimi K2.6 etc), bump max_tokens to ~16000.
-    max_tokens: int = 2048
+    # 4096 is enough for normal screenshots; bump to ~16000 only for reasoning
+    # models (Kimi K2.6 etc). 2048 was too tight — pathological URLs (e.g.
+    # Google SERP gs_lcrp) cause repetitive token loops that exhaust the
+    # budget and truncate the JSON output.
+    max_tokens: int = 4096
     disable_thinking: bool = True
     # whether to enable the VLM plugin
     enabled: bool = True
