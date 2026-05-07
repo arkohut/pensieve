@@ -42,6 +42,11 @@ class OCRSettings(BaseModel):
     concurrency: int = 8
     use_local: bool = True
     force_jpeg: bool = False
+    # Apple Vision language preference (macOS only, used when use_local=True).
+    # First language has the highest decoding weight. Default mixes Chinese and
+    # English so isolated Latin letters are not misread as digits in Chinese
+    # contexts (O→0, I→1, S→5, etc).
+    languages: List[str] = ["zh-Hans", "en-US"]
     # whether to enable the OCR plugin
     enabled: bool = True
 
