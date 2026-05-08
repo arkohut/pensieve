@@ -4,6 +4,7 @@ import uvicorn
 import mimetypes
 import time
 import threading
+import concurrent.futures
 import psutil
 from datetime import datetime, timedelta
 
@@ -934,25 +935,46 @@ async def search_entities_v2(
             )
             stats = {}
         else:
-            # Use search provider for both search and stats
-            entity_ids = search_provider.hybrid_search(
-                query=q,
-                db=db,
-                limit=limit,
-                library_ids=library_ids,
-                start=start,
-                end=end,
-                app_names=app_name_list,
-            )
+            # hybrid_search and count_full_text_matches are independent — run
+            # them in parallel so total wall time is max(search, count) rather
+            # than the sum. Each worker needs its own DB session because
+            # SQLAlchemy sync sessions are not thread-safe.
+            def _run_hybrid_search():
+                worker_db = SessionLocal()
+                try:
+                    return search_provider.hybrid_search(
+                        query=q,
+                        db=worker_db,
+                        limit=limit,
+                        library_ids=library_ids,
+                        start=start,
+                        end=end,
+                        app_names=app_name_list,
+                    )
+                finally:
+                    worker_db.close()
+
+            def _run_count():
+                worker_db = SessionLocal()
+                try:
+                    return search_provider.count_full_text_matches(
+                        query=q,
+                        db=worker_db,
+                        library_ids=library_ids,
+                        start=start,
+                        end=end,
+                        app_names=app_name_list,
+                    )
+                finally:
+                    worker_db.close()
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
+                f_search = ex.submit(_run_hybrid_search)
+                f_count = ex.submit(_run_count)
+                entity_ids = f_search.result()
+                total_matches = f_count.result()
+
             entities = crud.find_entities_by_ids(entity_ids, db)
-            total_matches = search_provider.count_full_text_matches(
-                query=q,
-                db=db,
-                library_ids=library_ids,
-                start=start,
-                end=end,
-                app_names=app_name_list,
-            )
             stats = (
                 search_provider.get_search_stats(
                     query=q,
