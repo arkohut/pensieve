@@ -498,6 +498,59 @@ class PostgreSQLSearchProvider(SearchProvider):
         result = db.execute(sql, params).fetchall()
         return [row[0] for row in result]
 
+    def count_full_text_matches(
+        self,
+        query: str,
+        db: Session,
+        library_ids: Optional[List[int]] = None,
+        start: Optional[int] = None,
+        end: Optional[int] = None,
+        app_names: Optional[List[str]] = None,
+    ) -> int:
+        base_sql = """
+        SELECT COUNT(*)
+        FROM entities_fts f
+        JOIN entities e ON e.id = f.id
+        WHERE f.search_vector @@ websearch_to_tsquery('simple', :query)
+        AND e.file_type_group = 'image'
+        """
+
+        where_clauses = []
+        if library_ids:
+            where_clauses.append("e.library_id = ANY(:library_ids)")
+
+        if start is not None and end is not None:
+            where_clauses.append(
+                "EXTRACT(EPOCH FROM e.file_created_at) BETWEEN :start AND :end"
+            )
+
+        if app_names:
+            where_clauses.append(
+                """
+                EXISTS (
+                    SELECT 1 FROM metadata_entries me
+                    WHERE me.entity_id = e.id
+                    AND me.key = 'active_app'
+                    AND me.value = ANY(:app_names)
+                )
+            """
+            )
+
+        if where_clauses:
+            base_sql += " AND " + " AND ".join(where_clauses)
+
+        params = {"query": query}
+        if library_ids:
+            params["library_ids"] = library_ids
+        if start is not None and end is not None:
+            params["start"] = start
+            params["end"] = end
+        if app_names:
+            params["app_names"] = app_names
+
+        result = db.execute(text(base_sql), params).scalar()
+        return int(result or 0)
+
     def vector_search(
         self,
         embeddings: List[float],
