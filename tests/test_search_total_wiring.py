@@ -5,7 +5,12 @@ crud.count_entities with collection scope only (drops q/start/end/app_names).
 Uses FastAPI TestClient with a fake search provider — no DB needed."""
 from fastapi.testclient import TestClient
 
+import memos.server as server_mod
 from memos.server import app
+
+
+def _reset_collection_cache():
+    server_mod._collection_size_cache.clear()
 
 
 class FakeProvider:
@@ -38,13 +43,13 @@ class FakeProvider:
 
 
 def test_found_reflects_total_matches_out_of_reflects_collection(monkeypatch):
+    _reset_collection_cache()
     fake = FakeProvider()
     fake.canned_ids = [1, 2, 3]      # only 3 returned
     fake.canned_total = 847          # but 847 actually match the keyword
 
     monkeypatch.setattr(app.state, "search_provider", fake)
 
-    import memos.server as server_mod
     monkeypatch.setattr(server_mod.crud, "find_entities_by_ids", lambda ids, db: [])
 
     # count_entities is called for collection_size (out_of). Record args to verify
@@ -84,11 +89,11 @@ def test_found_reflects_total_matches_out_of_reflects_collection(monkeypatch):
 def test_empty_query_uses_count_entities_for_both_fields(monkeypatch):
     """When q='', server uses crud.count_entities twice:
     - once with filters → found
-    - once without filters → out_of"""
+    - once without filters → out_of (via cache helper)"""
+    _reset_collection_cache()
     fake = FakeProvider()
     monkeypatch.setattr(app.state, "search_provider", fake)
 
-    import memos.server as server_mod
     monkeypatch.setattr(server_mod.crud, "list_entities", lambda **kw: [])
 
     # Two distinct return values keyed by whether time filters are present
@@ -116,3 +121,66 @@ def test_empty_query_uses_count_entities_for_both_fields(monkeypatch):
     assert body["out_of"] == 999999
     # count_full_text_matches must NOT be called for empty q
     assert fake.last_count_args is None
+
+
+def test_collection_size_is_cached_across_requests(monkeypatch):
+    """The collection-size COUNT(*) is expensive on multi-million-row tables.
+    Within the TTL, repeated /api/search requests must reuse the cached value."""
+    _reset_collection_cache()
+    fake = FakeProvider()
+    fake.canned_total = 5
+    monkeypatch.setattr(app.state, "search_provider", fake)
+    monkeypatch.setattr(server_mod.crud, "find_entities_by_ids", lambda ids, db: [])
+
+    # Track every call to crud.count_entities — without the cache, each request
+    # would invoke it once for out_of (q!=''); we expect a single invocation
+    # across many requests.
+    call_count = {"n": 0}
+
+    def fake_count(db, library_ids=None, start=None, end=None):
+        call_count["n"] += 1
+        return 1_000_000
+
+    monkeypatch.setattr(server_mod.crud, "count_entities", fake_count)
+
+    client = TestClient(app)
+    for _ in range(5):
+        resp = client.get("/api/search", params={"q": "x", "limit": 1})
+        assert resp.status_code == 200
+        assert resp.json()["out_of"] == 1_000_000
+
+    assert call_count["n"] == 1, f"expected cache to coalesce 5 requests into 1 count, got {call_count['n']}"
+
+
+def test_collection_size_cache_keys_by_library_ids(monkeypatch):
+    """Different library_ids must not share the cache."""
+    _reset_collection_cache()
+    fake = FakeProvider()
+    fake.canned_total = 5
+    monkeypatch.setattr(app.state, "search_provider", fake)
+    monkeypatch.setattr(server_mod.crud, "find_entities_by_ids", lambda ids, db: [])
+
+    seen_keys = []
+
+    def fake_count(db, library_ids=None, start=None, end=None):
+        key = tuple(sorted(library_ids)) if library_ids else None
+        seen_keys.append(key)
+        return {None: 999, (1,): 100, (2,): 200}[key]
+
+    monkeypatch.setattr(server_mod.crud, "count_entities", fake_count)
+
+    client = TestClient(app)
+    r1 = client.get("/api/search", params={"q": "x", "limit": 1})
+    r2 = client.get("/api/search", params={"q": "x", "limit": 1, "library_ids": "1"})
+    r3 = client.get("/api/search", params={"q": "x", "limit": 1, "library_ids": "2"})
+    # repeats — should hit cache
+    r1b = client.get("/api/search", params={"q": "x", "limit": 1})
+    r2b = client.get("/api/search", params={"q": "x", "limit": 1, "library_ids": "1"})
+
+    assert r1.json()["out_of"] == 999
+    assert r2.json()["out_of"] == 100
+    assert r3.json()["out_of"] == 200
+    assert r1b.json()["out_of"] == 999
+    assert r2b.json()["out_of"] == 100
+    # 3 distinct keys → 3 DB calls; r1b/r2b are cache hits
+    assert seen_keys == [None, (1,), (2,)], f"unexpected DB calls: {seen_keys}"

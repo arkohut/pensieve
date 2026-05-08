@@ -882,6 +882,27 @@ async def get_entity_thumbnail(
         # Fallback to original file if thumbnail generation fails
         return FileResponse(full_path)
 
+# Collection-size cache for SearchResult.out_of. The COUNT(*) over millions of
+# entities runs on every /api/search request; entities only grow and a stale
+# count is harmless for the "X out of Y" framing, so a short TTL is fine.
+_COLLECTION_SIZE_TTL = 10.0  # seconds
+_collection_size_cache: dict = {}
+_collection_size_lock = threading.Lock()
+
+
+def _get_collection_size(db: Session, library_ids):
+    key = tuple(sorted(library_ids)) if library_ids else None
+    now = time.monotonic()
+    with _collection_size_lock:
+        cached = _collection_size_cache.get(key)
+        if cached and now - cached[1] < _COLLECTION_SIZE_TTL:
+            return cached[0]
+    value = crud.count_entities(db=db, library_ids=library_ids)
+    with _collection_size_lock:
+        _collection_size_cache[key] = (value, now)
+    return value
+
+
 @api_router.get("/search", response_model=SearchResult, tags=["search"])
 async def search_entities_v2(
     q: str,
@@ -948,8 +969,8 @@ async def search_entities_v2(
         # Collection-scope size for out_of: Typesense convention says
         # "matches found out of N total in this collection". Library is the
         # collection scope; q / start / end / app_names are filters and
-        # intentionally dropped here.
-        collection_size = crud.count_entities(db=db, library_ids=library_ids)
+        # intentionally dropped here. Cached briefly — see _get_collection_size.
+        collection_size = _get_collection_size(db, library_ids)
 
         # Convert Entity list to SearchHit list
         hits = []
