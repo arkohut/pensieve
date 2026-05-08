@@ -1008,6 +1008,63 @@ class SqliteSearchProvider(SearchProvider):
 
         return [row[0] for row in result]
 
+    def count_full_text_matches(
+        self,
+        query: str,
+        db: Session,
+        library_ids: Optional[List[int]] = None,
+        start: Optional[int] = None,
+        end: Optional[int] = None,
+        app_names: Optional[List[str]] = None,
+    ) -> int:
+        and_query = self.and_words(query)
+
+        sql_query = """
+        WITH fts_matches AS (
+            SELECT id
+            FROM entities_fts
+            WHERE entities_fts MATCH jieba_query(:query)
+        )
+        SELECT COUNT(*)
+        FROM fts_matches f
+        JOIN entities e ON e.id = f.id
+        WHERE e.file_type_group = 'image'
+        """
+
+        params = {"query": and_query}
+        bindparams = []
+
+        if library_ids:
+            sql_query += " AND e.library_id IN :library_ids"
+            params["library_ids"] = tuple(library_ids)
+            bindparams.append(bindparam("library_ids", expanding=True))
+
+        if start is not None and end is not None:
+            sql_query += (
+                " AND strftime('%s', e.file_created_at, 'utc') BETWEEN :start AND :end"
+            )
+            params["start"] = start
+            params["end"] = end
+
+        if app_names:
+            sql_query += """
+            AND EXISTS (
+                SELECT 1 FROM metadata_entries me
+                WHERE me.entity_id = e.id
+                AND me.key = 'active_app'
+                AND me.value IN :app_names
+            )
+            """
+            params["app_names"] = tuple(app_names)
+            bindparams.append(bindparam("app_names", expanding=True))
+
+        sql = text(sql_query)
+        if bindparams:
+            sql = sql.bindparams(*bindparams)
+
+        result = db.execute(sql, params).scalar()
+        return int(result or 0)
+
     def vector_search(
         self,
         embeddings: List[float],
