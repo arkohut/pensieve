@@ -152,6 +152,54 @@ def test_collection_size_is_cached_across_requests(monkeypatch):
     assert call_count["n"] == 1, f"expected cache to coalesce 5 requests into 1 count, got {call_count['n']}"
 
 
+def test_hybrid_search_and_count_run_in_parallel(monkeypatch):
+    """hybrid_search and count_full_text_matches are independent — they must
+    run concurrently so total wall time is max(search, count), not sum."""
+    import time as _time
+
+    _reset_collection_cache()
+
+    class SlowProvider:
+        def __init__(self):
+            self.search_window = []
+            self.count_window = []
+
+        def hybrid_search(self, query, db, limit, **kw):
+            self.search_window.append(_time.monotonic())
+            _time.sleep(0.3)
+            self.search_window.append(_time.monotonic())
+            return []
+
+        def count_full_text_matches(self, query, db, **kw):
+            self.count_window.append(_time.monotonic())
+            _time.sleep(0.3)
+            self.count_window.append(_time.monotonic())
+            return 0
+
+        def get_search_stats(self, *a, **k):
+            return {}
+
+    fake = SlowProvider()
+    monkeypatch.setattr(app.state, "search_provider", fake)
+    monkeypatch.setattr(server_mod.crud, "find_entities_by_ids", lambda ids, db: [])
+    monkeypatch.setattr(server_mod.crud, "count_entities", lambda **kw: 1)
+
+    client = TestClient(app)
+    t0 = _time.monotonic()
+    resp = client.get("/api/search", params={"q": "x", "limit": 1})
+    elapsed = _time.monotonic() - t0
+
+    assert resp.status_code == 200
+    # Sequential would be ≥ 0.6s; parallel should be ≈ 0.3s. Use 0.5s as a
+    # generous ceiling that still proves we're not running serially.
+    assert elapsed < 0.5, f"expected parallel execution (~0.3s), got {elapsed:.2f}s"
+    # And the windows must overlap (search and count ran simultaneously)
+    s_start, s_end = fake.search_window
+    c_start, c_end = fake.count_window
+    overlap = min(s_end, c_end) - max(s_start, c_start)
+    assert overlap > 0, "search and count windows did not overlap"
+
+
 def test_collection_size_cache_keys_by_library_ids(monkeypatch):
     """Different library_ids must not share the cache."""
     _reset_collection_cache()
