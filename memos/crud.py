@@ -631,6 +631,30 @@ def list_entities(
     return [Entity.model_validate(entity, from_attributes=True) for entity in entities]
 
 
+def count_entities(
+    db: Session,
+    library_ids: Optional[List[int]] = None,
+    start: Optional[int] = None,
+    end: Optional[int] = None,
+) -> int:
+    """Count entities matching the same filters as list_entities, unbounded by limit.
+    Used to populate SearchResult.found when /api/search is called with empty q,
+    and SearchResult.out_of for collection-scope cardinality."""
+    query = db.query(EntityModel).filter(EntityModel.file_type_group == "image")
+
+    if library_ids:
+        query = query.filter(EntityModel.library_id.in_(library_ids))
+
+    if start is not None and end is not None:
+        query = query.filter(
+            func.extract("epoch", EntityModel.file_created_at)
+            .cast(BigInteger)
+            .between(start, end)
+        )
+
+    return query.count()
+
+
 def get_entity_context(
     db: Session, library_id: int, entity_id: int, prev: int = 0, next: int = 0
 ) -> Tuple[List[Entity], List[Entity]]:
