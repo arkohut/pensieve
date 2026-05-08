@@ -66,6 +66,20 @@ class SearchProvider(ABC):
         """Get statistics for search results including date range and app name counts."""
         pass
 
+    @abstractmethod
+    def count_full_text_matches(
+        self,
+        query: str,
+        db: Session,
+        library_ids: Optional[List[int]] = None,
+        start: Optional[int] = None,
+        end: Optional[int] = None,
+        app_names: Optional[List[str]] = None,
+    ) -> int:
+        """Return the total number of full-text matches under the given filters,
+        unbounded by limit. Used to populate SearchResult.found honestly."""
+        pass
+
     def prepare_vec_data(self, entity) -> str:
         """Prepare metadata for vector embedding.
 
