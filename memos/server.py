@@ -908,6 +908,9 @@ async def search_entities_v2(
             entities = crud.list_entities(
                 db=db, limit=limit, library_ids=library_ids, start=start, end=end
             )
+            total_matches = crud.count_entities(
+                db=db, library_ids=library_ids, start=start, end=end
+            )
             stats = {}
         else:
             # Use search provider for both search and stats
@@ -921,6 +924,14 @@ async def search_entities_v2(
                 app_names=app_name_list,
             )
             entities = crud.find_entities_by_ids(entity_ids, db)
+            total_matches = search_provider.count_full_text_matches(
+                query=q,
+                db=db,
+                library_ids=library_ids,
+                start=start,
+                end=end,
+                app_names=app_name_list,
+            )
             stats = (
                 search_provider.get_search_stats(
                     query=q,
@@ -933,6 +944,12 @@ async def search_entities_v2(
                 if use_facet
                 else {}
             )
+
+        # Collection-scope size for out_of: Typesense convention says
+        # "matches found out of N total in this collection". Library is the
+        # collection scope; q / start / end / app_names are filters and
+        # intentionally dropped here.
+        collection_size = crud.count_entities(db=db, library_ids=library_ids)
 
         # Convert Entity list to SearchHit list
         hits = []
@@ -1003,9 +1020,9 @@ async def search_entities_v2(
         # Build SearchResult
         search_result = SearchResult(
             facet_counts=facet_counts,
-            found=len(hits),
+            found=total_matches,
             hits=hits,
-            out_of=len(hits),
+            out_of=collection_size,
             page=1,
             request_params=RequestParams(
                 collection_name="entities",
