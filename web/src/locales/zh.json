@@ -18,6 +18,12 @@
   },
   "searchPlaceholder": "输入关键词搜索或直接按回车键显示最新记录",
   "loading": "加载中...",
+  "search": {
+    "dateBucketsMonth": "日期（按月）",
+    "dateBucketsDay": "日期（按日）",
+    "dateBucketsDayInScope": "{{scope}}（按日）",
+    "clearDate": "清除"
+  },
   "searchSummary": "✨ 找到 {{found}} 个结果 - 在 {{time}} 毫秒内搜索了 {{outOf}} 个记录。",
   "noResults": "未找到结果。",
   "copyright": "© 2024 Arkohut 漆妮妮 保留所有权利",

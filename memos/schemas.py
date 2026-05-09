@@ -257,6 +257,16 @@ class Facet(BaseModel):
     stats: FacetStats
 
 
+class DateRange(BaseModel):
+    earliest: Optional[datetime] = None
+    latest: Optional[datetime] = None
+
+
+class DateBucket(BaseModel):
+    date: str  # 'YYYY-MM' for month unit, 'YYYY-MM-DD' for day unit
+    count: int
+
+
 class TextMatchInfo(BaseModel):
     best_field_score: str
     best_field_weight: int
@@ -297,6 +307,9 @@ class SearchResult(BaseModel):
     request_params: RequestParams
     search_cutoff: bool
     search_time_ms: int
+    date_range: Optional[DateRange] = None
+    date_buckets: Optional[List[DateBucket]] = None
+    bucket_unit: Optional[str] = None  # 'day' | 'month'
 
 
 class EntityContext(BaseModel):

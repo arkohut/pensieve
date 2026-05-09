@@ -42,7 +42,8 @@ Parameters:
 | `app_names` | string | Comma-separated `active_app` values, e.g. `"Google Chrome,iTerm2"`. |
 | `library_ids` | string | Comma-separated; usually leave unset to query all. |
 | `limit` | int 1..200 | Default 48. Use 10–20 for casual queries, 200 only when scanning. |
-| `facet` | bool | Include `{date_range, app_name_counts}` stats. Set true on broad queries to help narrow. |
+| `facet` | bool | Include `facet_counts` (per-app counts), `date_range` (`earliest`/`latest`), and `date_buckets` (count per day or month, see Strategy 5). Set true on broad queries to help narrow. |
+| `date` | string | Bucket filter, `YYYY-MM` or `YYYY-MM-DD`. Intersected with `start`/`end`. |
 
 Returns `SearchResult { hits: [...] }`. Each hit:
 
@@ -118,13 +119,20 @@ jq '.hits[].document | {id, filepath, file_created_at}' /tmp/hits.json
 
 ### Strategy 5 — facet to discover
 
-When `q` returns 0 or hundreds of results, set `facet=true` to see what apps + dates dominate the matches:
+When `q` returns hundreds of results, set `facet=true` to see what apps and time range dominate the matches:
 
 ```bash
-curl -s 'http://127.0.0.1:8839/api/search?q=mastra&facet=true&limit=5' | jq '.facet'
+curl -s 'http://127.0.0.1:8839/api/search?q=mastra&facet=true&limit=5' \
+  | jq '{date_range, bucket_unit, date_buckets: .date_buckets[:10], facet_counts: .facet_counts[0].counts[:10]}'
 ```
 
-Use the returned `app_name_counts` to refine: see top apps, ask user which they meant, or pick the obvious one and re-query with `app_names=`.
+- **`date_range`** (top-level): `{earliest, latest}` ISO timestamps spanning all matched entities under the current filters. Use it to suggest a tighter `start`/`end` window.
+- **`date_buckets`** (top-level): `[{date, count}]` grouped by day or month — the bucket unit is adaptive based on the matched span (≤ 60 days → day, else month). The chosen unit is reported in `bucket_unit`. Single-bucket results are suppressed (returned as empty + `bucket_unit=null`) since they're not useful for narrowing.
+- **`facet_counts[0].counts`**: list of `{value, count}` for `active_app`, sorted desc. Use it to suggest an `app_names=` filter, or to ask the user which app they meant.
+
+All three are populated only when `facet=true` (or when `settings.facet=true` server-side).
+
+To drill into a bucket, re-issue with `?date=YYYY-MM` or `?date=YYYY-MM-DD`. The server intersects `date` with the existing filters; if you also set `start`/`end`, the effective range is the overlap. After drilling into a month, the next response's `date_buckets` automatically adapts to days within that month.
 
 ## Handling large result sets
 

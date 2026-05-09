@@ -18,6 +18,12 @@
   },
   "searchPlaceholder": "Input keyword to search or press Enter to show latest records",
   "loading": "Loading...",
+  "search": {
+    "dateBucketsMonth": "Date (by month)",
+    "dateBucketsDay": "Date (by day)",
+    "dateBucketsDayInScope": "{{scope}} (by day)",
+    "clearDate": "clear"
+  },
   "searchSummary": "✨ {{found}} results found - Searched {{outOf}} recipes in {{time}}ms.",
   "noResults": "No results found.",
   "copyright": "© 2024 Arkohut Qinini. All rights reserved.",
