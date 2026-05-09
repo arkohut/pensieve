@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useCallback, useEffect, useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Settings } from 'lucide-react';
+import { Loader2, Settings } from 'lucide-react';
 import { Button } from '$/components/ui/button';
 import { Input } from '$/components/ui/input';
 import { Skeleton } from '$/components/ui/skeleton';
@@ -47,7 +47,7 @@ function HomePage() {
   const [localQuery, setLocalQuery] = useState(search.q);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [isScrolled, setIsScrolled] = useState(false);
-  const { data, isLoading, isError, error, refetch } = useSearch(search);
+  const { data, isLoading, isError, error, refetch, isFetching } = useSearch(search);
 
   useEffect(() => {
     function handleScroll() {
@@ -61,13 +61,18 @@ function HomePage() {
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
-  const { data: facetData } = useFacets({
+  const { data: facetData, isFetching: isFacetFetching } = useFacets({
     submitted_q: search.submitted_q,
     library_ids: search.library_ids,
     start: search.start,
     end: search.end,
     date: search.date,
   });
+  // Surface in-flight queries on the input (spinner) and on stale results
+  // (faded grid). isLoading covers the very first fetch; isFetching covers
+  // every refetch including the ones that keep prior data via placeholderData.
+  const isQuerying = isFetching || isFacetFetching;
+  const isStale = !isLoading && isFetching && !!data;
   const appFacet = facetData?.facets.find((f) => f.field_name === 'app_names');
   const dateBuckets = facetData?.dateBuckets ?? [];
   const bucketUnit = facetData?.bucketUnit ?? null;
@@ -184,15 +189,24 @@ function HomePage() {
       <header className="mx-auto flex w-full max-w-screen-lg flex-col items-center justify-between px-4 py-4">
         <Logo size={128} withBorder hasGap className="mr-4" />
         <div className="mt-4 flex w-full p-2">
-          <Input
-            type="text"
-            value={localQuery}
-            onChange={handleInputChange}
-            onKeyDown={handleInputKeyDown}
-            placeholder={t('searchPlaceholder')}
-            autoFocus
-            className="w-full border-border text-lg"
-          />
+          <div className="relative w-full">
+            <Input
+              type="text"
+              value={localQuery}
+              onChange={handleInputChange}
+              onKeyDown={handleInputKeyDown}
+              placeholder={t('searchPlaceholder')}
+              autoFocus
+              className="w-full border-border pr-10 text-lg"
+            />
+            {isQuerying && (
+              <Loader2
+                aria-hidden
+                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground"
+                size={18}
+              />
+            )}
+          </div>
         </div>
         <div className="mt-2 flex w-full justify-start gap-2 px-2">{filterButtons}</div>
       </header>
@@ -206,15 +220,24 @@ function HomePage() {
       >
         <div className="mx-auto flex max-w-screen-lg items-center gap-4 px-4 py-2">
           <Logo size={32} withBorder={false} hasGap={false} />
-          <Input
-            type="text"
-            value={localQuery}
-            onChange={handleInputChange}
-            onKeyDown={handleInputKeyDown}
-            placeholder={t('searchPlaceholder')}
-            tabIndex={isScrolled ? 0 : -1}
-            className="w-full border-border"
-          />
+          <div className="relative w-full">
+            <Input
+              type="text"
+              value={localQuery}
+              onChange={handleInputChange}
+              onKeyDown={handleInputKeyDown}
+              placeholder={t('searchPlaceholder')}
+              tabIndex={isScrolled ? 0 : -1}
+              className="w-full border-border pr-10"
+            />
+            {isQuerying && (
+              <Loader2
+                aria-hidden
+                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground"
+                size={16}
+              />
+            )}
+          </div>
           <div className="flex flex-shrink-0 gap-2">{filterButtons}</div>
         </div>
       </div>
@@ -244,22 +267,25 @@ function HomePage() {
             ) : isError ? (
               <ErrorState error={error} onRetry={() => void refetch()} />
             ) : data && data.hits.length > 0 ? (
-              <>
-                {data.search_time_ms > 0 && (
-                  <p className="search-summary mb-4 text-center">
-                    {t('searchSummary', {
-                      found: data.found.toLocaleString(),
-                      outOf: data.out_of.toLocaleString(),
-                      time: data.search_time_ms,
-                    })}
-                  </p>
+              <div
+                className={cn(
+                  'transition-opacity duration-150',
+                  isStale && 'pointer-events-none opacity-60',
                 )}
+                aria-busy={isStale}
+              >
+                <p className="mb-4 text-center text-sm text-muted-foreground">
+                  {t('searchSummary', {
+                    found: data.found.toLocaleString(),
+                    outOf: data.out_of.toLocaleString(),
+                  })}
+                </p>
                 <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
                   {data.hits.map((hit, i) => (
                     <HitCard key={hit.document.id} hit={hit} onClick={() => setSelectedIndex(i)} />
                   ))}
                 </div>
-              </>
+              </div>
             ) : data ? (
               <div className="flex min-h-[200px] items-center justify-center">
                 <p>{t('noResults')}</p>

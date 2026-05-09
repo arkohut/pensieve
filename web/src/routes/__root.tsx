@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Github } from 'lucide-react';
 import { LanguageSwitcher } from '$/components/common/LanguageSwitcher';
 import { ThemeToggle } from '$/components/common/ThemeToggle';
+import { TopProgressBar } from '$/components/common/TopProgressBar';
 
 interface RouterContext {
   queryClient: QueryClient;
@@ -18,6 +19,7 @@ function RootLayout() {
   const { t } = useTranslation();
   return (
     <div className="min-h-screen bg-background">
+      <TopProgressBar />
       <div className="min-h-screen">
         <div className="mx-auto max-w-screen-2xl px-4 sm:px-6 lg:px-8">
           <div className="relative pb-16 pt-0">
