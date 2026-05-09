@@ -277,7 +277,13 @@ function HomePage() {
                 <p className="mb-4 text-center text-sm text-muted-foreground">
                   {data.found > 0
                     ? t('searchSummary', {
-                        found: data.found.toLocaleString(),
+                        found:
+                          // Server caps very broad counts at 10000 (returns 10001
+                          // as the sentinel) to avoid scanning hundreds of
+                          // thousands of FTS rows. Render that as '10,000+'.
+                          data.found > 10000
+                            ? `${(10000).toLocaleString()}+`
+                            : data.found.toLocaleString(),
                         outOf: data.out_of.toLocaleString(),
                       })
                     : t('searchSummarySemantic', {
