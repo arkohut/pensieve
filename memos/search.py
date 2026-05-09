@@ -42,20 +42,55 @@ def _adaptive_bucket_unit(earliest, latest, threshold_days: int = 60) -> Optiona
 COUNT_CAP = 10000  # Stop counting beyond this; UI renders "{COUNT_CAP}+".
 
 
-def _ts_range_filter(start: Optional[int], end: Optional[int], column: str = "file_created_at") -> str:
-    """Build an inline SQL fragment restricting `column` to the [start, end) UNIX-second range.
-    Returns an empty string when both bounds are absent. Inputs are ints validated upstream,
-    so direct interpolation is safe here.
+def _assemble_stats(rows) -> dict:
+    """Fold the kind-tagged UNION ALL rows from get_search_stats SQL into the
+    public stats dict (date_range, app_name_counts, date_buckets, bucket_unit).
+
+    Both PG and SQLite providers emit the same 'range'|'day'|'month'|'app'
+    row shape, so this assembly is shared.
     """
-    from datetime import timezone
-    parts = []
-    if start is not None:
-        s = datetime.fromtimestamp(start, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-        parts.append(f"{column} >= '{s}'")
-    if end is not None:
-        e = datetime.fromtimestamp(end, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-        parts.append(f"{column} < '{e}'")
-    return (" AND " + " AND ".join(parts)) if parts else ""
+    earliest = latest = None
+    total = 0
+    day_rows: List[Tuple[str, int]] = []
+    month_rows: List[Tuple[str, int]] = []
+    app_counts: dict = {}
+
+    for r in rows:
+        if r.kind == "range":
+            earliest, latest, total = r.earliest, r.latest, r.count
+        elif r.kind == "day":
+            day_rows.append((r.label, r.count))
+        elif r.kind == "month":
+            month_rows.append((r.label, r.count))
+        elif r.kind == "app":
+            app_counts[r.label] = r.count
+
+    if not total:
+        return {
+            "date_range": {"earliest": None, "latest": None},
+            "app_name_counts": {},
+            "date_buckets": [],
+            "bucket_unit": None,
+        }
+
+    bucket_unit = _adaptive_bucket_unit(earliest, latest)
+    chosen = day_rows if bucket_unit == "day" else month_rows
+    # Suppress degenerate single-bucket facets — they offer no filtering value.
+    if len(chosen) > 1:
+        chosen.sort(key=lambda x: x[0], reverse=True)
+        date_buckets = [{"date": d, "count": c} for d, c in chosen]
+    else:
+        date_buckets = []
+        bucket_unit = None
+
+    sorted_apps = dict(sorted(app_counts.items(), key=lambda kv: -kv[1]))
+
+    return {
+        "date_range": {"earliest": earliest, "latest": latest},
+        "app_name_counts": sorted_apps,
+        "date_buckets": date_buckets,
+        "bucket_unit": bucket_unit,
+    }
 
 
 class SearchProvider(ABC):
@@ -706,114 +741,78 @@ class PostgreSQLSearchProvider(SearchProvider):
     ) -> dict:
         """Get FTS-only statistics: date range, app counts, date buckets.
 
+        Aggregates over the *full* FTS-matched set (no sampling) so bucket
+        counts match what the user gets when drilling — same semantics as
+        `count_full_text_matches`. A single MATERIALIZED CTE keeps this to one
+        FTS scan; day and month buckets are both computed and the unit picked
+        in Python.
+
         Vector neighbors are intentionally excluded here so facet counts match
-        the keyword-match semantics of `found` (count_full_text_matches). A day
-        bucket showing N means 'N FTS hits in that day' — drilling into it will
-        produce hits consistent with that count, not a separate vector-driven
-        number.
+        the keyword-match semantics of `found`.
         """
-        MAX_SAMPLE_SIZE = 512
+        where_clauses = ["e.file_type_group = 'image'"]
+        params = {"query": query}
 
-        with logfire.span(
-            "full_text_search in stats {query=} {limit=}",
-            query=query,
-            limit=MAX_SAMPLE_SIZE,
-        ):
-            fts_results = self.full_text_search(
-                query,
-                db,
-                limit=MAX_SAMPLE_SIZE,
-                library_ids=library_ids,
-                start=start,
-                end=end,
-                app_names=app_names,
+        if library_ids:
+            where_clauses.append("e.library_id = ANY(:library_ids)")
+            params["library_ids"] = library_ids
+
+        if start is not None and end is not None:
+            where_clauses.append(
+                "EXTRACT(EPOCH FROM e.file_created_at) BETWEEN :start AND :end"
             )
+            params["start"] = start
+            params["end"] = end
 
-        logfire.info(f"fts_results: {len(fts_results)}")
-
-        entity_ids = set(fts_results)
-
-        if not entity_ids:
-            return {
-                "date_range": {"earliest": None, "latest": None},
-                "app_name_counts": {},
-                "date_buckets": [],
-                "bucket_unit": None,
-            }
-
-        entity_ids_str = ",".join(str(id) for id in entity_ids)
-        ts_filter = _ts_range_filter(start, end)
-        if ts_filter:
-            filtered_rows = db.execute(
-                text(f"SELECT id FROM entities WHERE id IN ({entity_ids_str}){ts_filter}")
-            ).all()
-            entity_ids = {r.id for r in filtered_rows}
-            if not entity_ids:
-                return {
-                    "date_range": {"earliest": None, "latest": None},
-                    "app_name_counts": {},
-                    "date_buckets": [],
-                    "bucket_unit": None,
-                }
-            entity_ids_str = ",".join(str(id) for id in entity_ids)
-
-        date_range = db.execute(
-            text(
-                f"""
-                SELECT
-                    MIN(file_created_at) as earliest,
-                    MAX(file_created_at) as latest
-                FROM entities
-                WHERE id IN ({entity_ids_str})
-            """
-            )
-        ).first()
-
-        app_name_counts = db.execute(
-            text(
-                f"""
-                SELECT me.value, COUNT(*) as count
-                FROM metadata_entries me
-                WHERE me.entity_id IN ({entity_ids_str}) and me.key = 'active_app'
-                GROUP BY me.value
-                ORDER BY count DESC
-            """
-            )
-        ).all()
-
-        bucket_unit = _adaptive_bucket_unit(date_range.earliest, date_range.latest)
-        bucket_expr = (
-            "to_char(file_created_at, 'YYYY-MM-DD')"
-            if bucket_unit == "day"
-            else "to_char(file_created_at, 'YYYY-MM')"
-        )
-        date_buckets = []
-        if bucket_unit:
-            rows = db.execute(
-                text(
-                    f"""
-                    SELECT {bucket_expr} AS bucket, COUNT(*) AS count
-                    FROM entities
-                    WHERE id IN ({entity_ids_str})
-                    GROUP BY bucket
-                    ORDER BY bucket DESC
+        if app_names:
+            where_clauses.append(
                 """
+                EXISTS (
+                    SELECT 1 FROM metadata_entries me
+                    WHERE me.entity_id = e.id
+                    AND me.key = 'active_app'
+                    AND me.value = ANY(:app_names)
                 )
-            ).all()
-            if len(rows) > 1:
-                date_buckets = [{"date": r.bucket, "count": r.count} for r in rows]
-            else:
-                bucket_unit = None
+                """
+            )
+            params["app_names"] = app_names
 
-        return {
-            "date_range": {
-                "earliest": date_range.earliest,
-                "latest": date_range.latest,
-            },
-            "app_name_counts": {app_name: count for app_name, count in app_name_counts},
-            "date_buckets": date_buckets,
-            "bucket_unit": bucket_unit,
-        }
+        sql = f"""
+        WITH fts_matches AS MATERIALIZED (
+            SELECT e.id, e.file_created_at
+            FROM entities_fts f
+            JOIN entities e ON e.id = f.id
+            WHERE f.search_vector @@ websearch_to_tsquery('simple', :query)
+            AND {" AND ".join(where_clauses)}
+        )
+        SELECT 'range'::text AS kind, NULL::text AS label,
+               MIN(file_created_at)::timestamp AS earliest,
+               MAX(file_created_at)::timestamp AS latest,
+               COUNT(*)::bigint AS count
+        FROM fts_matches
+        UNION ALL
+        SELECT 'day'::text, to_char(file_created_at, 'YYYY-MM-DD'),
+               NULL::timestamp, NULL::timestamp, COUNT(*)::bigint
+        FROM fts_matches
+        GROUP BY to_char(file_created_at, 'YYYY-MM-DD')
+        UNION ALL
+        SELECT 'month'::text, to_char(file_created_at, 'YYYY-MM'),
+               NULL::timestamp, NULL::timestamp, COUNT(*)::bigint
+        FROM fts_matches
+        GROUP BY to_char(file_created_at, 'YYYY-MM')
+        UNION ALL
+        SELECT 'app'::text, me.value,
+               NULL::timestamp, NULL::timestamp, COUNT(*)::bigint
+        FROM fts_matches fm
+        JOIN metadata_entries me ON me.entity_id = fm.id
+        WHERE me.key = 'active_app'
+        GROUP BY me.value
+        """
+
+        with logfire.span("fts_stats_aggregation {query=}", query=query):
+            rows = db.execute(text(sql), params).all()
+
+        return _assemble_stats(rows)
 
 
 class SqliteSearchProvider(SearchProvider):
@@ -1316,115 +1315,84 @@ class SqliteSearchProvider(SearchProvider):
     ) -> dict:
         """Get FTS-only statistics: date range, app counts, date buckets.
 
+        Aggregates over the *full* FTS-matched set (no sampling) so bucket
+        counts match what the user gets when drilling — same semantics as
+        `count_full_text_matches`. A single MATERIALIZED CTE keeps this to one
+        FTS scan; day and month buckets are both computed and the unit picked
+        in Python.
+
         Vector neighbors are intentionally excluded here so facet counts match
-        the keyword-match semantics of `found` (count_full_text_matches). A day
-        bucket showing N means 'N FTS hits in that day' — drilling into it will
-        produce hits consistent with that count, not a separate vector-driven
-        number.
+        the keyword-match semantics of `found`.
         """
-        MAX_SAMPLE_SIZE = 1024
+        and_query = self.and_words(query)
 
-        with logfire.span(
-            "full_text_search in stats {query=} {limit=}",
-            query=query,
-            limit=MAX_SAMPLE_SIZE,
-        ):
-            fts_results = self.full_text_search(
-                query,
-                db,
-                limit=MAX_SAMPLE_SIZE,
-                library_ids=library_ids,
-                start=start,
-                end=end,
-                app_names=app_names,
+        cte_filters = ["e.file_type_group = 'image'"]
+        params: dict = {"query": and_query}
+        bindparams = []
+
+        if library_ids:
+            cte_filters.append("e.library_id IN :library_ids")
+            params["library_ids"] = tuple(library_ids)
+            bindparams.append(bindparam("library_ids", expanding=True))
+
+        if start is not None and end is not None:
+            cte_filters.append(
+                "strftime('%s', e.file_created_at, 'utc') BETWEEN :start AND :end"
             )
+            params["start"] = start
+            params["end"] = end
 
-        logfire.info(f"fts_results: {len(fts_results)}")
-
-        entity_ids = set(fts_results)
-
-        if not entity_ids:
-            return {
-                "date_range": {"earliest": None, "latest": None},
-                "app_name_counts": {},
-                "date_buckets": [],
-                "bucket_unit": None,
-            }
-
-        entity_ids_str = ",".join(str(id) for id in entity_ids)
-        ts_filter = _ts_range_filter(start, end)
-        if ts_filter:
-            filtered_rows = db.execute(
-                text(f"SELECT id FROM entities WHERE id IN ({entity_ids_str}){ts_filter}")
-            ).all()
-            entity_ids = {r.id for r in filtered_rows}
-            if not entity_ids:
-                return {
-                    "date_range": {"earliest": None, "latest": None},
-                    "app_name_counts": {},
-                    "date_buckets": [],
-                    "bucket_unit": None,
-                }
-            entity_ids_str = ",".join(str(id) for id in entity_ids)
-
-        date_range = db.execute(
-            text(
-                f"""
-                SELECT
-                    MIN(file_created_at) as earliest,
-                    MAX(file_created_at) as latest
-                FROM entities
-                WHERE id IN ({entity_ids_str})
-            """
-            )
-        ).first()
-
-        app_name_counts = db.execute(
-            text(
-                f"""
-                SELECT me.value, COUNT(*) as count
-                FROM metadata_entries me
-                WHERE me.entity_id IN ({entity_ids_str}) and me.key = 'active_app'
-                GROUP BY me.value
-                ORDER BY count DESC
-            """
-            )
-        ).all()
-
-        bucket_unit = _adaptive_bucket_unit(date_range.earliest, date_range.latest)
-        bucket_expr = (
-            "DATE(file_created_at)"
-            if bucket_unit == "day"
-            else "strftime('%Y-%m', file_created_at)"
-        )
-        date_buckets = []
-        if bucket_unit:
-            rows = db.execute(
-                text(
-                    f"""
-                    SELECT {bucket_expr} AS bucket, COUNT(*) AS count
-                    FROM entities
-                    WHERE id IN ({entity_ids_str})
-                    GROUP BY bucket
-                    ORDER BY bucket DESC
+        if app_names:
+            cte_filters.append(
                 """
+                EXISTS (
+                    SELECT 1 FROM metadata_entries me
+                    WHERE me.entity_id = e.id
+                    AND me.key = 'active_app'
+                    AND me.value IN :app_names
                 )
-            ).all()
-            # Suppress degenerate single-bucket facets — they offer no filtering value.
-            if len(rows) > 1:
-                date_buckets = [{"date": r.bucket, "count": r.count} for r in rows]
-            else:
-                bucket_unit = None
+                """
+            )
+            params["app_names"] = tuple(app_names)
+            bindparams.append(bindparam("app_names", expanding=True))
 
-        return {
-            "date_range": {
-                "earliest": date_range.earliest,
-                "latest": date_range.latest,
-            },
-            "app_name_counts": {app_name: count for app_name, count in app_name_counts},
-            "date_buckets": date_buckets,
-            "bucket_unit": bucket_unit,
-        }
+        sql_str = f"""
+        WITH fts_matches AS MATERIALIZED (
+            SELECT e.id, e.file_created_at
+            FROM entities_fts f
+            JOIN entities e ON e.id = f.id
+            WHERE entities_fts MATCH jieba_query(:query)
+            AND {" AND ".join(cte_filters)}
+        )
+        SELECT 'range' AS kind, NULL AS label,
+               MIN(file_created_at) AS earliest,
+               MAX(file_created_at) AS latest,
+               COUNT(*) AS count
+        FROM fts_matches
+        UNION ALL
+        SELECT 'day', DATE(file_created_at), NULL, NULL, COUNT(*)
+        FROM fts_matches
+        GROUP BY DATE(file_created_at)
+        UNION ALL
+        SELECT 'month', strftime('%Y-%m', file_created_at), NULL, NULL, COUNT(*)
+        FROM fts_matches
+        GROUP BY strftime('%Y-%m', file_created_at)
+        UNION ALL
+        SELECT 'app', me.value, NULL, NULL, COUNT(*)
+        FROM fts_matches fm
+        JOIN metadata_entries me ON me.entity_id = fm.id
+        WHERE me.key = 'active_app'
+        GROUP BY me.value
+        """
+
+        sql = text(sql_str)
+        if bindparams:
+            sql = sql.bindparams(*bindparams)
+
+        with logfire.span("fts_stats_aggregation {query=}", query=query):
+            rows = db.execute(sql, params).all()
+
+        return _assemble_stats(rows)
 
 
 def create_search_provider(database_url: str) -> SearchProvider:
