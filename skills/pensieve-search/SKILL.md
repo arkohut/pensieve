@@ -11,7 +11,6 @@ Pensieve (`memos`) continuously captures screenshots and indexes them. This skil
 
 - **Server**: `http://127.0.0.1:8839` by default (config: `server_host` / `server_port`).
   - Override with `MEMOS_SERVER_HOST` / `MEMOS_SERVER_PORT` env vars or `~/.memos/config.yaml` if the user has a non-default setup. Confirm with the user if the default doesn't respond.
-  - If `auth_username` is set in config, requests need HTTP Basic auth. Default install has empty auth → no header needed.
 - **Screenshots on disk**: `~/.memos/screenshots/YYYYMMDD/<entity>.webp`. The API returns `filepath` directly so you don't have to compute it.
 - **Web UI** (same server, browser-friendly):
   - **Search page** (mirrors API filters as URL params): `http://127.0.0.1:8839/?q=...&start=...&end=...&app_names=...&library_ids=...` — you should always offer this URL in your reply so the user can click and verify results visually.

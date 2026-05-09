@@ -538,16 +538,6 @@ export function Config({ onBack }: Props) {
                 <p className="mt-1 text-sm text-muted-foreground">{t('config.server.portDesc')}</p>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="auth-username">{t('config.server.username')}</Label>
-                <Input id="auth-username" className="font-mono" value={String(getVal(['auth_username']) ?? '')} onChange={(e) => handleChange(['auth_username'], e.target.value)} />
-              </div>
-              <div>
-                <Label htmlFor="auth-password">{t('config.server.password')}</Label>
-                <Input id="auth-password" className="font-mono" type="password" value={getVal(['auth_password']) === '********' ? '' : String(getVal(['auth_password']) ?? '')} placeholder="********" onChange={(e) => { if (e.target.value) handleChange(['auth_password'], e.target.value); }} />
-              </div>
-            </div>
           </ConfigSection>
 
           {/* Embedding */}
