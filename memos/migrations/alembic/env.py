@@ -1,4 +1,6 @@
+import sys
 from logging.config import fileConfig
+from pathlib import Path
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 from alembic import context
@@ -32,10 +34,25 @@ def get_db_type():
 
 def configure_sqlite(engine):
     """Configure SQLite specific settings."""
+    # Mirrors SQLiteInitializer._load_sqlite_extensions: migrations that touch
+    # entities_fts need the `simple` tokenizer registered on the connection.
+    tokenizer_dir = Path(memosConfig.__file__).resolve().parent / "simple_tokenizer"
+    if sys.platform.startswith("linux"):
+        simple_lib = tokenizer_dir / "linux" / "libsimple"
+    elif sys.platform == "win32":
+        simple_lib = tokenizer_dir / "windows" / "simple"
+    elif sys.platform == "darwin":
+        simple_lib = tokenizer_dir / "macos" / "libsimple"
+    else:
+        raise OSError(f"Unsupported operating system: {sys.platform}")
+    dict_path = tokenizer_dir / "dict"
+
     def load_extension(dbapi_conn, connection_record):
         dbapi_conn.enable_load_extension(True)
+        dbapi_conn.load_extension(str(simple_lib))
+        dbapi_conn.execute(f"SELECT jieba_dict('{dict_path}')")
         sqlite_vec.load(dbapi_conn)
-    
+
     event.listen(engine, 'connect', load_extension)
 
 def run_migrations_offline() -> None:
