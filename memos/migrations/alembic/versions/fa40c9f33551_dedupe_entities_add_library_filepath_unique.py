@@ -60,10 +60,14 @@ def upgrade() -> None:
 
     existing = {uc["name"] for uc in sa.inspect(conn).get_unique_constraints("entities")}
     if CONSTRAINT_NAME not in existing:
-        op.create_unique_constraint(CONSTRAINT_NAME, "entities", ["library_id", "filepath"])
+        # batch_alter_table is required on SQLite (no native ALTER ADD CONSTRAINT);
+        # on PostgreSQL it falls through to a plain ALTER.
+        with op.batch_alter_table("entities") as batch_op:
+            batch_op.create_unique_constraint(CONSTRAINT_NAME, ["library_id", "filepath"])
 
 
 def downgrade() -> None:
     existing = {uc["name"] for uc in sa.inspect(op.get_bind()).get_unique_constraints("entities")}
     if CONSTRAINT_NAME in existing:
-        op.drop_constraint(CONSTRAINT_NAME, "entities", type_="unique")
+        with op.batch_alter_table("entities") as batch_op:
+            batch_op.drop_constraint(CONSTRAINT_NAME, type_="unique")
