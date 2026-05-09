@@ -696,8 +696,14 @@ class PostgreSQLSearchProvider(SearchProvider):
         end: Optional[int] = None,
         app_names: Optional[List[str]] = None,
     ) -> dict:
-        """Get statistics for search results including date range and app name counts."""
-        MIN_SAMPLE_SIZE = 1024
+        """Get FTS-only statistics: date range, app counts, date buckets.
+
+        Vector neighbors are intentionally excluded here so facet counts match
+        the keyword-match semantics of `found` (count_full_text_matches). A day
+        bucket showing N means 'N FTS hits in that day' — drilling into it will
+        produce hits consistent with that count, not a separate vector-driven
+        number.
+        """
         MAX_SAMPLE_SIZE = 2048
 
         with logfire.span(
@@ -715,28 +721,9 @@ class PostgreSQLSearchProvider(SearchProvider):
                 app_names=app_names,
             )
 
-        vec_limit = max(min(len(fts_results) * 2, MAX_SAMPLE_SIZE), MIN_SAMPLE_SIZE)
+        logfire.info(f"fts_results: {len(fts_results)}")
 
-        with logfire.span(
-            "vec_search in stats {query=} {limit=}", query=query, limit=vec_limit
-        ):
-            embeddings = get_embeddings([query])
-            if embeddings and embeddings[0]:
-                vec_results = self.vector_search(
-                    embeddings[0],
-                    db,
-                    limit=vec_limit,
-                    library_ids=library_ids,
-                    start=start,
-                    end=end,
-                    app_names=app_names,
-                )
-            else:
-                vec_results = []
-
-        logfire.info(f"fts_results: {len(fts_results)} vec_results: {len(vec_results)}")
-
-        entity_ids = set(fts_results + vec_results)
+        entity_ids = set(fts_results)
 
         if not entity_ids:
             return {
@@ -1314,8 +1301,14 @@ class SqliteSearchProvider(SearchProvider):
         end: Optional[int] = None,
         app_names: Optional[List[str]] = None,
     ) -> dict:
-        """Get statistics for search results including date range and tag counts."""
-        MIN_SAMPLE_SIZE = 2048
+        """Get FTS-only statistics: date range, app counts, date buckets.
+
+        Vector neighbors are intentionally excluded here so facet counts match
+        the keyword-match semantics of `found` (count_full_text_matches). A day
+        bucket showing N means 'N FTS hits in that day' — drilling into it will
+        produce hits consistent with that count, not a separate vector-driven
+        number.
+        """
         MAX_SAMPLE_SIZE = 4096
 
         with logfire.span(
@@ -1333,28 +1326,9 @@ class SqliteSearchProvider(SearchProvider):
                 app_names=app_names,
             )
 
-        vec_limit = max(min(len(fts_results) * 2, MAX_SAMPLE_SIZE), MIN_SAMPLE_SIZE)
+        logfire.info(f"fts_results: {len(fts_results)}")
 
-        with logfire.span(
-            "vec_search in stats {query=} {limit=}", query=query, limit=vec_limit
-        ):
-            embeddings = get_embeddings([query])
-            if embeddings and embeddings[0]:
-                vec_results = self.vector_search(
-                    embeddings[0],
-                    db,
-                    limit=vec_limit,
-                    library_ids=library_ids,
-                    start=start,
-                    end=end,
-                    app_names=app_names,
-                )
-            else:
-                vec_results = []
-
-        logfire.info(f"fts_results: {len(fts_results)} vec_results: {len(vec_results)}")
-
-        entity_ids = set(fts_results + vec_results)
+        entity_ids = set(fts_results)
 
         if not entity_ids:
             return {
@@ -1365,9 +1339,6 @@ class SqliteSearchProvider(SearchProvider):
             }
 
         entity_ids_str = ",".join(str(id) for id in entity_ids)
-        # Vector search contributes neighbors that may fall outside the
-        # caller's start/end window. Re-filter the id set so all stats below
-        # honor the user-visible time scope.
         ts_filter = _ts_range_filter(start, end)
         if ts_filter:
             filtered_rows = db.execute(
