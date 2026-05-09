@@ -951,14 +951,32 @@ async def search_entities_v2(
     # Use settings.facet if facet parameter is not provided
     use_facet = settings.facet if facet is None else facet
 
+    # Phase timings recorded by perf_counter; surfaced in the response as
+    # search_time_ms (total) and logged for debugging hot spots.
+    phase_ms: dict = {}
+
+    def _phase(name: str, fn):
+        t0 = time.perf_counter()
+        try:
+            return fn()
+        finally:
+            phase_ms[name] = round((time.perf_counter() - t0) * 1000)
+
+    overall_t0 = time.perf_counter()
+
     try:
         if q.strip() == "":
-            # Use list_entities when q is empty
-            entities = crud.list_entities(
-                db=db, limit=limit, library_ids=library_ids, start=eff_start, end=eff_end
+            entities = _phase(
+                "list_entities",
+                lambda: crud.list_entities(
+                    db=db, limit=limit, library_ids=library_ids, start=eff_start, end=eff_end
+                ),
             )
-            total_matches = crud.count_entities(
-                db=db, library_ids=library_ids, start=eff_start, end=eff_end
+            total_matches = _phase(
+                "count_entities",
+                lambda: crud.count_entities(
+                    db=db, library_ids=library_ids, start=eff_start, end=eff_end
+                ),
             )
             stats = {}
         else:
@@ -968,8 +986,9 @@ async def search_entities_v2(
             # SQLAlchemy sync sessions are not thread-safe.
             def _run_hybrid_search():
                 worker_db = SessionLocal()
+                t0 = time.perf_counter()
                 try:
-                    return search_provider.hybrid_search(
+                    result = search_provider.hybrid_search(
                         query=q,
                         db=worker_db,
                         limit=limit,
@@ -978,13 +997,15 @@ async def search_entities_v2(
                         end=eff_end,
                         app_names=app_name_list,
                     )
+                    return result, round((time.perf_counter() - t0) * 1000)
                 finally:
                     worker_db.close()
 
             def _run_count():
                 worker_db = SessionLocal()
+                t0 = time.perf_counter()
                 try:
-                    return search_provider.count_full_text_matches(
+                    result = search_provider.count_full_text_matches(
                         query=q,
                         db=worker_db,
                         library_ids=library_ids,
@@ -992,24 +1013,35 @@ async def search_entities_v2(
                         end=eff_end,
                         app_names=app_name_list,
                     )
+                    return result, round((time.perf_counter() - t0) * 1000)
                 finally:
                     worker_db.close()
 
+            parallel_t0 = time.perf_counter()
             with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
                 f_search = ex.submit(_run_hybrid_search)
                 f_count = ex.submit(_run_count)
-                entity_ids = f_search.result()
-                total_matches = f_count.result()
+                entity_ids, hybrid_ms = f_search.result()
+                total_matches, count_ms = f_count.result()
+            phase_ms["hybrid_search"] = hybrid_ms
+            phase_ms["count_full_text_matches"] = count_ms
+            phase_ms["parallel_wall"] = round((time.perf_counter() - parallel_t0) * 1000)
 
-            entities = crud.find_entities_by_ids(entity_ids, db)
+            entities = _phase(
+                "find_entities_by_ids",
+                lambda: crud.find_entities_by_ids(entity_ids, db),
+            )
             stats = (
-                search_provider.get_search_stats(
-                    query=q,
-                    db=db,
-                    library_ids=library_ids,
-                    start=eff_start,
-                    end=eff_end,
-                    app_names=app_name_list,
+                _phase(
+                    "get_search_stats",
+                    lambda: search_provider.get_search_stats(
+                        query=q,
+                        db=db,
+                        library_ids=library_ids,
+                        start=eff_start,
+                        end=eff_end,
+                        app_names=app_name_list,
+                    ),
                 )
                 if use_facet
                 else {}
@@ -1124,11 +1156,13 @@ async def search_entities_v2(
                 app_names=app_name_list,
             ),
             search_cutoff=False,
-            search_time_ms=0,
+            search_time_ms=round((time.perf_counter() - overall_t0) * 1000),
             date_range=date_range,
             date_buckets=date_buckets,
             bucket_unit=bucket_unit,
         )
+
+        logging.info("search phases (ms): %s", phase_ms)
 
         return search_result
 

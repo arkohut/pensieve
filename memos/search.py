@@ -39,6 +39,9 @@ def _adaptive_bucket_unit(earliest, latest, threshold_days: int = 60) -> Optiona
     return "day" if (l - e).total_seconds() / 86400 <= threshold_days else "month"
 
 
+COUNT_CAP = 10000  # Stop counting beyond this; UI renders "{COUNT_CAP}+".
+
+
 def _ts_range_filter(start: Optional[int], end: Optional[int], column: str = "file_created_at") -> str:
     """Build an inline SQL fragment restricting `column` to the [start, end) UNIX-second range.
     Returns an empty string when both bounds are absent. Inputs are ints validated upstream,
@@ -546,8 +549,10 @@ class PostgreSQLSearchProvider(SearchProvider):
         end: Optional[int] = None,
         app_names: Optional[List[str]] = None,
     ) -> int:
-        base_sql = """
-        SELECT COUNT(*)
+        # Cap the inner scan so very broad queries (155k+ matches) don't pay
+        # the full COUNT cost. UI surfaces COUNT_CAP+ as "{COUNT_CAP}+".
+        inner_sql = """
+        SELECT 1
         FROM entities_fts f
         JOIN entities e ON e.id = f.id
         WHERE f.search_vector @@ websearch_to_tsquery('simple', :query)
@@ -576,9 +581,12 @@ class PostgreSQLSearchProvider(SearchProvider):
             )
 
         if where_clauses:
-            base_sql += " AND " + " AND ".join(where_clauses)
+            inner_sql += " AND " + " AND ".join(where_clauses)
 
-        params = {"query": query}
+        inner_sql += " LIMIT :cap"
+        base_sql = f"SELECT COUNT(*) FROM ({inner_sql}) sub"
+
+        params = {"query": query, "cap": COUNT_CAP + 1}
         if library_ids:
             params["library_ids"] = library_ids
         if start is not None and end is not None:
@@ -704,7 +712,7 @@ class PostgreSQLSearchProvider(SearchProvider):
         produce hits consistent with that count, not a separate vector-driven
         number.
         """
-        MAX_SAMPLE_SIZE = 2048
+        MAX_SAMPLE_SIZE = 512
 
         with logfire.span(
             "full_text_search in stats {query=} {limit=}",
@@ -1139,37 +1147,39 @@ class SqliteSearchProvider(SearchProvider):
         end: Optional[int] = None,
         app_names: Optional[List[str]] = None,
     ) -> int:
+        # Cap the inner FTS scan so very broad queries don't pay the full
+        # COUNT cost. UI surfaces COUNT_CAP+ as "{COUNT_CAP}+".
         and_query = self.and_words(query)
 
-        sql_query = """
+        inner_sql = """
         WITH fts_matches AS (
             SELECT id
             FROM entities_fts
             WHERE entities_fts MATCH jieba_query(:query)
         )
-        SELECT COUNT(*)
+        SELECT 1
         FROM fts_matches f
         JOIN entities e ON e.id = f.id
         WHERE e.file_type_group = 'image'
         """
 
-        params = {"query": and_query}
+        params = {"query": and_query, "cap": COUNT_CAP + 1}
         bindparams = []
 
         if library_ids:
-            sql_query += " AND e.library_id IN :library_ids"
+            inner_sql += " AND e.library_id IN :library_ids"
             params["library_ids"] = tuple(library_ids)
             bindparams.append(bindparam("library_ids", expanding=True))
 
         if start is not None and end is not None:
-            sql_query += (
+            inner_sql += (
                 " AND strftime('%s', e.file_created_at, 'utc') BETWEEN :start AND :end"
             )
             params["start"] = start
             params["end"] = end
 
         if app_names:
-            sql_query += """
+            inner_sql += """
             AND EXISTS (
                 SELECT 1 FROM metadata_entries me
                 WHERE me.entity_id = e.id
@@ -1179,6 +1189,9 @@ class SqliteSearchProvider(SearchProvider):
             """
             params["app_names"] = tuple(app_names)
             bindparams.append(bindparam("app_names", expanding=True))
+
+        inner_sql += " LIMIT :cap"
+        sql_query = f"SELECT COUNT(*) FROM ({inner_sql}) sub"
 
         sql = text(sql_query)
         if bindparams:
@@ -1309,7 +1322,7 @@ class SqliteSearchProvider(SearchProvider):
         produce hits consistent with that count, not a separate vector-driven
         number.
         """
-        MAX_SAMPLE_SIZE = 4096
+        MAX_SAMPLE_SIZE = 1024
 
         with logfire.span(
             "full_text_search in stats {query=} {limit=}",
