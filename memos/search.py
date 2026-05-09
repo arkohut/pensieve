@@ -16,6 +16,45 @@ import os
 logger = logging.getLogger(__name__)
 
 
+def _adaptive_bucket_unit(earliest, latest, threshold_days: int = 60) -> Optional[str]:
+    """Pick 'day' if the [earliest, latest] span is <= threshold_days, else 'month'.
+    Returns None when the span can't be derived.
+    """
+    if earliest is None or latest is None:
+        return None
+
+    def _to_dt(v):
+        if isinstance(v, datetime):
+            return v
+        if isinstance(v, str):
+            try:
+                return datetime.fromisoformat(v.replace(" ", "T"))
+            except ValueError:
+                return None
+        return None
+
+    e, l = _to_dt(earliest), _to_dt(latest)
+    if e is None or l is None:
+        return None
+    return "day" if (l - e).total_seconds() / 86400 <= threshold_days else "month"
+
+
+def _ts_range_filter(start: Optional[int], end: Optional[int], column: str = "file_created_at") -> str:
+    """Build an inline SQL fragment restricting `column` to the [start, end) UNIX-second range.
+    Returns an empty string when both bounds are absent. Inputs are ints validated upstream,
+    so direct interpolation is safe here.
+    """
+    from datetime import timezone
+    parts = []
+    if start is not None:
+        s = datetime.fromtimestamp(start, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        parts.append(f"{column} >= '{s}'")
+    if end is not None:
+        e = datetime.fromtimestamp(end, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        parts.append(f"{column} < '{e}'")
+    return (" AND " + " AND ".join(parts)) if parts else ""
+
+
 class SearchProvider(ABC):
     @abstractmethod
     def full_text_search(
@@ -703,13 +742,30 @@ class PostgreSQLSearchProvider(SearchProvider):
             return {
                 "date_range": {"earliest": None, "latest": None},
                 "app_name_counts": {},
+                "date_buckets": [],
+                "bucket_unit": None,
             }
 
         entity_ids_str = ",".join(str(id) for id in entity_ids)
+        ts_filter = _ts_range_filter(start, end)
+        if ts_filter:
+            filtered_rows = db.execute(
+                text(f"SELECT id FROM entities WHERE id IN ({entity_ids_str}){ts_filter}")
+            ).all()
+            entity_ids = {r.id for r in filtered_rows}
+            if not entity_ids:
+                return {
+                    "date_range": {"earliest": None, "latest": None},
+                    "app_name_counts": {},
+                    "date_buckets": [],
+                    "bucket_unit": None,
+                }
+            entity_ids_str = ",".join(str(id) for id in entity_ids)
+
         date_range = db.execute(
             text(
                 f"""
-                SELECT 
+                SELECT
                     MIN(file_created_at) as earliest,
                     MAX(file_created_at) as latest
                 FROM entities
@@ -730,12 +786,38 @@ class PostgreSQLSearchProvider(SearchProvider):
             )
         ).all()
 
+        bucket_unit = _adaptive_bucket_unit(date_range.earliest, date_range.latest)
+        bucket_expr = (
+            "to_char(file_created_at, 'YYYY-MM-DD')"
+            if bucket_unit == "day"
+            else "to_char(file_created_at, 'YYYY-MM')"
+        )
+        date_buckets = []
+        if bucket_unit:
+            rows = db.execute(
+                text(
+                    f"""
+                    SELECT {bucket_expr} AS bucket, COUNT(*) AS count
+                    FROM entities
+                    WHERE id IN ({entity_ids_str})
+                    GROUP BY bucket
+                    ORDER BY bucket DESC
+                """
+                )
+            ).all()
+            if len(rows) > 1:
+                date_buckets = [{"date": r.bucket, "count": r.count} for r in rows]
+            else:
+                bucket_unit = None
+
         return {
             "date_range": {
                 "earliest": date_range.earliest,
                 "latest": date_range.latest,
             },
             "app_name_counts": {app_name: count for app_name, count in app_name_counts},
+            "date_buckets": date_buckets,
+            "bucket_unit": bucket_unit,
         }
 
 
@@ -1278,13 +1360,33 @@ class SqliteSearchProvider(SearchProvider):
             return {
                 "date_range": {"earliest": None, "latest": None},
                 "app_name_counts": {},
+                "date_buckets": [],
+                "bucket_unit": None,
             }
 
         entity_ids_str = ",".join(str(id) for id in entity_ids)
+        # Vector search contributes neighbors that may fall outside the
+        # caller's start/end window. Re-filter the id set so all stats below
+        # honor the user-visible time scope.
+        ts_filter = _ts_range_filter(start, end)
+        if ts_filter:
+            filtered_rows = db.execute(
+                text(f"SELECT id FROM entities WHERE id IN ({entity_ids_str}){ts_filter}")
+            ).all()
+            entity_ids = {r.id for r in filtered_rows}
+            if not entity_ids:
+                return {
+                    "date_range": {"earliest": None, "latest": None},
+                    "app_name_counts": {},
+                    "date_buckets": [],
+                    "bucket_unit": None,
+                }
+            entity_ids_str = ",".join(str(id) for id in entity_ids)
+
         date_range = db.execute(
             text(
                 f"""
-                SELECT 
+                SELECT
                     MIN(file_created_at) as earliest,
                     MAX(file_created_at) as latest
                 FROM entities
@@ -1305,12 +1407,39 @@ class SqliteSearchProvider(SearchProvider):
             )
         ).all()
 
+        bucket_unit = _adaptive_bucket_unit(date_range.earliest, date_range.latest)
+        bucket_expr = (
+            "DATE(file_created_at)"
+            if bucket_unit == "day"
+            else "strftime('%Y-%m', file_created_at)"
+        )
+        date_buckets = []
+        if bucket_unit:
+            rows = db.execute(
+                text(
+                    f"""
+                    SELECT {bucket_expr} AS bucket, COUNT(*) AS count
+                    FROM entities
+                    WHERE id IN ({entity_ids_str})
+                    GROUP BY bucket
+                    ORDER BY bucket DESC
+                """
+                )
+            ).all()
+            # Suppress degenerate single-bucket facets — they offer no filtering value.
+            if len(rows) > 1:
+                date_buckets = [{"date": r.bucket, "count": r.count} for r in rows]
+            else:
+                bucket_unit = None
+
         return {
             "date_range": {
                 "earliest": date_range.earliest,
                 "latest": date_range.latest,
             },
             "app_name_counts": {app_name: count for app_name, count in app_name_counts},
+            "date_buckets": date_buckets,
+            "bucket_unit": bucket_unit,
         }
 
 
