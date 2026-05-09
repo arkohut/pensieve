@@ -30,6 +30,16 @@ export interface Facet {
   counts: FacetCount[];
 }
 
+export interface DateRange {
+  earliest: string | null;
+  latest: string | null;
+}
+
+export interface DateBucket {
+  date: string; // 'YYYY-MM' or 'YYYY-MM-DD' depending on bucket_unit
+  count: number;
+}
+
 export interface Hit {
   document: Entity;
   highlight?: Record<string, unknown>;
@@ -42,6 +52,9 @@ export interface SearchResult {
   found: number;
   out_of: number;
   search_time_ms: number;
+  date_range?: DateRange | null;
+  date_buckets?: DateBucket[] | null;
+  bucket_unit?: 'day' | 'month' | null;
 }
 
 export interface Folder {

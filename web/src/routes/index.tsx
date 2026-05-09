@@ -12,6 +12,7 @@ import { HitCard } from '$/components/search/HitCard';
 import { FacetFilter } from '$/components/search/FacetFilter';
 import { LibraryFilter } from '$/components/search/LibraryFilter';
 import { TimeFilter } from '$/components/search/TimeFilter';
+import { DateBucketFilter } from '$/components/search/DateBucketFilter';
 import { Figure } from '$/components/entity/Figure';
 import { searchSchema, type SearchParams } from '$/lib/search-params';
 import { useFacets, useSearch } from '$/lib/api/search';
@@ -60,13 +61,19 @@ function HomePage() {
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
-  const { data: facets } = useFacets({
+  const { data: facetData } = useFacets({
     submitted_q: search.submitted_q,
     library_ids: search.library_ids,
     start: search.start,
     end: search.end,
+    date: search.date,
   });
-  const appFacet = facets?.find((f) => f.field_name === 'app_names');
+  const appFacet = facetData?.facets.find((f) => f.field_name === 'app_names');
+  const dateBuckets = facetData?.dateBuckets ?? [];
+  const bucketUnit = facetData?.bucketUnit ?? null;
+  const hasAppFacet = !!appFacet && appFacet.counts.length > 0;
+  const hasDateBuckets = dateBuckets.length > 0 && bucketUnit !== null;
+  const hasSidebar = hasAppFacet || hasDateBuckets;
 
   useEffect(() => {
     setLocalQuery(search.q);
@@ -108,9 +115,21 @@ function HomePage() {
     [navigate],
   );
 
+  // TimeFilter and the date facet are mutually exclusive temporal filters —
+  // setting one clears the other so the displayed range always matches the
+  // effective range (no UI mismatch like "Last month" + date=2026-05-09).
   const handleTimeChange = useCallback(
     ({ start, end }: { start?: number; end?: number }) => {
-      void navigate({ search: (s: SearchParams) => ({ ...s, start, end }) });
+      void navigate({ search: (s: SearchParams) => ({ ...s, start, end, date: undefined }) });
+    },
+    [navigate],
+  );
+
+  const handleDateBucketChange = useCallback(
+    (date: string | undefined) => {
+      void navigate({
+        search: (s: SearchParams) => ({ ...s, date, start: undefined, end: undefined }),
+      });
     },
     [navigate],
   );
@@ -202,15 +221,23 @@ function HomePage() {
 
       <main className="flex-grow">
         <div className="mx-auto flex flex-col sm:flex-row">
-          {appFacet && appFacet.counts.length > 0 && (
+          {hasSidebar && (
             <aside className="pr-4 sm:w-full md:w-1/5 lg:w-1/6 xl:w-[14.28%]">
-              <FacetFilter facet={appFacet} selected={search.app_names} onToggle={toggleApp} />
+              {hasDateBuckets && bucketUnit && (
+                <DateBucketFilter
+                  buckets={dateBuckets}
+                  unit={bucketUnit}
+                  selected={search.date}
+                  onToggle={handleDateBucketChange}
+                />
+              )}
+              {hasAppFacet && (
+                <FacetFilter facet={appFacet} selected={search.app_names} onToggle={toggleApp} />
+              )}
             </aside>
           )}
           <div
-            className={
-              appFacet && appFacet.counts.length > 0 ? 'md:w-4/5 lg:w-5/6 xl:w-[85.72%]' : 'w-full'
-            }
+            className={hasSidebar ? 'md:w-4/5 lg:w-5/6 xl:w-[85.72%]' : 'w-full'}
           >
             {isLoading ? (
               LOADING_SKELETON

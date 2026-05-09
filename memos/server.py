@@ -6,7 +6,7 @@ import time
 import threading
 import concurrent.futures
 import psutil
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import logfire
 
@@ -55,6 +55,8 @@ from .schemas import (
     FacetCount,
     Facet,
     FacetStats,
+    DateRange,
+    DateBucket,
 )
 from .logging_config import LOGGING_CONFIG
 from .databases.initializers import create_db_initializer
@@ -891,6 +893,18 @@ _collection_size_cache: dict = {}
 _collection_size_lock = threading.Lock()
 
 
+def _date_param_to_range(date_str: str) -> tuple[int, int]:
+    """Translate 'YYYY-MM' or 'YYYY-MM-DD' to a UTC [start, end) UNIX-second range."""
+    if len(date_str) == 7:
+        d = datetime.strptime(date_str, "%Y-%m").replace(tzinfo=timezone.utc)
+        nxt = d.replace(year=d.year + 1, month=1) if d.month == 12 else d.replace(month=d.month + 1)
+        return int(d.timestamp()), int(nxt.timestamp())
+    if len(date_str) == 10:
+        d = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        return int(d.timestamp()), int((d + timedelta(days=1)).timestamp())
+    raise ValueError(f"date must be YYYY-MM or YYYY-MM-DD, got {date_str!r}")
+
+
 def _get_collection_size(db: Session, library_ids):
     key = tuple(sorted(library_ids)) if library_ids else None
     now = time.monotonic()
@@ -913,6 +927,7 @@ async def search_entities_v2(
     end: int = None,
     app_names: str = Query(None, description="Comma-separated list of app names"),
     facet: bool = Query(None, description="Include facet in the search results"),
+    date: str = Query(None, description="Date bucket filter, YYYY-MM or YYYY-MM-DD"),
     db: Session = Depends(get_db),
     search_provider=Depends(lambda: app.state.search_provider),
 ):
@@ -921,6 +936,18 @@ async def search_entities_v2(
         [app_name.strip() for app_name in app_names.split(",")] if app_names else None
     )
 
+    # Combine the date bucket filter with the user-provided start/end window by
+    # intersection — both are temporal, so their effective range is the overlap.
+    if date:
+        try:
+            d_start, d_end = _date_param_to_range(date)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        eff_start = max(start, d_start) if start is not None else d_start
+        eff_end = min(end, d_end) if end is not None else d_end
+    else:
+        eff_start, eff_end = start, end
+
     # Use settings.facet if facet parameter is not provided
     use_facet = settings.facet if facet is None else facet
 
@@ -928,10 +955,10 @@ async def search_entities_v2(
         if q.strip() == "":
             # Use list_entities when q is empty
             entities = crud.list_entities(
-                db=db, limit=limit, library_ids=library_ids, start=start, end=end
+                db=db, limit=limit, library_ids=library_ids, start=eff_start, end=eff_end
             )
             total_matches = crud.count_entities(
-                db=db, library_ids=library_ids, start=start, end=end
+                db=db, library_ids=library_ids, start=eff_start, end=eff_end
             )
             stats = {}
         else:
@@ -947,8 +974,8 @@ async def search_entities_v2(
                         db=worker_db,
                         limit=limit,
                         library_ids=library_ids,
-                        start=start,
-                        end=end,
+                        start=eff_start,
+                        end=eff_end,
                         app_names=app_name_list,
                     )
                 finally:
@@ -961,8 +988,8 @@ async def search_entities_v2(
                         query=q,
                         db=worker_db,
                         library_ids=library_ids,
-                        start=start,
-                        end=end,
+                        start=eff_start,
+                        end=eff_end,
                         app_names=app_name_list,
                     )
                 finally:
@@ -980,8 +1007,8 @@ async def search_entities_v2(
                     query=q,
                     db=db,
                     library_ids=library_ids,
-                    start=start,
-                    end=end,
+                    start=eff_start,
+                    end=eff_end,
                     app_names=app_name_list,
                 )
                 if use_facet
@@ -1060,6 +1087,28 @@ async def search_entities_v2(
             else []
         )
 
+        # earliest/latest of the matched entities under current filters; pydantic
+        # coerces SQLite's "YYYY-MM-DD HH:MM:SS" strings and Postgres's datetime
+        # objects to the same datetime type.
+        date_range_stats = stats.get("date_range") if stats else None
+        date_range = (
+            DateRange(
+                earliest=date_range_stats.get("earliest"),
+                latest=date_range_stats.get("latest"),
+            )
+            if date_range_stats
+            and (date_range_stats.get("earliest") or date_range_stats.get("latest"))
+            else None
+        )
+
+        bucket_rows = stats.get("date_buckets") if stats else None
+        date_buckets = (
+            [DateBucket(date=b["date"], count=b["count"]) for b in bucket_rows]
+            if bucket_rows
+            else None
+        )
+        bucket_unit = stats.get("bucket_unit") if stats else None
+
         # Build SearchResult
         search_result = SearchResult(
             facet_counts=facet_counts,
@@ -1076,6 +1125,9 @@ async def search_entities_v2(
             ),
             search_cutoff=False,
             search_time_ms=0,
+            date_range=date_range,
+            date_buckets=date_buckets,
+            bucket_unit=bucket_unit,
         )
 
         return search_result
