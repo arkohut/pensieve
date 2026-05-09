@@ -129,9 +129,6 @@ class Settings(BaseSettings):
     # Embedding settings
     embedding: EmbeddingSettings = EmbeddingSettings()
 
-    auth_username: str = ""
-    auth_password: SecretStr = SecretStr("")
-
     default_plugins: List[str] = ["builtin_ocr"]
 
     record_interval: int = 4
@@ -318,8 +315,6 @@ def categorize_settings_by_restart():
         "database_path": ["serve"],     # Changes to the database path
         "server_host": ["serve"],       # Changes to the server host
         "server_port": ["serve"],       # Changes to the server port
-        "auth_username": ["serve"],     # Changes to authentication information
-        "auth_password": ["serve"],
         "facet": ["serve"],            # Changes to the search facet feature
         
         # Configuration affecting only the recording service

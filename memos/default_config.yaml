@@ -21,10 +21,6 @@ server_host: 127.0.0.1
 server_port: 8839
 # The port number to listen on.
 
-# Enable authentication by uncommenting the following lines
-# auth_username: admin
-# auth_password: changeme
-
 # List of default plugins to load at startup.
 default_plugins:
 - builtin_ocr

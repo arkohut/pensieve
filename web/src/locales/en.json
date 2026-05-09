@@ -66,9 +66,7 @@
       "host": "Server Host",
       "hostDesc": "The host address to listen on. Use '0.0.0.0' to listen on all interfaces.",
       "port": "Server Port",
-      "portDesc": "The port number for the server to listen on.",
-      "username": "Auth Username",
-      "password": "Auth Password"
+      "portDesc": "The port number for the server to listen on."
     },
     "record": {
       "title": "Record Configuration",
