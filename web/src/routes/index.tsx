@@ -275,10 +275,14 @@ function HomePage() {
                 aria-busy={isStale}
               >
                 <p className="mb-4 text-center text-sm text-muted-foreground">
-                  {t('searchSummary', {
-                    found: data.found.toLocaleString(),
-                    outOf: data.out_of.toLocaleString(),
-                  })}
+                  {data.found > 0
+                    ? t('searchSummary', {
+                        found: data.found.toLocaleString(),
+                        outOf: data.out_of.toLocaleString(),
+                      })
+                    : t('searchSummarySemantic', {
+                        hits: data.hits.length.toLocaleString(),
+                      })}
                 </p>
                 <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
                   {data.hits.map((hit, i) => (

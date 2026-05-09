@@ -25,6 +25,7 @@
     "clearDate": "清除"
   },
   "searchSummary": "✨ 找到 {{found}} 个，共 {{outOf}} 张截图",
+  "searchSummarySemantic": "✨ {{hits}} 个语义相关结果（无关键词精确匹配）",
   "noResults": "未找到结果。",
   "copyright": "© 2024 Arkohut 漆妮妮 保留所有权利",
   "github": "GitHub",
