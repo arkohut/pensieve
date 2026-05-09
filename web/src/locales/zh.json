@@ -24,7 +24,7 @@
     "dateBucketsDayInScope": "{{scope}}（按日）",
     "clearDate": "清除"
   },
-  "searchSummary": "✨ 找到 {{found}} 个结果 - 在 {{time}} 毫秒内搜索了 {{outOf}} 个记录。",
+  "searchSummary": "✨ 找到 {{found}} 个，共 {{outOf}} 张截图",
   "noResults": "未找到结果。",
   "copyright": "© 2024 Arkohut 漆妮妮 保留所有权利",
   "github": "GitHub",

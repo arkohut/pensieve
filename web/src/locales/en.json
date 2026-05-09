@@ -24,7 +24,7 @@
     "dateBucketsDayInScope": "{{scope}} (by day)",
     "clearDate": "clear"
   },
-  "searchSummary": "✨ {{found}} results found - Searched {{outOf}} recipes in {{time}}ms.",
+  "searchSummary": "✨ {{found}} matches in {{outOf}} screenshots",
   "noResults": "No results found.",
   "copyright": "© 2024 Arkohut Qinini. All rights reserved.",
   "github": "GitHub",
