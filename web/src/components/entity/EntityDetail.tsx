@@ -78,7 +78,7 @@ export function EntityDetail({ entity }: Props) {
 
   return (
     <ScrollArea className="mt-4 max-h-[calc(100vh-180px)] overflow-y-auto md:ml-6 md:mt-0 md:w-1/2">
-      <div className="divide-y divide-border">
+      <div className="divide-y divide-border pr-3">
         {entity.tags && entity.tags.length > 0 && (
           <Row label="tags">
             <div className="flex flex-wrap gap-1.5">
