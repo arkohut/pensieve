@@ -226,7 +226,12 @@ export function Config({ onBack }: Props) {
               <ArrowLeft size={16} className="mr-2" />
               {t('back')}
             </Button>
-            <h1 className="text-xl font-bold">{t('config.title')}</h1>
+            <span className="font-semibold tracking-tight">
+              Pensieve<span className="text-brand">.</span>
+            </span>
+            <span className="ml-2 hidden font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground sm:inline">
+              / configuration
+            </span>
           </>
         }
         right={
@@ -244,6 +249,7 @@ export function Config({ onBack }: Props) {
               size="sm"
               onClick={() => void saveConfig()}
               disabled={saving || servicesRestarting || !hasChanges}
+              className="bg-brand text-brand-foreground hover:bg-brand/90 focus-visible:ring-brand"
             >
               <Save size={16} className="mr-2" />
               {t('config.saveButton')}
@@ -252,7 +258,18 @@ export function Config({ onBack }: Props) {
         }
       />
 
-      <div className="container mx-auto max-w-5xl p-4">
+      <div className="container mx-auto max-w-5xl px-6 pb-16 pt-10">
+        <header className="mb-10 border-b border-border pb-8">
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-[36px]">
+            {t('config.title')}<span className="text-brand">.</span>
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+            {t('config.description', {
+              defaultValue:
+                'Pensieve runs locally on your machine. These settings change how screens are captured, indexed, and retrieved. Restart the service after editing models or the OCR backend.',
+            })}
+          </p>
+        </header>
       {error && (
         <Alert variant="destructive" className="mb-4">
           <AlertDescription>{error}</AlertDescription>

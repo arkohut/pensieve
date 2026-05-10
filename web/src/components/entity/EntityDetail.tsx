@@ -52,62 +52,102 @@ export function EntityDetail({ entity }: Props) {
 
   return (
     <ScrollArea className="mt-4 max-h-[calc(100vh-180px)] overflow-y-auto md:ml-6 md:mt-0 md:w-1/2">
-      {entity.tags && entity.tags.length > 0 && (
-        <div className="mb-4">
-          <div className="text-sm font-bold uppercase tracking-wide text-primary">TAGS</div>
-          <div className="text-muted-foreground">
-            {entity.tags.map((tag, i) => (
-              <span key={i} className="mr-2 inline-block text-base text-muted-foreground">
-                {typeof tag === 'string' ? tag : ((tag as { name?: string }).name ?? '')}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
+      <div className="divide-y divide-border">
+        {entity.tags && entity.tags.length > 0 && (
+          <Row label="tags">
+            <div className="flex flex-wrap gap-1.5">
+              {entity.tags.map((tag, i) => (
+                <Tag key={i}>
+                  {typeof tag === 'string' ? tag : ((tag as { name?: string }).name ?? '')}
+                </Tag>
+              ))}
+            </div>
+          </Row>
+        )}
 
-      <div className="text-sm font-bold uppercase tracking-wide text-primary">METADATA</div>
-      <div className="mt-2 pb-4 text-muted-foreground">
+        {appNameEntry && (
+          <Row label="application" source="system" copyText={appNameEntry.value || ''}>
+            <span className="text-sm text-foreground">{appNameEntry.value || 'unknown'}</span>
+          </Row>
+        )}
+
         {displayEntries.map((entry) => {
           const isObject = typeof entry.value === 'object' && entry.value !== null;
           const copyText = isObject ? JSON.stringify(entry.value) : String(entry.value);
-          return (
-            <div key={entry.key} className="mb-2">
-              <span className="flex items-center font-bold">
-                {entry.key}
-                <CopyToClipboard text={copyText} />
-              </span>
-              {isObject ? (
-                isValidOCRDataStructure(entry.value) ? (
+
+          if (isObject) {
+            return (
+              <div key={entry.key} className="py-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
+                    {entry.key}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <SourcePill source={entry.source} />
+                    <CopyToClipboard text={copyText} />
+                  </div>
+                </div>
+                {isValidOCRDataStructure(entry.value) ? (
                   <OCRTable ocrData={entry.value} />
                 ) : (
-                  <pre className="max-h-80 overflow-y-auto rounded bg-muted p-2">
+                  <pre className="max-h-80 overflow-y-auto rounded-md bg-secondary p-3 font-mono text-[11.5px] leading-relaxed text-foreground">
                     {JSON.stringify(entry.value, null, 2)}
                   </pre>
-                )
-              ) : (
-                <div className="prose max-w-none">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {String(entry.value)}
-                  </ReactMarkdown>
-                </div>
-              )}
-              <span className="text-sm text-muted-foreground">({entry.source})</span>
-            </div>
+                )}
+              </div>
+            );
+          }
+
+          return (
+            <Row key={entry.key} label={entry.key} source={entry.source} copyText={copyText}>
+              <div className="prose prose-sm max-w-none break-words text-sm text-foreground prose-p:my-0">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {String(entry.value)}
+                </ReactMarkdown>
+              </div>
+            </Row>
           );
         })}
       </div>
-
-      {appNameEntry && (
-        <>
-          <div className="mt-6 text-sm font-bold uppercase tracking-wide text-primary">
-            APP NAME
-          </div>
-          <div className="mb-4 flex items-center text-base text-foreground">
-            {appNameEntry.value || 'unknown'}
-            <CopyToClipboard text={appNameEntry.value || ''} />
-          </div>
-        </>
-      )}
     </ScrollArea>
+  );
+}
+
+interface RowProps {
+  label: string;
+  source?: string;
+  copyText?: string;
+  children: React.ReactNode;
+}
+
+function Row({ label, source, copyText, children }: RowProps) {
+  return (
+    <div className="grid grid-cols-[96px_1fr_auto] items-baseline gap-3 py-3">
+      <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
+        {label}
+      </span>
+      <div className="min-w-0">{children}</div>
+      <div className="flex items-center gap-2">
+        {source && <SourcePill source={source} />}
+        {copyText !== undefined && <CopyToClipboard text={copyText} />}
+      </div>
+    </div>
+  );
+}
+
+function Tag({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-0.5 font-mono text-[11px] text-foreground">
+      <span className="text-brand">·</span>
+      {children}
+    </span>
+  );
+}
+
+function SourcePill({ source }: { source: string }) {
+  return (
+    <span className="rounded-sm border border-border px-1.5 py-px font-mono text-[9.5px] uppercase tracking-[0.08em] text-muted-foreground">
+      {source}
+    </span>
   );
 }
