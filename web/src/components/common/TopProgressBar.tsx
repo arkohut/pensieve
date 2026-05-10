@@ -28,7 +28,7 @@ export function TopProgressBar() {
         visible ? 'opacity-100' : 'opacity-0',
       )}
     >
-      <div className="h-full w-1/4 animate-progress-slide bg-primary" />
+      <div className="h-full w-1/4 animate-progress-slide bg-brand shadow-[0_0_8px_hsl(var(--brand))]" />
     </div>
   );
 }

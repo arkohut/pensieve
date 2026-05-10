@@ -5,7 +5,6 @@ import { Loader2, Settings } from 'lucide-react';
 import { Button } from '$/components/ui/button';
 import { Input } from '$/components/ui/input';
 import { Skeleton } from '$/components/ui/skeleton';
-import { Logo } from '$/components/common/Logo';
 import { ErrorState } from '$/components/common/ErrorState';
 import { PageHeader } from '$/components/common/PageHeader';
 import { HitCard } from '$/components/search/HitCard';
@@ -24,17 +23,15 @@ export const Route = createFileRoute('/')({
 });
 
 const LOADING_SKELETON = (
-  <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+  <div className="grid grid-cols-2 gap-x-5 gap-y-7 md:grid-cols-3 lg:grid-cols-4">
     {Array.from({ length: 8 }).map((_, i) => (
-      <div key={i} className="overflow-hidden rounded-lg border bg-card">
-        <div className="px-4 pt-4">
-          <Skeleton className="mb-2 h-4 w-3/4" />
-          <Skeleton className="h-4 w-1/2" />
-          <Skeleton className="mt-2 h-3 w-1/4" />
+      <div key={i}>
+        <Skeleton className="aspect-[16/10] w-full rounded-md" />
+        <div className="mt-2.5 flex items-center gap-3">
+          <Skeleton className="h-3.5 flex-1" />
+          <Skeleton className="h-3 w-12" />
         </div>
-        <div className="px-4 pb-4 pt-4">
-          <Skeleton className="h-48 w-full" />
-        </div>
+        <Skeleton className="mt-1.5 h-3 w-1/2" />
       </div>
     ))}
   </div>
@@ -174,53 +171,93 @@ function HomePage() {
     </>
   );
 
+  const totalIndexed = data?.out_of;
+
   return (
     <div className="flex min-h-screen flex-col">
       <PageHeader
+        maxWidth="max-w-screen-xl"
+        left={
+          <Link to="/" className="flex items-baseline gap-3">
+            <span className="text-base font-semibold tracking-tight">
+              Pensieve<span className="text-brand">.</span>
+            </span>
+            <span className="hidden font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground sm:inline">
+              / a private archive of your screen
+            </span>
+          </Link>
+        }
         right={
           <Link to="/config">
             <Button variant="ghost" size="icon" title={t('config.title')}>
-              <Settings size={20} />
+              <Settings size={18} />
             </Button>
           </Link>
         }
       />
 
-      <header className="mx-auto flex w-full max-w-screen-lg flex-col items-center justify-between px-4 py-4">
-        <Logo size={128} withBorder hasGap className="mr-4" />
-        <div className="mt-4 flex w-full p-2">
-          <div className="relative w-full">
-            <Input
-              type="text"
-              value={localQuery}
-              onChange={handleInputChange}
-              onKeyDown={handleInputKeyDown}
-              placeholder={t('searchPlaceholder')}
-              autoFocus
-              className="w-full border-border pr-10 text-lg"
-            />
-            {isQuerying && (
-              <Loader2
-                aria-hidden
-                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground"
-                size={18}
-              />
-            )}
-          </div>
+      <header className="mx-auto w-full max-w-screen-xl px-6 pb-6 pt-12">
+        <div className="flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground">
+          <span className="relative inline-flex h-1.5 w-1.5">
+            <span className="absolute inset-0 animate-ping rounded-full bg-brand/40" />
+            <span className="relative inline-block h-1.5 w-1.5 rounded-full bg-brand" />
+          </span>
+          <span>live · capturing</span>
         </div>
-        <div className="mt-2 flex w-full justify-start gap-2 px-2">{filterButtons}</div>
+
+        <h1 className="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-[36px]">
+          <span className="text-brand">
+            {totalIndexed != null ? totalIndexed.toLocaleString() : '—'}
+          </span>{' '}
+          memories indexed.
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          你电脑的私人记忆库
+          {totalIndexed != null && (
+            <>
+              {' '}
+              ——{' '}
+              <span className="font-mono text-[13px] tabular-nums">
+                {totalIndexed.toLocaleString()}
+              </span>{' '}
+              张截图，覆盖所有应用与所有屏幕。
+            </>
+          )}
+        </p>
+
+        <div className="relative mt-7 max-w-2xl">
+          <Input
+            type="text"
+            value={localQuery}
+            onChange={handleInputChange}
+            onKeyDown={handleInputKeyDown}
+            placeholder={t('searchPlaceholder')}
+            autoFocus
+            className="h-11 w-full border-border pr-10 text-[15px]"
+          />
+          {isQuerying && (
+            <Loader2
+              aria-hidden
+              className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-brand"
+              size={16}
+            />
+          )}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">{filterButtons}</div>
       </header>
 
       <div
         className={cn(
-          'fixed inset-x-0 top-0 z-20 border-b bg-background shadow-sm transition-opacity duration-200',
+          'fixed inset-x-0 top-0 z-20 border-b bg-background/85 backdrop-blur transition-opacity duration-200',
           isScrolled ? 'opacity-100' : 'pointer-events-none opacity-0',
         )}
         aria-hidden={!isScrolled}
       >
-        <div className="mx-auto flex max-w-screen-lg items-center gap-4 px-4 py-2">
-          <Logo size={32} withBorder={false} hasGap={false} />
-          <div className="relative w-full">
+        <div className="mx-auto flex max-w-screen-xl items-center gap-4 px-6 py-2.5">
+          <Link to="/" className="shrink-0 text-sm font-semibold tracking-tight">
+            Pensieve<span className="text-brand">.</span>
+          </Link>
+          <div className="relative min-w-0 flex-1">
             <Input
               type="text"
               value={localQuery}
@@ -228,13 +265,13 @@ function HomePage() {
               onKeyDown={handleInputKeyDown}
               placeholder={t('searchPlaceholder')}
               tabIndex={isScrolled ? 0 : -1}
-              className="w-full border-border pr-10"
+              className="h-9 w-full border-border pr-10"
             />
             {isQuerying && (
               <Loader2
                 aria-hidden
-                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground"
-                size={16}
+                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-brand"
+                size={14}
               />
             )}
           </div>
@@ -242,10 +279,10 @@ function HomePage() {
         </div>
       </div>
 
-      <main className="flex-grow">
-        <div className="mx-auto flex flex-col sm:flex-row">
+      <main className="mx-auto w-full max-w-screen-xl flex-grow px-6 pb-16">
+        <div className="flex flex-col sm:flex-row sm:gap-8">
           {hasSidebar && (
-            <aside className="pr-4 sm:w-full md:w-1/5 lg:w-1/6 xl:w-[14.28%]">
+            <aside className="pb-6 sm:w-full md:w-56 md:flex-shrink-0">
               {hasDateBuckets && bucketUnit && (
                 <DateBucketFilter
                   buckets={dateBuckets}
@@ -259,9 +296,7 @@ function HomePage() {
               )}
             </aside>
           )}
-          <div
-            className={hasSidebar ? 'md:w-4/5 lg:w-5/6 xl:w-[85.72%]' : 'w-full'}
-          >
+          <div className="min-w-0 flex-1">
             {isLoading ? (
               LOADING_SKELETON
             ) : isError ? (
@@ -274,23 +309,25 @@ function HomePage() {
                 )}
                 aria-busy={isStale}
               >
-                <p className="mb-4 text-center text-sm text-muted-foreground">
-                  {data.found > 0
-                    ? t('searchSummary', {
-                        found:
-                          // Server caps very broad counts at 10000 (returns 10001
-                          // as the sentinel) to avoid scanning hundreds of
-                          // thousands of FTS rows. Render that as '10,000+'.
-                          data.found > 10000
-                            ? `${(10000).toLocaleString()}+`
-                            : data.found.toLocaleString(),
-                        outOf: data.out_of.toLocaleString(),
-                      })
-                    : t('searchSummarySemantic', {
-                        hits: data.hits.length.toLocaleString(),
-                      })}
-                </p>
-                <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+                <div className="mb-5 flex items-baseline justify-between border-b border-border pb-3 font-mono text-[11.5px] uppercase tracking-[0.08em] text-muted-foreground">
+                  <span>
+                    {data.found > 0
+                      ? t('searchSummary', {
+                          found:
+                            // Server caps very broad counts at 10000 (returns 10001
+                            // as the sentinel to avoid scanning hundreds of
+                            // thousands of FTS rows. Render that as '10,000+'.
+                            data.found > 10000
+                              ? `${(10000).toLocaleString()}+`
+                              : data.found.toLocaleString(),
+                          outOf: data.out_of.toLocaleString(),
+                        })
+                      : t('searchSummarySemantic', {
+                          hits: data.hits.length.toLocaleString(),
+                        })}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-x-5 gap-y-7 md:grid-cols-3 lg:grid-cols-4">
                   {data.hits.map((hit, i) => (
                     <HitCard key={hit.document.id} hit={hit} onClick={() => setSelectedIndex(i)} />
                   ))}
@@ -298,7 +335,7 @@ function HomePage() {
               </div>
             ) : data ? (
               <div className="flex min-h-[200px] items-center justify-center">
-                <p>{t('noResults')}</p>
+                <p className="text-sm text-muted-foreground">{t('noResults')}</p>
               </div>
             ) : null}
           </div>

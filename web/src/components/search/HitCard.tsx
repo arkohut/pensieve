@@ -14,6 +14,11 @@ function getAppName(doc: Hit['document']): string {
   return aa?.value ?? 'unknown';
 }
 
+function getScreenName(doc: Hit['document']): string | null {
+  const sn = doc.metadata_entries?.find((e) => e.key === 'screen_name');
+  return sn?.value ?? null;
+}
+
 const RELATIVE_TIME_DIVISIONS = [
   { amount: 60, unit: 'second' },
   { amount: 60, unit: 'minute' },
@@ -52,33 +57,41 @@ interface Props {
 export function HitCard({ hit, onClick }: Props) {
   const title = getEntityTitle(hit.document);
   const appName = getAppName(hit.document);
+  const screenName = getScreenName(hit.document);
   const iconName = translateAppName(appName) ?? 'Hexagon';
+  const subtitle = [appName !== 'unknown' ? appName : null, screenName]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className="relative overflow-hidden rounded-lg border bg-card text-left hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="group block w-full text-left transition-transform duration-200 ease-out hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
-      <div className="px-4 pt-4">
-        <h2 className="line-clamp-2 h-12">{title}</h2>
-        <p className="text-xs text-muted-foreground">{formatRelativeTime(hit.document.file_created_at)}</p>
-      </div>
-      <figure className="relative mb-4 px-4 pt-4">
+      <figure className="aspect-[16/10] overflow-hidden rounded-md border border-border bg-secondary transition-shadow duration-200 group-hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.18)]">
         <img
           loading="lazy"
           decoding="async"
-          className="h-48 w-full object-cover"
+          className="h-full w-full object-cover"
           src={`${apiEndpoint}/thumbnails/${hit.document.filepath.replace(/^\/+/, '')}`}
           alt=""
         />
-        {appName !== 'unknown' && (
-          <div className="absolute bottom-2 left-6 flex items-center space-x-2 rounded-full border bg-card/75 px-2 py-1 text-xs font-semibold">
-            <LucideIcon name={iconName} size={16} />
-            <span>{appName}</span>
-          </div>
-        )}
       </figure>
+      <div className="mt-2.5 flex items-baseline gap-3">
+        <h2 className="min-w-0 flex-1 truncate text-[13px] font-medium leading-tight text-foreground">
+          {title}
+        </h2>
+        <span className="shrink-0 font-mono text-[11px] tracking-wide text-muted-foreground">
+          {formatRelativeTime(hit.document.file_created_at)}
+        </span>
+      </div>
+      {subtitle && (
+        <p className="mt-1 flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
+          <LucideIcon name={iconName} size={12} className="shrink-0 opacity-70" />
+          <span className="truncate">{subtitle}</span>
+        </p>
+      )}
     </button>
   );
 }

@@ -5,6 +5,9 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { createRouter, RouterProvider } from '@tanstack/react-router';
 import { Toaster } from 'sonner';
 
+import '@fontsource-variable/geist';
+import '@fontsource-variable/jetbrains-mono';
+
 import { ThemeProvider } from '$/components/common/ThemeProvider';
 import { routeTree } from './routeTree.gen';
 import './styles/globals.css';
