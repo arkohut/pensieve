@@ -61,3 +61,46 @@
     font-feature-settings: 'cv11', 'ss01', 'ss03';
   }
 }
+
+@layer utilities {
+  /* Visually fold near-identical adjacent screenshots into a "stack" of two
+     or three offset rectangles peeking out from behind the representative
+     thumbnail. Hover spreads them slightly to hint at depth. */
+  .stack-2,
+  .stack-3 {
+    position: relative;
+    isolation: isolate;
+  }
+  .stack-2 > .stack-top,
+  .stack-3 > .stack-top {
+    position: relative;
+    z-index: 2;
+  }
+  .stack-2::before,
+  .stack-3::before,
+  .stack-3::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 1px solid hsl(var(--border));
+    border-radius: calc(var(--radius) - 2px);
+    background: hsl(var(--secondary));
+    transition: transform 0.18s ease;
+  }
+  .stack-2::before,
+  .stack-3::before {
+    transform: translate(3px, 3px);
+    z-index: 1;
+  }
+  .stack-3::after {
+    transform: translate(6px, 6px);
+    z-index: 0;
+  }
+  .stack-2:hover::before,
+  .stack-3:hover::before {
+    transform: translate(5px, 5px);
+  }
+  .stack-3:hover::after {
+    transform: translate(10px, 10px);
+  }
+}
