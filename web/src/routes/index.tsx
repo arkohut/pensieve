@@ -15,6 +15,7 @@ import { DateBucketFilter } from '$/components/search/DateBucketFilter';
 import { Figure } from '$/components/entity/Figure';
 import { searchSchema, type SearchParams } from '$/lib/search-params';
 import { useFacets, useSearch } from '$/lib/api/search';
+import { groupHits } from '$/lib/group-hits';
 import { cn } from '$/lib/utils';
 
 export const Route = createFileRoute('/')({
@@ -328,8 +329,13 @@ function HomePage() {
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-x-5 gap-y-7 md:grid-cols-3 lg:grid-cols-4">
-                  {data.hits.map((hit, i) => (
-                    <HitCard key={hit.document.id} hit={hit} onClick={() => setSelectedIndex(i)} />
+                  {groupHits(data.hits).map((group) => (
+                    <HitCard
+                      key={group.rep.document.id}
+                      hit={group.rep}
+                      stackCount={group.count}
+                      onClick={() => setSelectedIndex(group.flatIndex)}
+                    />
                   ))}
                 </div>
               </div>
