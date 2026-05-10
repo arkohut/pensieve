@@ -36,15 +36,15 @@ export function OCRTable({ ocrData }: Props) {
         <ModeToggle mode={mode} onChange={setMode} />
       </div>
       {mode === 'text' ? (
-        <div className="max-h-80 overflow-y-auto rounded-md border border-border bg-secondary/50 p-3 font-mono text-[11.5px] leading-relaxed text-foreground">
+        <div className="rounded-md border border-border bg-secondary/50 p-3 font-mono text-[11.5px] leading-relaxed text-foreground">
           <p className="whitespace-pre-wrap break-words">
             {ocrData.map((r) => r.rec_txt).join('\n')}
           </p>
         </div>
       ) : (
-        <div className="max-h-80 overflow-auto rounded-md border border-border">
+        <div className="rounded-md border border-border">
           <table className="w-full table-auto font-mono text-[11px]">
-            <thead className="sticky top-0 bg-secondary text-[9.5px] uppercase tracking-[0.08em] text-muted-foreground">
+            <thead className="sticky top-0 z-[1] bg-secondary text-[9.5px] uppercase tracking-[0.08em] text-muted-foreground">
               <tr>
                 <th className="px-2.5 py-1 text-left font-medium">Text</th>
                 <th className="w-14 px-2.5 py-1 text-right font-medium">Score</th>
