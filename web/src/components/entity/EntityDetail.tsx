@@ -21,9 +21,35 @@ function processEntries(entries: MetadataEntry[] | undefined): ProcessedEntry[] 
         console.error(`Error parsing JSON for key ${entry.key}:`, error);
         processed.value = entry.value;
       }
+    } else if (typeof entry.value === 'string') {
+      // Some pipelines (e.g. structured_vlm) stash JSON in entries marked
+      // data_type='text'. Opportunistically reparse so the UI can pretty-
+      // print them instead of rendering raw braces inline.
+      const trimmed = entry.value.trim();
+      if (
+        (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+        (trimmed.startsWith('[') && trimmed.endsWith(']'))
+      ) {
+        try {
+          const parsed: unknown = JSON.parse(trimmed);
+          if (parsed !== null && typeof parsed === 'object') {
+            processed.value = parsed;
+          }
+        } catch {
+          // Not actually JSON — leave as the original string.
+        }
+      }
     }
     return processed;
   });
+}
+
+const SOURCE_LABELS: Record<string, string> = {
+  system_generated: 'system',
+};
+
+function shortSource(source: string): string {
+  return SOURCE_LABELS[source] ?? source;
 }
 
 const HIDDEN_KEYS = new Set(['timestamp', 'sequence', 'active_app', 'active_window']);
@@ -122,8 +148,8 @@ interface RowProps {
 
 function Row({ label, source, copyText, children }: RowProps) {
   return (
-    <div className="grid grid-cols-[96px_1fr_auto] items-baseline gap-3 py-3">
-      <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
+    <div className="grid grid-cols-[minmax(108px,auto)_1fr_auto] items-baseline gap-3 py-3 sm:grid-cols-[140px_1fr_auto]">
+      <span className="break-all font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
         {label}
       </span>
       <div className="min-w-0">{children}</div>
@@ -145,9 +171,13 @@ function Tag({ children }: { children: React.ReactNode }) {
 }
 
 function SourcePill({ source }: { source: string }) {
+  const label = shortSource(source);
   return (
-    <span className="rounded-sm border border-border px-1.5 py-px font-mono text-[9.5px] uppercase tracking-[0.08em] text-muted-foreground">
-      {source}
+    <span
+      className="rounded-sm border border-border px-1.5 py-px font-mono text-[9.5px] uppercase tracking-[0.08em] text-muted-foreground"
+      title={source}
+    >
+      {label}
     </span>
   );
 }
