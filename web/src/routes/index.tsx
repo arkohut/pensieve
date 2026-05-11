@@ -44,6 +44,18 @@ function HomePage() {
   const [localQuery, setLocalQuery] = useState(search.q);
   const [isScrolled, setIsScrolled] = useState(false);
 
+  // Snapshot the home search so the entity page can restore it on Esc/Home.
+  // sessionStorage is per-tab and clears with the tab, which matches the
+  // intuition that the "previous home" only makes sense within this session.
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('memos:homeSearch', JSON.stringify(search));
+    } catch {
+      // Storage may be disabled (private mode quotas, etc). Falling back to
+      // an unparameterized home is still a valid behavior.
+    }
+  }, [search]);
+
   const openEntity = useCallback(
     (entityId: number) => {
       void navigate({ to: '/entities/$id', params: { id: String(entityId) } });

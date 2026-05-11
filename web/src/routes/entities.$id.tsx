@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate, useRouter } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Home, Loader } from 'lucide-react';
@@ -26,7 +26,6 @@ function EntityPage() {
   const { id } = Route.useParams();
   const entityId = Number(id);
   const navigate = useNavigate();
-  const router = useRouter();
   const queryClient = useQueryClient();
 
   const [layout, setLayoutState] = useState<ViewerLayout>(() => {
@@ -81,14 +80,18 @@ function EntityPage() {
   );
 
   const goToHome = useCallback(() => {
-    // Prefer history.back so the home page's search params survive. Fall back
-    // to a fresh navigate when the user landed directly on /entities/$id.
-    if (router.history.length > 1) {
-      router.history.back();
-    } else {
-      void navigate({ to: '/' });
+    // Restore the home search params snapshotted by HomePage so the user lands
+    // back on their previous query / filters. Falls back to a bare home when
+    // there's no snapshot (direct visit to /entities/$id, fresh tab, etc).
+    let homeSearch: Record<string, unknown> = {};
+    try {
+      const saved = sessionStorage.getItem('memos:homeSearch');
+      if (saved) homeSearch = JSON.parse(saved);
+    } catch {
+      // Ignore storage failures; navigate to bare home below.
     }
-  }, [navigate, router.history]);
+    void navigate({ to: '/', search: homeSearch });
+  }, [navigate]);
 
   useEffect(() => {
     function handler(e: KeyboardEvent) {
