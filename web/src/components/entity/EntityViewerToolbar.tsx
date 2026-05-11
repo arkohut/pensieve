@@ -1,19 +1,31 @@
 import { type ReactNode, useMemo } from 'react';
-import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { Check, Columns2, PanelLeft, PanelRight } from 'lucide-react';
 import { Button } from '$/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '$/components/ui/dropdown-menu';
 import { LucideIcon } from '$/components/common/LucideIcon';
-import { translateAppName, formatDate, filename } from '$/lib/utils';
+import { translateAppName, formatDate, filename, cn } from '$/lib/utils';
 import type { Entity } from '$/lib/api/types';
+
+export type ViewerLayout = 'both' | 'image' | 'details';
 
 interface Props {
   entity: Entity | null;
-  showImage: boolean;
-  showDetails: boolean;
-  onToggleImage: () => void;
-  onToggleDetails: () => void;
+  layout: ViewerLayout;
+  onLayoutChange: (layout: ViewerLayout) => void;
   leftAction?: ReactNode;
   rightAction?: ReactNode;
 }
+
+const LAYOUT_OPTIONS: Array<{ value: ViewerLayout; label: string; Icon: typeof Columns2 }> = [
+  { value: 'both', label: 'Image & details', Icon: Columns2 },
+  { value: 'image', label: 'Image only', Icon: PanelLeft },
+  { value: 'details', label: 'Details only', Icon: PanelRight },
+];
 
 function getEntityTitle(doc: Entity): string {
   const aw = doc.metadata_entries?.find((e) => e.key === 'active_window');
@@ -28,10 +40,8 @@ function getAppName(doc: Entity): string {
 
 export function EntityViewerToolbar({
   entity,
-  showImage,
-  showDetails,
-  onToggleImage,
-  onToggleDetails,
+  layout,
+  onLayoutChange,
   leftAction,
   rightAction,
 }: Props) {
@@ -42,10 +52,8 @@ export function EntityViewerToolbar({
     [entity?.file_created_at],
   );
 
-  // Prevent both panes from being hidden at once: only disable a toggle
-  // when clicking it would collapse the last visible pane.
-  const imageWouldOrphan = showImage && !showDetails;
-  const detailsWouldOrphan = showDetails && !showImage;
+  const current = LAYOUT_OPTIONS.find((o) => o.value === layout) ?? LAYOUT_OPTIONS[0];
+  const showInlineTime = layout === 'image';
 
   return (
     <div className="relative z-[52] flex w-full items-center gap-2">
@@ -54,7 +62,7 @@ export function EntityViewerToolbar({
         <div className="flex min-w-0 items-center gap-2">
           <LucideIcon name={translateAppName(displayAppName) ?? 'Image'} size={20} />
           <p className="truncate text-base font-medium leading-tight">{displayTitle}</p>
-          {!showDetails && formattedCreatedAt && (
+          {showInlineTime && formattedCreatedAt && (
             <span className="ml-3 font-mono text-xs text-muted-foreground">
               {formattedCreatedAt}
             </span>
@@ -62,30 +70,39 @@ export function EntityViewerToolbar({
         </div>
       </div>
       <div className="flex flex-none items-center gap-1">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          disabled={imageWouldOrphan}
-          className="h-8 w-8 text-muted-foreground hover:text-foreground"
-          onClick={onToggleImage}
-          aria-label={showImage ? 'Hide image' : 'Show image'}
-          title={showImage ? 'Hide image' : 'Show image'}
-        >
-          {showImage ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          disabled={detailsWouldOrphan}
-          className="h-8 w-8 text-muted-foreground hover:text-foreground"
-          onClick={onToggleDetails}
-          aria-label={showDetails ? 'Hide details' : 'Show details'}
-          title={showDetails ? 'Hide details' : 'Show details'}
-        >
-          {showDetails ? <PanelRightClose size={18} /> : <PanelRightOpen size={18} />}
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              aria-label={`Layout: ${current.label}`}
+              title={`Layout: ${current.label}`}
+            >
+              <current.Icon size={18} />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-[10rem]">
+            {LAYOUT_OPTIONS.map(({ value, label, Icon }) => (
+              <DropdownMenuItem
+                key={value}
+                onClick={() => onLayoutChange(value)}
+                className="gap-2"
+              >
+                <Icon size={14} className="text-muted-foreground" />
+                <span className="flex-1">{label}</span>
+                <Check
+                  size={14}
+                  className={cn(
+                    'text-brand transition-opacity',
+                    value === layout ? 'opacity-100' : 'opacity-0',
+                  )}
+                />
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
         {rightAction}
       </div>
     </div>
