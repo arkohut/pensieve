@@ -12,7 +12,6 @@ import { FacetFilter } from '$/components/search/FacetFilter';
 import { LibraryFilter } from '$/components/search/LibraryFilter';
 import { TimeFilter } from '$/components/search/TimeFilter';
 import { DateBucketFilter } from '$/components/search/DateBucketFilter';
-import { Figure } from '$/components/entity/Figure';
 import { searchSchema, type SearchParams } from '$/lib/search-params';
 import { useFacets, useSearch } from '$/lib/api/search';
 import { groupHits } from '$/lib/group-hits';
@@ -43,8 +42,14 @@ function HomePage() {
   const search = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
   const [localQuery, setLocalQuery] = useState(search.q);
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [isScrolled, setIsScrolled] = useState(false);
+
+  const openEntity = useCallback(
+    (entityId: number) => {
+      void navigate({ to: '/entities/$id', params: { id: String(entityId) } });
+    },
+    [navigate],
+  );
   const { data, isLoading, isError, error, refetch, isFetching } = useSearch(search);
 
   useEffect(() => {
@@ -150,20 +155,6 @@ function HomePage() {
     },
     [submitQuery],
   );
-
-  const closeFigure = useCallback(() => setSelectedIndex(null), []);
-  const showNextFigure = useCallback(() => {
-    setSelectedIndex((index) => {
-      if (index == null || !data?.hits.length) return index;
-      return (index + 1) % data.hits.length;
-    });
-  }, [data?.hits.length]);
-  const showPreviousFigure = useCallback(() => {
-    setSelectedIndex((index) => {
-      if (index == null || !data?.hits.length) return index;
-      return (index - 1 + data.hits.length) % data.hits.length;
-    });
-  }, [data?.hits.length]);
 
   const filterButtons = (
     <>
@@ -334,7 +325,7 @@ function HomePage() {
                       key={group.rep.document.id}
                       hit={group.rep}
                       stackCount={group.count}
-                      onClick={() => setSelectedIndex(group.flatIndex)}
+                      onClick={() => openEntity(group.rep.document.id)}
                     />
                   ))}
                 </div>
@@ -347,15 +338,6 @@ function HomePage() {
           </div>
         </div>
       </main>
-
-      {data && selectedIndex != null && data.hits[selectedIndex] && (
-        <Figure
-          entity={data.hits[selectedIndex].document}
-          onClose={closeFigure}
-          onNext={showNextFigure}
-          onPrevious={showPreviousFigure}
-        />
-      )}
     </div>
   );
 }

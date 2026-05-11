@@ -145,8 +145,5 @@
       "confirm": "确认修改",
       "cancel": "取消"
     }
-  },
-  "figure": {
-    "viewContext": "查看上下文"
   }
 }

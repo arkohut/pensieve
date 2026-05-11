@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, useNavigate, useRouter } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Home, Loader } from 'lucide-react';
@@ -15,6 +15,7 @@ import {
   useEntity,
   useEntityContext,
 } from '$/lib/api/entities';
+import { useLibraries } from '$/lib/api/libraries';
 import type { Entity } from '$/lib/api/types';
 
 export const Route = createFileRoute('/entities/$id')({
@@ -25,6 +26,7 @@ function EntityPage() {
   const { id } = Route.useParams();
   const entityId = Number(id);
   const navigate = useNavigate();
+  const router = useRouter();
   const queryClient = useQueryClient();
 
   const [layout, setLayoutState] = useState<ViewerLayout>(() => {
@@ -41,7 +43,15 @@ function EntityPage() {
   }
 
   const { data: entity, isLoading, isError, error, refetch } = useEntity(entityId);
-  const { data: contextData } = useEntityContext(entity?.library_id, entityId);
+  const { data: libraries } = useLibraries();
+  const library = libraries?.find((l) => l.id === entity?.library_id);
+  // Treat libraries with unknown kind as 'record' to stay backward-compatible
+  // until everyone is on a server that exposes the field.
+  const isRecordLibrary = library?.kind !== 'static';
+  const { data: contextData } = useEntityContext(
+    isRecordLibrary ? entity?.library_id : undefined,
+    isRecordLibrary ? entityId : 0,
+  );
   const previousEntity = useMemo(() => contextData?.prev.at(-1), [contextData?.prev]);
   const nextEntity = useMemo(() => contextData?.next[0], [contextData?.next]);
   const adjacentEntities = useMemo(
@@ -62,13 +72,21 @@ function EntityPage() {
     [navigate, queryClient],
   );
 
-  function goToHome() {
-    void navigate({ to: '/' });
-  }
+  const goToHome = useCallback(() => {
+    // Prefer history.back so the home page's search params survive. Fall back
+    // to a fresh navigate when the user landed directly on /entities/$id.
+    if (router.history.length > 1) {
+      router.history.back();
+    } else {
+      void navigate({ to: '/' });
+    }
+  }, [navigate, router.history]);
 
   useEffect(() => {
     function handler(e: KeyboardEvent) {
-      if (e.key === 'ArrowLeft' && previousEntity) {
+      if (e.key === 'Escape') {
+        goToHome();
+      } else if (e.key === 'ArrowLeft' && previousEntity) {
         goToEntity(previousEntity);
       } else if (e.key === 'ArrowRight' && nextEntity) {
         goToEntity(nextEntity);
@@ -76,7 +94,7 @@ function EntityPage() {
     }
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [goToEntity, nextEntity, previousEntity]);
+  }, [goToEntity, goToHome, nextEntity, previousEntity]);
 
   useEffect(() => {
     if (!contextData) return;
@@ -125,10 +143,15 @@ function EntityPage() {
     </Button>
   );
 
+  const showContext = isRecordLibrary && !!contextData;
+  const viewerHeight = showContext ? 'h-[calc(100vh-180px)]' : 'h-[calc(100vh-48px)]';
+
   return (
     <div className="fixed inset-0 z-40 flex h-full w-full flex-col bg-black/50">
       <div className="flex flex-grow flex-col">
-        <div className="relative mx-auto mt-6 flex h-[calc(100vh-180px)] w-11/12 max-w-[95vw] flex-col overflow-hidden rounded-t-md bg-background">
+        <div
+          className={`relative mx-auto mt-6 flex ${viewerHeight} w-11/12 max-w-[95vw] flex-col overflow-hidden rounded-t-md bg-background`}
+        >
           <div className="flex flex-grow flex-col overflow-hidden">
             <div className="flex h-full flex-col overflow-y-auto px-4 py-4 sm:px-6 lg:overflow-hidden lg:px-10">
               <EntityViewerToolbar
@@ -157,17 +180,17 @@ function EntityPage() {
         </div>
       </div>
 
-      <div className="h-[180px] w-full border-t bg-muted/50 shadow-inner">
-        <div className="mx-auto h-full py-3">
-          {contextData && (
+      {showContext && (
+        <div className="h-[180px] w-full border-t bg-muted/50 shadow-inner">
+          <div className="mx-auto h-full py-3">
             <ContextNavigationBar
               entity={entity}
               contextData={contextData}
               onSelectEntity={goToEntity}
             />
-          )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
