@@ -2,8 +2,10 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Home, Loader } from 'lucide-react';
+import { Button } from '$/components/ui/button';
 import { EntityImage } from '$/components/entity/EntityImage';
 import { EntityDetail } from '$/components/entity/EntityDetail';
+import { EntityViewerToolbar } from '$/components/entity/EntityViewerToolbar';
 import { ContextNavigationBar } from '$/components/entity/ContextNavigationBar';
 import { ErrorState } from '$/components/common/ErrorState';
 import {
@@ -25,6 +27,15 @@ function EntityPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
+  const [showImage, setShowImage] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    const img = localStorage.getItem('entityShowImage');
+    const det = localStorage.getItem('entityShowDetails');
+    const imgVal = img !== null ? JSON.parse(img) : true;
+    const detVal = det !== null ? JSON.parse(det) : true;
+    // Defensive: if a previous session left both hidden, restore the image.
+    return imgVal || !detVal;
+  });
   const [showDetails, setShowDetails] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
     const saved = localStorage.getItem('entityShowDetails');
@@ -39,6 +50,14 @@ function EntityPage() {
     () => [previousEntity, nextEntity].filter((item): item is Entity => Boolean(item)),
     [nextEntity, previousEntity],
   );
+
+  function toggleImage() {
+    setShowImage((prev) => {
+      const next = !prev;
+      localStorage.setItem('entityShowImage', JSON.stringify(next));
+      return next;
+    });
+  }
 
   function toggleDetails() {
     setShowDetails((prev) => {
@@ -111,30 +130,47 @@ function EntityPage() {
   if (!entity) return <p className="p-4">Entity not found.</p>;
 
   const homeButton = (
-    <button
+    <Button
       type="button"
+      variant="ghost"
+      size="icon"
+      className="h-8 w-8 text-muted-foreground hover:text-foreground"
       onClick={goToHome}
-      className="-ml-2 flex items-center gap-2 rounded-full p-2 text-primary hover:bg-accent"
       aria-label="Home"
+      title="Home"
     >
-      <Home size={24} className="text-primary" />
-    </button>
+      <Home size={18} />
+    </Button>
   );
 
   return (
     <div className="fixed inset-0 z-40 flex h-full w-full flex-col bg-black/50">
       <div className="flex flex-grow flex-col">
         <div className="relative mx-auto mt-6 flex h-[calc(100vh-180px)] w-11/12 max-w-[95vw] flex-col overflow-hidden rounded-t-md bg-background">
-          <div className="flex-grow overflow-hidden lg:overflow-hidden">
-            <div className="h-full overflow-y-auto px-4 py-4 sm:px-6 lg:overflow-hidden lg:px-10">
-              <div className="flex min-h-full flex-col lg:h-full lg:flex-row">
-                <EntityImage
-                  entity={entity}
-                  showDetails={showDetails}
-                  toggleDetails={toggleDetails}
-                  leftIcon={homeButton}
-                />
-                {showDetails && <EntityDetail entity={entity} />}
+          <div className="flex flex-grow flex-col overflow-hidden">
+            <div className="flex h-full flex-col overflow-y-auto px-4 py-4 sm:px-6 lg:overflow-hidden lg:px-10">
+              <EntityViewerToolbar
+                entity={entity}
+                showImage={showImage}
+                showDetails={showDetails}
+                onToggleImage={toggleImage}
+                onToggleDetails={toggleDetails}
+                leftAction={homeButton}
+              />
+              <div className="mt-3 flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
+                {showImage && (
+                  <EntityImage
+                    entity={entity}
+                    showIdentifier={showDetails}
+                    className={showDetails ? 'lg:w-1/2' : 'lg:flex-1'}
+                  />
+                )}
+                {showDetails && (
+                  <EntityDetail
+                    entity={entity}
+                    className={showImage ? 'lg:ml-6 lg:w-1/2' : 'lg:flex-1'}
+                  />
+                )}
               </div>
             </div>
           </div>
