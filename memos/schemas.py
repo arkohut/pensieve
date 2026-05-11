@@ -28,6 +28,15 @@ class MetadataType(Enum):
     NUMBER_DATA = "number"
 
 
+class LibraryKind(str, Enum):
+    # Continuous capture (default-library style): adjacent entities form a
+    # temporal stream, so context navigation and date-bucket facets apply.
+    RECORD = "record"
+    # Static collections (imports, demos, photo archives) where adjacency
+    # has no temporal meaning.
+    STATIC = "static"
+
+
 class NewFolderParam(BaseModel):
     path: DirectoryPath
     last_modified_at: datetime
@@ -128,10 +137,15 @@ class Plugin(BaseModel):
 class Library(BaseModel):
     id: int
     name: str
+    kind: LibraryKind = LibraryKind.STATIC
     folders: List[Folder] = []
     plugins: List[Plugin] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UpdateLibraryParam(BaseModel):
+    kind: LibraryKind | None = None
 
 
 class Tag(BaseModel):
