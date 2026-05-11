@@ -4,63 +4,13 @@ import remarkGfm from 'remark-gfm';
 import { ScrollArea } from '$/components/ui/scroll-area';
 import { CopyToClipboard } from '$/components/common/CopyToClipboard';
 import { OCRTable, isValidOCRDataStructure } from './OCRTable';
-import type { Entity, MetadataEntry } from '$/lib/api/types';
-
-interface ProcessedEntry extends Omit<MetadataEntry, 'value'> {
-  value: string | unknown;
-}
-
-function processEntries(entries: MetadataEntry[] | undefined): ProcessedEntry[] {
-  if (!entries) return [];
-  return entries.map((entry) => {
-    const processed: ProcessedEntry = { ...entry };
-    if (entry.data_type === 'json') {
-      try {
-        processed.value = JSON.parse(entry.value);
-      } catch (error) {
-        console.error(`Error parsing JSON for key ${entry.key}:`, error);
-        processed.value = entry.value;
-      }
-    } else if (typeof entry.value === 'string') {
-      // Some pipelines (e.g. structured_vlm) stash JSON in entries marked
-      // data_type='text'. Opportunistically reparse so the UI can pretty-
-      // print them instead of rendering raw braces inline.
-      const trimmed = entry.value.trim();
-      if (
-        (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
-        (trimmed.startsWith('[') && trimmed.endsWith(']'))
-      ) {
-        try {
-          const parsed: unknown = JSON.parse(trimmed);
-          if (parsed !== null && typeof parsed === 'object') {
-            processed.value = parsed;
-          }
-        } catch {
-          // Not actually JSON — leave as the original string.
-        }
-      }
-    }
-    return processed;
-  });
-}
-
-const SOURCE_LABELS: Record<string, string> = {
-  system_generated: 'system',
-};
-
-function shortSource(source: string): string {
-  return SOURCE_LABELS[source] ?? source;
-}
-
-const HIDDEN_KEYS = new Set(['timestamp', 'sequence', 'active_app', 'active_window']);
-
-function displayOrder(a: ProcessedEntry, b: ProcessedEntry): number {
-  if (a.key === 'screen_name') return -1;
-  if (b.key === 'screen_name') return 1;
-  if (a.key === 'ocr_result') return 1;
-  if (b.key === 'ocr_result') return -1;
-  return 0;
-}
+import {
+  HIDDEN_KEYS,
+  displayOrder,
+  processEntries,
+  shortSource,
+} from '$/lib/metadata';
+import type { Entity } from '$/lib/api/types';
 
 interface Props {
   entity: Entity | null;
