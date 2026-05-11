@@ -147,6 +147,15 @@ def get_or_create_default_library():
             return None
         default_library = response.json()
 
+        # The default library is the continuous-capture stream, so flip it to
+        # record kind. Other libraries stay static unless the user changes them.
+        patch_resp = httpx.patch(
+            f"{BASE_URL}/api/libraries/{default_library['id']}",
+            json={"kind": "record"},
+        )
+        if patch_resp.status_code == 200:
+            default_library = patch_resp.json()
+
         # Bind default plugins only when initializing the default library
         for plugin in settings.default_plugins:
             bind(default_library["id"], plugin)

@@ -63,9 +63,12 @@ export interface Folder {
   library_id: number;
 }
 
+export type LibraryKind = 'record' | 'static';
+
 export interface Library {
   id: number;
   name: string;
+  kind: LibraryKind;
   folders: Folder[];
   plugins?: unknown[];
 }

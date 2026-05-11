@@ -33,6 +33,7 @@ from .search import create_search_provider
 from .read_metadata import read_metadata
 from .schemas import (
     Library,
+    LibraryKind,
     Folder,
     Entity,
     Plugin,
@@ -40,6 +41,7 @@ from .schemas import (
     NewFoldersParam,
     NewEntityParam,
     UpdateEntityParam,
+    UpdateLibraryParam,
     NewPluginParam,
     NewLibraryPluginParam,
     UpdateEntityTagsParam,
@@ -58,6 +60,7 @@ from .schemas import (
     DateRange,
     DateBucket,
 )
+from .models import LibraryModel
 from .logging_config import LOGGING_CONFIG
 from .databases.initializers import create_db_initializer
 
@@ -225,6 +228,25 @@ def get_library_by_id(library_id: int, db: Session = Depends(get_db)):
             status_code=status.HTTP_404_NOT_FOUND,
         )
     return library
+
+
+@api_router.patch("/libraries/{library_id}", response_model=Library, tags=["library"])
+def update_library(
+    library_id: int,
+    update: UpdateLibraryParam,
+    db: Session = Depends(get_db),
+):
+    library = db.query(LibraryModel).filter(LibraryModel.id == library_id).first()
+    if library is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Library not found"
+        )
+    if update.kind is not None:
+        library.kind = update.kind
+        db.commit()
+        db.refresh(library)
+    return library
+
 
 @api_router.post("/libraries/{library_id}/folders", response_model=Library, tags=["library"])
 def new_folders(
@@ -1199,6 +1221,12 @@ def get_entity_context(
     """
     # If both prev and next are None, return empty lists
     if prev is None and next is None:
+        return EntityContext(prev=[], next=[])
+
+    # Static libraries don't have temporal context. Returning empty lists
+    # keeps the API shape stable while the UI suppresses the strip.
+    library = db.query(LibraryModel).filter(LibraryModel.id == library_id).first()
+    if library is None or library.kind != LibraryKind.RECORD:
         return EntityContext(prev=[], next=[])
 
     # Convert None to 0 for the crud function

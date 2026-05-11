@@ -12,7 +12,7 @@ from sqlalchemy import (
 from datetime import datetime, timezone
 from sqlalchemy.orm import relationship, DeclarativeBase, Mapped, mapped_column, Session
 from typing import List
-from .schemas import MetadataSource, MetadataType, FolderType
+from .schemas import LibraryKind, MetadataSource, MetadataType, FolderType
 
 
 class RawBase(DeclarativeBase):
@@ -33,6 +33,11 @@ class Base(RawBase):
 class LibraryModel(Base):
     __tablename__ = "libraries"
     name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    kind: Mapped[LibraryKind] = mapped_column(
+        Enum(LibraryKind, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+        server_default=LibraryKind.STATIC.value,
+    )
     folders: Mapped[List["FolderModel"]] = relationship(
         "FolderModel",
         back_populates="library",
