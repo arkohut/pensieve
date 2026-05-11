@@ -25,6 +25,16 @@ export function entityFileUrl(entity: Pick<Entity, 'filepath'>): string {
   return `${apiEndpoint}/files/${entity.filepath.replace(/^\/+/, '')}`;
 }
 
+/**
+ * Warm the browser HTTP cache for an entity's full-size image. Fire-and-
+ * forget: the bytes landing in cache is what matters; we don't await decode.
+ */
+export function preloadEntityImage(entity: Pick<Entity, 'filepath'>): void {
+  const img = new Image();
+  img.decoding = 'async';
+  img.src = entityFileUrl(entity);
+}
+
 export function entityThumbnailUrl(entity: Pick<Entity, 'filepath'>): string {
   return `${apiEndpoint}/thumbnails/${entity.filepath.replace(/^\/+/, '')}`;
 }

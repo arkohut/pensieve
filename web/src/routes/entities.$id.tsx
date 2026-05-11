@@ -9,10 +9,10 @@ import { EntityViewerToolbar, type ViewerLayout } from '$/components/entity/Enti
 import { ContextNavigationBar } from '$/components/entity/ContextNavigationBar';
 import { ErrorState } from '$/components/common/ErrorState';
 import {
-  entityFileUrl,
   entityKeys,
   fetchEntity,
   fetchEntityContext,
+  preloadEntityImage,
   useEntity,
   useEntityContext,
 } from '$/lib/api/entities';
@@ -180,24 +180,21 @@ function EntityPage() {
     }
   }, [contextData, queryClient]);
 
+  // Warm the cache for likely next clicks: temporal neighbors come with
+  // entity data attached, so we can preload their images + prefetch their
+  // own context queries in one go.
   useEffect(() => {
-    for (const adjacentEntity of adjacentEntities) {
-      const image = document.createElement('img');
-      image.decoding = 'async';
-      image.src = entityFileUrl(adjacentEntity);
-      void image.decode().catch(() => undefined);
-
+    for (const e of adjacentEntities) {
+      preloadEntityImage(e);
       void queryClient.prefetchQuery({
-        queryKey: entityKeys.context(adjacentEntity.library_id, adjacentEntity.id, 12),
-        queryFn: ({ signal }) =>
-          fetchEntityContext(adjacentEntity.library_id, adjacentEntity.id, 12, signal),
+        queryKey: entityKeys.context(e.library_id, e.id, 12),
+        queryFn: ({ signal }) => fetchEntityContext(e.library_id, e.id, 12, signal),
       });
     }
   }, [adjacentEntities, queryClient]);
 
-  // Warm the cache for prev/next search hits too: their entity records and
-  // full images, so navigating with arrow keys feels instant instead of
-  // flashing through a blank frame.
+  // Search hits come as bare ids — resolve the entity record first, then
+  // preload its image once we know the filepath.
   useEffect(() => {
     if (!searchNav) return;
     const ids = [searchNav.prevId, searchNav.nextId].filter(
@@ -205,18 +202,12 @@ function EntityPage() {
     );
     for (const id of ids) {
       void queryClient
-        .prefetchQuery({
+        .ensureQueryData({
           queryKey: entityKeys.detail(id),
           queryFn: ({ signal }) => fetchEntity(id, signal),
         })
-        .then(() => {
-          const cached = queryClient.getQueryData<Entity>(entityKeys.detail(id));
-          if (!cached) return;
-          const img = document.createElement('img');
-          img.decoding = 'async';
-          img.src = entityFileUrl(cached);
-          void img.decode().catch(() => undefined);
-        });
+        .then(preloadEntityImage)
+        .catch(() => undefined);
     }
   }, [searchNav, queryClient]);
 
