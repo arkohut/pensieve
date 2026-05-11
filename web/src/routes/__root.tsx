@@ -3,8 +3,6 @@ import { TanStackRouterDevtools } from '@tanstack/react-router-devtools';
 import type { QueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Github } from 'lucide-react';
-import { LanguageSwitcher } from '$/components/common/LanguageSwitcher';
-import { ThemeToggle } from '$/components/common/ThemeToggle';
 import { TopProgressBar } from '$/components/common/TopProgressBar';
 
 interface RouterContext {
@@ -22,31 +20,22 @@ function RootLayout() {
       <TopProgressBar />
       <div className="min-h-screen">
         <div className="mx-auto max-w-screen-2xl px-4 sm:px-6 lg:px-8">
-          <div className="relative pb-16 pt-0">
+          <div className="relative pb-12 pt-0">
             <Outlet />
           </div>
         </div>
-        <footer className="mx-auto mt-8 w-full">
-          <div className="container mx-auto">
-            <div className="border-t py-10 text-center">
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">{t('slogan')}</p>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">{t('copyright')}</p>
-              <div className="mt-2 flex items-center justify-center space-x-4 text-sm font-semibold leading-6 text-foreground">
-                <a
-                  href="https://github.com/arkohut/pensieve"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="transition-colors hover:text-primary"
-                  aria-label={t('github')}
-                >
-                  <Github size={16} />
-                </a>
-                <div className="h-4 w-px bg-border" />
-                <LanguageSwitcher />
-                <div className="h-4 w-px bg-border" />
-                <ThemeToggle />
-              </div>
-            </div>
+        <footer className="border-t border-border">
+          <div className="mx-auto flex max-w-screen-xl items-center justify-between px-6 py-4 text-xs text-muted-foreground">
+            <span>{t('copyright')}</span>
+            <a
+              href="https://github.com/arkohut/pensieve"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition-colors hover:text-foreground"
+              aria-label={t('github')}
+            >
+              <Github size={14} />
+            </a>
           </div>
         </footer>
       </div>
