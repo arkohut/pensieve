@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { Button } from '$/components/ui/button';
 import { EntityImage } from './EntityImage';
 import { EntityDetail } from './EntityDetail';
 import type { Entity } from '$/lib/api/types';
@@ -13,20 +14,22 @@ interface Props {
   onPrevious: () => void;
 }
 
+const SHOW_DETAILS_KEY = 'entityShowDetails';
+
 export function Figure({ entity, onClose, onNext, onPrevious }: Props) {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
   const [showDetails, setShowDetails] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    const saved = localStorage.getItem('figureShowDetails');
-    return saved ? JSON.parse(saved) : false;
+    if (typeof window === 'undefined') return true;
+    const saved = localStorage.getItem(SHOW_DETAILS_KEY);
+    return saved !== null ? JSON.parse(saved) : true;
   });
 
   function toggleDetails() {
     setShowDetails((prev) => {
       const next = !prev;
-      localStorage.setItem('figureShowDetails', JSON.stringify(next));
+      localStorage.setItem(SHOW_DETAILS_KEY, JSON.stringify(next));
       return next;
     });
   }
@@ -80,19 +83,21 @@ export function Figure({ entity, onClose, onNext, onPrevious }: Props) {
               entity={entity}
               showDetails={showDetails}
               toggleDetails={toggleDetails}
+              rightAction={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                  onClick={onClose}
+                  aria-label="Close"
+                  title="Close (Esc)"
+                >
+                  <X size={18} />
+                </Button>
+              }
             />
             {showDetails && <EntityDetail entity={entity} />}
-          </div>
-
-          <div className="absolute right-2 top-2 z-[52]">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-full bg-background/80 p-2 opacity-0 transition-all duration-200 hover:bg-accent group-hover:opacity-100"
-              aria-label="Close"
-            >
-              <X size={24} className="text-primary" />
-            </button>
           </div>
 
           <div className="pointer-events-none absolute bottom-8 left-1/2 z-[53] flex w-full -translate-x-1/2 justify-center">

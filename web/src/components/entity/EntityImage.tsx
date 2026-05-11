@@ -1,5 +1,6 @@
 import { type ReactNode, useMemo } from 'react';
-import { IndentIncrease, Library, Folder, Hash, FileClock } from 'lucide-react';
+import { PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { Button } from '$/components/ui/button';
 import { LucideIcon } from '$/components/common/LucideIcon';
 import { translateAppName, formatDate, filename } from '$/lib/utils';
 import { entityFileUrl, entityVideoUrl } from '$/lib/api/entities';
@@ -10,6 +11,7 @@ interface Props {
   showDetails: boolean;
   toggleDetails: () => void;
   leftIcon?: ReactNode;
+  rightAction?: ReactNode;
 }
 
 function getEntityTitle(doc: Entity): string {
@@ -23,7 +25,13 @@ function getAppName(doc: Entity): string {
   return aa?.value ?? 'unknown';
 }
 
-export function EntityImage({ entity, showDetails, toggleDetails, leftIcon }: Props) {
+export function EntityImage({
+  entity,
+  showDetails,
+  toggleDetails,
+  leftIcon,
+  rightAction,
+}: Props) {
   const displayTitle = entity ? getEntityTitle(entity) : 'unknown';
   const displayAppName = entity ? getAppName(entity) : 'unknown';
   const formattedCreatedAt = useMemo(
@@ -34,80 +42,59 @@ export function EntityImage({ entity, showDetails, toggleDetails, leftIcon }: Pr
   const imageUrl = entity?.filepath ? entityFileUrl(entity) : '';
 
   return (
-    <div className={`flex flex-col lg:h-full lg:flex-none ${showDetails ? 'w-full lg:w-1/2' : 'w-full'}`}>
-      <div className="relative z-[52] mb-2">
-        <div className="flex w-full items-center text-lg font-medium leading-tight text-black">
-          <div className="flex w-full items-center justify-between">
-            <div className="flex-none">{leftIcon}</div>
-            <div className="flex min-w-0 flex-1 items-center justify-center">
-              <div className="flex min-w-0 items-center space-x-2">
-                <LucideIcon name={translateAppName(displayAppName) ?? 'Image'} size={24} />
-                <p className="max-w-[500px] truncate">{displayTitle}</p>
-                {!showDetails && formattedCreatedAt && (
-                  <span className="inline-flex items-center pl-4 font-mono text-sm text-muted-foreground">
-                    <FileClock size={16} className="mr-1 text-muted-foreground" />
-                    {formattedCreatedAt}
-                  </span>
-                )}
-              </div>
-            </div>
-            <button
-              type="button"
-              className="flex-none rounded-full p-2 transition-colors hover:bg-accent"
-              onClick={toggleDetails}
-              aria-label="Toggle details"
-            >
-              <IndentIncrease
-                size={24}
-                className={showDetails ? 'text-primary' : 'text-muted-foreground'}
-              />
-            </button>
+    <div
+      className={`flex flex-col lg:h-full lg:flex-none ${
+        showDetails ? 'w-full lg:w-1/2' : 'w-full'
+      }`}
+    >
+      <div className="relative z-[52] mb-2 flex w-full items-center gap-2">
+        <div className="flex-none">{leftIcon}</div>
+        <div className="flex min-w-0 flex-1 items-center justify-center">
+          <div className="flex min-w-0 items-center gap-2">
+            <LucideIcon name={translateAppName(displayAppName) ?? 'Image'} size={20} />
+            <p className="truncate text-base font-medium leading-tight">{displayTitle}</p>
+            {!showDetails && formattedCreatedAt && (
+              <span className="ml-3 font-mono text-xs text-muted-foreground">
+                {formattedCreatedAt}
+              </span>
+            )}
           </div>
+        </div>
+        <div className="flex flex-none items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            onClick={toggleDetails}
+            aria-label={showDetails ? 'Hide details' : 'Show details'}
+            title={showDetails ? 'Hide details' : 'Show details'}
+          >
+            {showDetails ? <PanelRightClose size={18} /> : <PanelRightOpen size={18} />}
+          </Button>
+          {rightAction}
         </div>
       </div>
 
       {showDetails && entity && (
         <div className="mb-2 mr-2 border-b pb-2">
-          <span className="mt-1 font-mono text-sm font-medium leading-tight text-muted-foreground">
-            <span className="mr-4 inline-flex">
-              <Library
-                size={16}
-                className="mr-1 text-sm font-bold uppercase tracking-wide text-primary"
-              />
-              {entity.library_id || ''}
-            </span>
-            <span className="mr-4 inline-flex">
-              <Folder
-                size={16}
-                className="mr-1 text-sm font-bold uppercase tracking-wide text-primary"
-              />
-              {entity.folder_id || ''}
-            </span>
-            <span className="mr-4 inline-flex">
-              <Hash
-                size={16}
-                className="mr-1 text-sm font-bold uppercase tracking-wide text-primary"
-              />
-              {entity.id || ''}
-            </span>
-            <span className="mr-4 inline-flex">
-              <FileClock
-                size={16}
-                className="mr-1 font-mono text-sm font-bold uppercase tracking-wide text-primary"
-              />
-              {formattedCreatedAt}
-            </span>
-          </span>
-          <div>
-            <span className="font-xs mt-1 font-mono text-xs leading-tight text-muted-foreground">
-              {entity.filepath || ''}
-            </span>
+          <div className="font-mono text-xs leading-tight text-muted-foreground">
+            <span className="text-foreground">№ {entity.id}</span>
+            <span className="mx-2 opacity-50">·</span>
+            <span>{formattedCreatedAt}</span>
           </div>
+          {entity.filepath && (
+            <div className="mt-1 break-all font-mono text-[11px] leading-tight text-muted-foreground">
+              {entity.filepath}
+            </div>
+          )}
         </div>
       )}
 
       <div
-        className={`relative flex items-center justify-center overflow-hidden lg:flex-1 ${showDetails ? 'lg:mr-2' : ''}`}
+        className={`relative flex items-center justify-center overflow-hidden lg:flex-1 ${
+          showDetails ? 'lg:mr-2' : ''
+        }`}
       >
         <a
           href={videoUrl}
