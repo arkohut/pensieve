@@ -67,7 +67,15 @@ function EntityPage() {
         queryClient.setQueryData(entityKeys.detail(targetId), target);
       }
 
-      void navigate({ to: '/entities/$id', params: { id: String(targetId) } });
+      // Replace instead of push: entity-to-entity navigation should not
+      // accumulate history, so a later Esc / Home reliably lands on the
+      // place the user came from (typically the home page) rather than
+      // unwinding through each entity they visited.
+      void navigate({
+        to: '/entities/$id',
+        params: { id: String(targetId) },
+        replace: true,
+      });
     },
     [navigate, queryClient],
   );
@@ -181,7 +189,7 @@ function EntityPage() {
       </div>
 
       {showContext && (
-        <div className="h-[180px] w-full border-t bg-muted/50 shadow-inner">
+        <div className="h-[180px] w-full border-t border-border bg-background">
           <div className="mx-auto h-full py-3">
             <ContextNavigationBar
               entity={entity}

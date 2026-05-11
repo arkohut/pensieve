@@ -31,6 +31,14 @@ function tooltipText(e: Entity): string {
   return `${screen} ${app} ${formatDate(e.file_created_at)}`.trim();
 }
 
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded border border-border bg-secondary/60 px-1 font-mono text-[10px] font-medium text-foreground">
+      {children}
+    </kbd>
+  );
+}
+
 export function ContextNavigationBar({ entity, contextData, onSelectEntity }: Props) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const currentRef = useRef<HTMLDivElement | null>(null);
@@ -73,22 +81,25 @@ export function ContextNavigationBar({ entity, contextData, onSelectEntity }: Pr
 
   return (
     <div className="flex h-full w-full flex-col">
-      <div className="mb-1 flex items-center justify-between px-4 font-mono text-[10.5px] uppercase tracking-[0.08em] text-muted-foreground">
-        <span>
-          <span className="opacity-60">← →</span> navigate
-          <span className="mx-2 opacity-40">·</span>
-          <span className="opacity-60">esc</span> home
+      <div className="mb-1 flex items-center justify-between px-4 font-mono text-[10.5px] text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <Kbd>←</Kbd>
+          <Kbd>→</Kbd>
+          <span>navigate</span>
+          <span className="mx-1 opacity-50">·</span>
+          <Kbd>Esc</Kbd>
+          <span>home</span>
         </span>
         {first && last && (
-          <span>
-            <strong className="font-medium text-foreground">
+          <span className="uppercase tracking-[0.08em]">
+            <strong className="font-medium text-foreground tabular-nums">
               {shortTime(first.file_created_at)}
             </strong>
-            <span className="mx-2 opacity-40">→</span>
-            <strong className="font-medium text-foreground">
+            <span className="mx-2 opacity-50">→</span>
+            <strong className="font-medium text-foreground tabular-nums">
               {shortTime(last.file_created_at)}
             </strong>
-            <span className="ml-3 opacity-60">· {timeline.length} frames</span>
+            <span className="ml-3 opacity-70">· {timeline.length} frames</span>
           </span>
         )}
       </div>
