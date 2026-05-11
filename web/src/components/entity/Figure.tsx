@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '$/components/ui/button';
 import { EntityImage } from './EntityImage';
 import { EntityDetail } from './EntityDetail';
+import { EntityViewerToolbar } from './EntityViewerToolbar';
 import type { Entity } from '$/lib/api/types';
 
 interface Props {
@@ -14,17 +15,36 @@ interface Props {
   onPrevious: () => void;
 }
 
+const SHOW_IMAGE_KEY = 'entityShowImage';
 const SHOW_DETAILS_KEY = 'entityShowDetails';
+
+function loadPaneState(key: string, fallback: boolean): boolean {
+  if (typeof window === 'undefined') return fallback;
+  const saved = localStorage.getItem(key);
+  return saved !== null ? JSON.parse(saved) : fallback;
+}
 
 export function Figure({ entity, onClose, onNext, onPrevious }: Props) {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
-  const [showDetails, setShowDetails] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true;
-    const saved = localStorage.getItem(SHOW_DETAILS_KEY);
-    return saved !== null ? JSON.parse(saved) : true;
+  const [showImage, setShowImage] = useState<boolean>(() => {
+    const img = loadPaneState(SHOW_IMAGE_KEY, true);
+    const det = loadPaneState(SHOW_DETAILS_KEY, true);
+    // Defensive: if a previous session left both hidden, restore the image.
+    return img || !det;
   });
+  const [showDetails, setShowDetails] = useState<boolean>(() =>
+    loadPaneState(SHOW_DETAILS_KEY, true),
+  );
+
+  function toggleImage() {
+    setShowImage((prev) => {
+      const next = !prev;
+      localStorage.setItem(SHOW_IMAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  }
 
   function toggleDetails() {
     setShowDetails((prev) => {
@@ -60,7 +80,7 @@ export function Figure({ entity, onClose, onNext, onPrevious }: Props) {
       id="my-modal"
     >
       <div className="group relative mx-auto h-[95vh] w-11/12 max-w-[95vw] rounded-md border bg-background shadow-lg">
-        <div className="absolute inset-0 px-4 py-4 sm:px-6 lg:px-10">
+        <div className="absolute inset-0 flex flex-col px-4 py-4 sm:px-6 lg:px-10">
           <button
             type="button"
             onClick={onPrevious}
@@ -78,26 +98,41 @@ export function Figure({ entity, onClose, onNext, onPrevious }: Props) {
             <ChevronRight size={24} className="text-primary" />
           </button>
 
-          <div className="relative flex h-full flex-col lg:flex-row">
-            <EntityImage
-              entity={entity}
-              showDetails={showDetails}
-              toggleDetails={toggleDetails}
-              rightAction={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                  onClick={onClose}
-                  aria-label="Close"
-                  title="Close (Esc)"
-                >
-                  <X size={18} />
-                </Button>
-              }
-            />
-            {showDetails && <EntityDetail entity={entity} />}
+          <EntityViewerToolbar
+            entity={entity}
+            showImage={showImage}
+            showDetails={showDetails}
+            onToggleImage={toggleImage}
+            onToggleDetails={toggleDetails}
+            rightAction={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                onClick={onClose}
+                aria-label="Close"
+                title="Close (Esc)"
+              >
+                <X size={18} />
+              </Button>
+            }
+          />
+
+          <div className="mt-3 flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
+            {showImage && (
+              <EntityImage
+                entity={entity}
+                showIdentifier={showDetails}
+                className={showDetails ? 'lg:w-1/2' : 'lg:flex-1'}
+              />
+            )}
+            {showDetails && (
+              <EntityDetail
+                entity={entity}
+                className={showImage ? 'lg:ml-6 lg:w-1/2' : 'lg:flex-1'}
+              />
+            )}
           </div>
 
           <div className="pointer-events-none absolute bottom-8 left-1/2 z-[53] flex w-full -translate-x-1/2 justify-center">

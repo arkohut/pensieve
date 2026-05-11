@@ -64,9 +64,10 @@ function displayOrder(a: ProcessedEntry, b: ProcessedEntry): number {
 
 interface Props {
   entity: Entity | null;
+  className?: string;
 }
 
-export function EntityDetail({ entity }: Props) {
+export function EntityDetail({ entity, className }: Props) {
   const displayEntries = useMemo(() => {
     const processed = processEntries(entity?.metadata_entries);
     return processed.filter((e) => !HIDDEN_KEYS.has(e.key)).sort(displayOrder);
@@ -77,7 +78,9 @@ export function EntityDetail({ entity }: Props) {
   if (!entity) return null;
 
   return (
-    <ScrollArea className="mt-4 w-full overflow-y-auto lg:ml-6 lg:mt-0 lg:max-h-[calc(100vh-180px)] lg:w-1/2">
+    <ScrollArea
+      className={`w-full overflow-y-auto lg:max-h-[calc(100vh-180px)] ${className ?? ''}`}
+    >
       <div className="divide-y divide-border pr-3">
         {entity.tags && entity.tags.length > 0 && (
           <Row label="tags">
