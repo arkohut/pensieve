@@ -263,7 +263,7 @@ async def handle_entity(entity: Entity, request: Request):
             patch_url,
             json={"metadata_entries": [{
                 "key": field, "value": value,
-                "source": PLUGIN_NAME, "data_type": MetadataType.TEXT_DATA.value,
+                "source": PLUGIN_NAME, "data_type": MetadataType.JSON_DATA.value,
             }]},
             timeout=30,
         )
