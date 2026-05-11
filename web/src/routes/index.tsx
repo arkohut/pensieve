@@ -6,7 +6,9 @@ import { Button } from '$/components/ui/button';
 import { Input } from '$/components/ui/input';
 import { Skeleton } from '$/components/ui/skeleton';
 import { ErrorState } from '$/components/common/ErrorState';
+import { LanguageSwitcher } from '$/components/common/LanguageSwitcher';
 import { PageHeader } from '$/components/common/PageHeader';
+import { ThemeToggle } from '$/components/common/ThemeToggle';
 import { HitCard } from '$/components/search/HitCard';
 import { FacetFilter } from '$/components/search/FacetFilter';
 import { LibraryFilter } from '$/components/search/LibraryFilter';
@@ -209,11 +211,20 @@ function HomePage() {
           </Link>
         }
         right={
-          <Link to="/config">
-            <Button variant="ghost" size="icon" title={t('config.title')}>
-              <Settings size={18} />
-            </Button>
-          </Link>
+          <div className="flex items-center gap-1">
+            <LanguageSwitcher />
+            <ThemeToggle />
+            <Link to="/config">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                title={t('config.title')}
+              >
+                <Settings size={18} />
+              </Button>
+            </Link>
+          </div>
         }
       />
 
