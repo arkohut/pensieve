@@ -68,17 +68,32 @@ function EntityPage() {
     }
   }, [entityId]);
 
-  const searchNav = useMemo(() => {
-    if (searchHitIds.length === 0) return null;
+  // Anchor sticks at the last hit visited so the indicator stays put even
+  // when the user temporarily wanders into a temporal neighbor that wasn't
+  // in the search results. Pressing ←/→ pulls them back onto hits land.
+  const [anchorIndex, setAnchorIndex] = useState<number | null>(null);
+  useEffect(() => {
+    if (searchHitIds.length === 0) {
+      setAnchorIndex(null);
+      return;
+    }
     const idx = searchHitIds.indexOf(entityId);
-    if (idx < 0) return null;
+    if (idx >= 0) setAnchorIndex(idx);
+    // else: keep the previous anchor so the session indicator stays visible.
+  }, [entityId, searchHitIds]);
+
+  const searchNav = useMemo(() => {
+    if (searchHitIds.length === 0 || anchorIndex === null) return null;
+    const onHit = searchHitIds[anchorIndex] === entityId;
     return {
-      index: idx,
+      index: anchorIndex,
       total: searchHitIds.length,
-      prevId: idx > 0 ? searchHitIds[idx - 1] : null,
-      nextId: idx < searchHitIds.length - 1 ? searchHitIds[idx + 1] : null,
+      onHit,
+      prevId: anchorIndex > 0 ? searchHitIds[anchorIndex - 1] : null,
+      nextId:
+        anchorIndex < searchHitIds.length - 1 ? searchHitIds[anchorIndex + 1] : null,
     };
-  }, [searchHitIds, entityId]);
+  }, [searchHitIds, anchorIndex, entityId]);
 
   // Treat libraries with unknown kind as 'record' to stay backward-compatible
   // until everyone is on a server that exposes the field.
@@ -200,7 +215,16 @@ function EntityPage() {
         <Home size={18} />
       </Button>
       {searchNav && (
-        <div className="ml-1 flex items-center gap-1 border-l border-border pl-2">
+        <div
+          className={`ml-1 flex items-center gap-1 border-l border-border pl-2 ${
+            searchNav.onHit ? '' : 'opacity-60'
+          }`}
+          title={
+            searchNav.onHit
+              ? 'Position within search results'
+              : 'Off search results — ← / → return to the list'
+          }
+        >
           <Button
             type="button"
             variant="ghost"
@@ -214,7 +238,9 @@ function EntityPage() {
             <ChevronLeft size={16} />
           </Button>
           <span className="min-w-[3.5rem] text-center font-mono text-[11px] tabular-nums text-muted-foreground">
-            <span className="text-foreground">{searchNav.index + 1}</span>
+            <span className={searchNav.onHit ? 'text-foreground' : ''}>
+              {searchNav.index + 1}
+            </span>
             <span className="mx-1 opacity-50">/</span>
             {searchNav.total}
           </span>
