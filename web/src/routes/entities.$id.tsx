@@ -125,9 +125,9 @@ function EntityPage() {
     <div className="fixed inset-0 z-40 flex h-full w-full flex-col bg-black/50">
       <div className="flex flex-grow flex-col">
         <div className="relative mx-auto mt-6 flex h-[calc(100vh-180px)] w-11/12 max-w-[95vw] flex-col overflow-hidden rounded-t-md bg-background">
-          <div className="flex-grow overflow-hidden">
-            <div className="h-full px-10 py-4">
-              <div className="flex h-full flex-col md:flex-row">
+          <div className="flex-grow overflow-hidden lg:overflow-hidden">
+            <div className="h-full overflow-y-auto px-4 py-4 sm:px-6 lg:overflow-hidden lg:px-10">
+              <div className="flex min-h-full flex-col lg:h-full lg:flex-row">
                 <EntityImage
                   entity={entity}
                   showDetails={showDetails}

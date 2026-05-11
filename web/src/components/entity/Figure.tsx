@@ -57,7 +57,7 @@ export function Figure({ entity, onClose, onNext, onPrevious }: Props) {
       id="my-modal"
     >
       <div className="group relative mx-auto h-[95vh] w-11/12 max-w-[95vw] rounded-md border bg-background shadow-lg">
-        <div className="absolute inset-0 px-10 py-4">
+        <div className="absolute inset-0 px-4 py-4 sm:px-6 lg:px-10">
           <button
             type="button"
             onClick={onPrevious}
@@ -75,7 +75,7 @@ export function Figure({ entity, onClose, onNext, onPrevious }: Props) {
             <ChevronRight size={24} className="text-primary" />
           </button>
 
-          <div className="relative flex h-full flex-col md:flex-row">
+          <div className="relative flex h-full flex-col lg:flex-row">
             <EntityImage
               entity={entity}
               showDetails={showDetails}

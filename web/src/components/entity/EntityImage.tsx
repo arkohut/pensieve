@@ -34,7 +34,7 @@ export function EntityImage({ entity, showDetails, toggleDetails, leftIcon }: Pr
   const imageUrl = entity?.filepath ? entityFileUrl(entity) : '';
 
   return (
-    <div className={`flex h-full flex-none flex-col ${showDetails ? 'w-full md:w-1/2' : 'w-full'}`}>
+    <div className={`flex flex-col lg:h-full lg:flex-none ${showDetails ? 'w-full lg:w-1/2' : 'w-full'}`}>
       <div className="relative z-[52] mb-2">
         <div className="flex w-full items-center text-lg font-medium leading-tight text-black">
           <div className="flex w-full items-center justify-between">
@@ -107,16 +107,16 @@ export function EntityImage({ entity, showDetails, toggleDetails, leftIcon }: Pr
       )}
 
       <div
-        className={`relative flex flex-1 items-center justify-center overflow-hidden ${showDetails ? 'mr-2' : ''}`}
+        className={`relative flex items-center justify-center overflow-hidden lg:flex-1 ${showDetails ? 'lg:mr-2' : ''}`}
       >
         <a
           href={videoUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex h-full w-full items-center justify-center"
+          className="flex w-full items-center justify-center lg:h-full"
         >
           <img
-            className="h-full rounded-lg object-contain drop-shadow-md"
+            className="max-h-[55vh] w-full rounded-lg object-contain drop-shadow-md lg:h-full lg:max-h-none"
             src={imageUrl}
             alt={displayTitle}
           />

@@ -77,7 +77,7 @@ export function EntityDetail({ entity }: Props) {
   if (!entity) return null;
 
   return (
-    <ScrollArea className="mt-4 max-h-[calc(100vh-180px)] overflow-y-auto md:ml-6 md:mt-0 md:w-1/2">
+    <ScrollArea className="mt-4 w-full overflow-y-auto lg:ml-6 lg:mt-0 lg:max-h-[calc(100vh-180px)] lg:w-1/2">
       <div className="divide-y divide-border pr-3">
         {entity.tags && entity.tags.length > 0 && (
           <Row label="tags">
@@ -116,7 +116,7 @@ export function EntityDetail({ entity }: Props) {
                 {isValidOCRDataStructure(entry.value) ? (
                   <OCRTable ocrData={entry.value} />
                 ) : (
-                  <pre className="max-h-80 overflow-y-auto rounded-md bg-secondary p-3 font-mono text-[11.5px] leading-relaxed text-foreground">
+                  <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-secondary p-3 font-mono text-[11.5px] leading-relaxed text-foreground">
                     {JSON.stringify(entry.value, null, 2)}
                   </pre>
                 )}
@@ -126,11 +126,7 @@ export function EntityDetail({ entity }: Props) {
 
           return (
             <Row key={entry.key} label={entry.key} source={entry.source} copyText={copyText}>
-              <div className="prose prose-sm max-w-none break-words text-sm text-foreground prose-p:my-0">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {String(entry.value)}
-                </ReactMarkdown>
-              </div>
+              <StringValue text={String(entry.value)} />
             </Row>
           );
         })}
@@ -148,14 +144,32 @@ interface RowProps {
 
 function Row({ label, source, copyText, children }: RowProps) {
   return (
-    <div className="grid grid-cols-[minmax(108px,auto)_1fr_auto] items-baseline gap-3 py-3 sm:grid-cols-[140px_1fr_auto]">
-      <span className="break-all font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
+    <div className="grid grid-cols-[100px_1fr_auto] items-baseline gap-3 py-3 sm:grid-cols-[128px_1fr_auto]">
+      <span className="break-all font-mono text-[11px] uppercase leading-tight tracking-[0.08em] text-muted-foreground">
         {label}
       </span>
       <div className="min-w-0">{children}</div>
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         {source && <SourcePill source={source} />}
         {copyText !== undefined && <CopyToClipboard text={copyText} />}
+      </div>
+    </div>
+  );
+}
+
+function StringValue({ text }: { text: string }) {
+  const isLong = text.length > 120 || text.includes('\n');
+  if (!isLong) {
+    return (
+      <div className="prose prose-sm max-w-none break-words text-sm text-foreground prose-p:my-0">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-md border border-border bg-secondary/50 p-3 text-[12px] leading-relaxed">
+      <div className="prose prose-sm max-w-none break-words text-foreground prose-p:my-1.5 prose-p:leading-relaxed prose-li:my-0">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
       </div>
     </div>
   );
