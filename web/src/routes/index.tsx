@@ -257,11 +257,12 @@ function HomePage() {
             className="h-11 w-full border-border pr-10 text-[15px]"
           />
           {isQuerying && (
-            <Loader2
+            <span
               aria-hidden
-              className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-brand"
-              size={16}
-            />
+              className="pointer-events-none absolute inset-y-0 right-3 flex items-center"
+            >
+              <Loader2 className="animate-spin text-brand" size={16} />
+            </span>
           )}
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">{filterButtons}</div>
@@ -289,11 +290,12 @@ function HomePage() {
               className="h-9 w-full border-border pr-10"
             />
             {isQuerying && (
-              <Loader2
+              <span
                 aria-hidden
-                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-brand"
-                size={14}
-              />
+                className="pointer-events-none absolute inset-y-0 right-3 flex items-center"
+              >
+                <Loader2 className="animate-spin text-brand" size={14} />
+              </span>
             )}
           </div>
           <div className="flex flex-shrink-0 gap-2">{filterButtons}</div>
