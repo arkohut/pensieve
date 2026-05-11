@@ -5,7 +5,7 @@ import { Home, Loader } from 'lucide-react';
 import { Button } from '$/components/ui/button';
 import { EntityImage } from '$/components/entity/EntityImage';
 import { EntityDetail } from '$/components/entity/EntityDetail';
-import { EntityViewerToolbar } from '$/components/entity/EntityViewerToolbar';
+import { EntityViewerToolbar, type ViewerLayout } from '$/components/entity/EntityViewerToolbar';
 import { ContextNavigationBar } from '$/components/entity/ContextNavigationBar';
 import { ErrorState } from '$/components/common/ErrorState';
 import {
@@ -27,20 +27,18 @@ function EntityPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [showImage, setShowImage] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true;
-    const img = localStorage.getItem('entityShowImage');
-    const det = localStorage.getItem('entityShowDetails');
-    const imgVal = img !== null ? JSON.parse(img) : true;
-    const detVal = det !== null ? JSON.parse(det) : true;
-    // Defensive: if a previous session left both hidden, restore the image.
-    return imgVal || !detVal;
+  const [layout, setLayoutState] = useState<ViewerLayout>(() => {
+    if (typeof window === 'undefined') return 'both';
+    const saved = localStorage.getItem('entityViewerLayout');
+    return saved === 'image' || saved === 'details' ? saved : 'both';
   });
-  const [showDetails, setShowDetails] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true;
-    const saved = localStorage.getItem('entityShowDetails');
-    return saved !== null ? JSON.parse(saved) : true;
-  });
+  const showImage = layout !== 'details';
+  const showDetails = layout !== 'image';
+
+  function setLayout(next: ViewerLayout) {
+    setLayoutState(next);
+    localStorage.setItem('entityViewerLayout', next);
+  }
 
   const { data: entity, isLoading, isError, error, refetch } = useEntity(entityId);
   const { data: contextData } = useEntityContext(entity?.library_id, entityId);
@@ -50,22 +48,6 @@ function EntityPage() {
     () => [previousEntity, nextEntity].filter((item): item is Entity => Boolean(item)),
     [nextEntity, previousEntity],
   );
-
-  function toggleImage() {
-    setShowImage((prev) => {
-      const next = !prev;
-      localStorage.setItem('entityShowImage', JSON.stringify(next));
-      return next;
-    });
-  }
-
-  function toggleDetails() {
-    setShowDetails((prev) => {
-      const next = !prev;
-      localStorage.setItem('entityShowDetails', JSON.stringify(next));
-      return next;
-    });
-  }
 
   const goToEntity = useCallback(
     (target: Entity | number) => {
@@ -151,10 +133,8 @@ function EntityPage() {
             <div className="flex h-full flex-col overflow-y-auto px-4 py-4 sm:px-6 lg:overflow-hidden lg:px-10">
               <EntityViewerToolbar
                 entity={entity}
-                showImage={showImage}
-                showDetails={showDetails}
-                onToggleImage={toggleImage}
-                onToggleDetails={toggleDetails}
+                layout={layout}
+                onLayoutChange={setLayout}
                 leftAction={homeButton}
               />
               <div className="mt-3 flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">

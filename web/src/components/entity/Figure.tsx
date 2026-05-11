@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '$/components/ui/button';
 import { EntityImage } from './EntityImage';
 import { EntityDetail } from './EntityDetail';
-import { EntityViewerToolbar } from './EntityViewerToolbar';
+import { EntityViewerToolbar, type ViewerLayout } from './EntityViewerToolbar';
 import type { Entity } from '$/lib/api/types';
 
 interface Props {
@@ -15,44 +15,30 @@ interface Props {
   onPrevious: () => void;
 }
 
-const SHOW_IMAGE_KEY = 'entityShowImage';
-const SHOW_DETAILS_KEY = 'entityShowDetails';
+const LAYOUT_KEY = 'entityViewerLayout';
+const LAYOUT_VALUES: ViewerLayout[] = ['both', 'image', 'details'];
 
-function loadPaneState(key: string, fallback: boolean): boolean {
-  if (typeof window === 'undefined') return fallback;
-  const saved = localStorage.getItem(key);
-  return saved !== null ? JSON.parse(saved) : fallback;
+function loadLayout(): ViewerLayout {
+  if (typeof window === 'undefined') return 'both';
+  const saved = localStorage.getItem(LAYOUT_KEY);
+  return saved && (LAYOUT_VALUES as string[]).includes(saved)
+    ? (saved as ViewerLayout)
+    : 'both';
 }
 
 export function Figure({ entity, onClose, onNext, onPrevious }: Props) {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
-  const [showImage, setShowImage] = useState<boolean>(() => {
-    const img = loadPaneState(SHOW_IMAGE_KEY, true);
-    const det = loadPaneState(SHOW_DETAILS_KEY, true);
-    // Defensive: if a previous session left both hidden, restore the image.
-    return img || !det;
-  });
-  const [showDetails, setShowDetails] = useState<boolean>(() =>
-    loadPaneState(SHOW_DETAILS_KEY, true),
-  );
+  const [layout, setLayoutState] = useState<ViewerLayout>(loadLayout);
 
-  function toggleImage() {
-    setShowImage((prev) => {
-      const next = !prev;
-      localStorage.setItem(SHOW_IMAGE_KEY, JSON.stringify(next));
-      return next;
-    });
+  function setLayout(next: ViewerLayout) {
+    setLayoutState(next);
+    localStorage.setItem(LAYOUT_KEY, next);
   }
 
-  function toggleDetails() {
-    setShowDetails((prev) => {
-      const next = !prev;
-      localStorage.setItem(SHOW_DETAILS_KEY, JSON.stringify(next));
-      return next;
-    });
-  }
+  const showImage = layout !== 'details';
+  const showDetails = layout !== 'image';
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -100,10 +86,8 @@ export function Figure({ entity, onClose, onNext, onPrevious }: Props) {
 
           <EntityViewerToolbar
             entity={entity}
-            showImage={showImage}
-            showDetails={showDetails}
-            onToggleImage={toggleImage}
-            onToggleDetails={toggleDetails}
+            layout={layout}
+            onLayoutChange={setLayout}
             rightAction={
               <Button
                 type="button"
