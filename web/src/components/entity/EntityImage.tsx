@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { formatDate, filename } from '$/lib/utils';
 import { entityFileUrl, entityVideoUrl } from '$/lib/api/entities';
 import type { Entity } from '$/lib/api/types';
@@ -23,7 +23,28 @@ export function EntityImage({ entity, showIdentifier = true, className }: Props)
     [entity?.file_created_at],
   );
   const videoUrl = entity?.filepath ? entityVideoUrl(entity) : undefined;
-  const imageUrl = entity?.filepath ? entityFileUrl(entity) : '';
+  const targetUrl = entity?.filepath ? entityFileUrl(entity) : '';
+
+  // Keep the previous image visible until the next one has fully decoded in
+  // the background. The browser's default behavior — blank the <img> the
+  // instant src changes — is what produces the navigation flash, even when
+  // the bytes are cached.
+  const [displayUrl, setDisplayUrl] = useState(targetUrl);
+  useEffect(() => {
+    if (!targetUrl || targetUrl === displayUrl) return;
+    let cancelled = false;
+    const img = new Image();
+    img.decoding = 'async';
+    img.onload = () => {
+      if (!cancelled) setDisplayUrl(targetUrl);
+    };
+    img.src = targetUrl;
+    // Cached images resolve synchronously; flip without waiting on onload.
+    if (img.complete) setDisplayUrl(targetUrl);
+    return () => {
+      cancelled = true;
+    };
+  }, [targetUrl, displayUrl]);
 
   return (
     <div className={`flex min-w-0 flex-col ${className ?? ''}`}>
@@ -51,7 +72,7 @@ export function EntityImage({ entity, showIdentifier = true, className }: Props)
         >
           <img
             className="max-h-[55vh] w-full rounded-lg object-contain drop-shadow-md lg:h-full lg:max-h-none"
-            src={imageUrl}
+            src={displayUrl}
             alt={displayTitle}
             decoding="async"
           />
