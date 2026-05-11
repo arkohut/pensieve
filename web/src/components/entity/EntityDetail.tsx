@@ -100,25 +100,26 @@ export function EntityDetail({ entity }: Props) {
         {displayEntries.map((entry) => {
           const isObject = typeof entry.value === 'object' && entry.value !== null;
           const copyText = isObject ? JSON.stringify(entry.value) : String(entry.value);
+          const stringValue = !isObject ? String(entry.value) : '';
+          const isLongString =
+            !isObject && (stringValue.length > 120 || stringValue.includes('\n'));
 
-          if (isObject) {
+          // Long markdown values and structured objects share the same block
+          // layout: key + source/copy on top, content full-width below.
+          if (isObject || isLongString) {
             return (
               <div key={entry.key} className="py-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
-                    {entry.key}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <SourcePill source={entry.source} />
-                    <CopyToClipboard text={copyText} />
-                  </div>
-                </div>
-                {isValidOCRDataStructure(entry.value) ? (
-                  <OCRTable ocrData={entry.value} />
+                <FieldHeader label={entry.key} source={entry.source} copyText={copyText} />
+                {isObject ? (
+                  isValidOCRDataStructure(entry.value) ? (
+                    <OCRTable ocrData={entry.value} />
+                  ) : (
+                    <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-secondary p-3 font-mono text-[11.5px] leading-relaxed text-foreground">
+                      {JSON.stringify(entry.value, null, 2)}
+                    </pre>
+                  )
                 ) : (
-                  <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-secondary p-3 font-mono text-[11.5px] leading-relaxed text-foreground">
-                    {JSON.stringify(entry.value, null, 2)}
-                  </pre>
+                  <BlockMarkdown text={stringValue} />
                 )}
               </div>
             );
@@ -126,7 +127,7 @@ export function EntityDetail({ entity }: Props) {
 
           return (
             <Row key={entry.key} label={entry.key} source={entry.source} copyText={copyText}>
-              <StringValue text={String(entry.value)} />
+              <span className="text-sm text-foreground">{stringValue}</span>
             </Row>
           );
         })}
@@ -157,15 +158,29 @@ function Row({ label, source, copyText, children }: RowProps) {
   );
 }
 
-function StringValue({ text }: { text: string }) {
-  const isLong = text.length > 120 || text.includes('\n');
-  if (!isLong) {
-    return (
-      <div className="prose prose-sm max-w-none break-words text-sm text-foreground prose-p:my-0">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+function FieldHeader({
+  label,
+  source,
+  copyText,
+}: {
+  label: string;
+  source?: string;
+  copyText?: string;
+}) {
+  return (
+    <div className="mb-2 flex items-center justify-between gap-3">
+      <span className="break-all font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
+        {label}
+      </span>
+      <div className="flex shrink-0 items-center gap-2">
+        {source && <SourcePill source={source} />}
+        {copyText !== undefined && <CopyToClipboard text={copyText} />}
       </div>
-    );
-  }
+    </div>
+  );
+}
+
+function BlockMarkdown({ text }: { text: string }) {
   return (
     <div className="rounded-md border border-border bg-secondary/50 p-3 text-[12px] leading-relaxed">
       <div className="prose prose-sm max-w-none break-words text-foreground prose-p:my-1.5 prose-p:leading-relaxed prose-li:my-0">
