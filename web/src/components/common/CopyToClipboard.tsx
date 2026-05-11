@@ -27,7 +27,12 @@ export function CopyToClipboard({ text, className }: Props) {
       variant="ghost"
       size="icon"
       onClick={handleCopy}
-      className={cn('h-6 w-6', className)}
+      aria-label={copied ? 'Copied' : 'Copy to clipboard'}
+      className={cn(
+        'h-7 w-7 text-muted-foreground opacity-60 transition-opacity hover:opacity-100',
+        copied && 'text-brand opacity-100',
+        className,
+      )}
     >
       {copied ? <Check size={14} /> : <Copy size={14} />}
     </Button>
