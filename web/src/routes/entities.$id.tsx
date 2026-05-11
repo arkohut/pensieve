@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Home, Loader } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Home, Loader } from 'lucide-react';
 import { Button } from '$/components/ui/button';
 import { EntityImage } from '$/components/entity/EntityImage';
 import { EntityDetail } from '$/components/entity/EntityDetail';
@@ -44,6 +44,42 @@ function EntityPage() {
   const { data: entity, isLoading, isError, error, refetch } = useEntity(entityId);
   const { data: libraries } = useLibraries();
   const library = libraries?.find((l) => l.id === entity?.library_id);
+
+  // Read the search hit list captured by HomePage so we can offer
+  // "previous / next result" navigation when the user opened this entity
+  // from a search. The list is plain ids — when an id lands here we know
+  // it's part of the active search session.
+  const [searchHitIds, setSearchHitIds] = useState<number[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = sessionStorage.getItem('memos:searchHitIds');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    // Refresh on entity change in case the storage was updated mid-session.
+    try {
+      const raw = sessionStorage.getItem('memos:searchHitIds');
+      setSearchHitIds(raw ? JSON.parse(raw) : []);
+    } catch {
+      setSearchHitIds([]);
+    }
+  }, [entityId]);
+
+  const searchNav = useMemo(() => {
+    if (searchHitIds.length === 0) return null;
+    const idx = searchHitIds.indexOf(entityId);
+    if (idx < 0) return null;
+    return {
+      index: idx,
+      total: searchHitIds.length,
+      prevId: idx > 0 ? searchHitIds[idx - 1] : null,
+      nextId: idx < searchHitIds.length - 1 ? searchHitIds[idx + 1] : null,
+    };
+  }, [searchHitIds, entityId]);
+
   // Treat libraries with unknown kind as 'record' to stay backward-compatible
   // until everyone is on a server that exposes the field.
   const isRecordLibrary = library?.kind !== 'static';
@@ -97,15 +133,25 @@ function EntityPage() {
     function handler(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         goToHome();
-      } else if (e.key === 'ArrowLeft' && previousEntity) {
-        goToEntity(previousEntity);
-      } else if (e.key === 'ArrowRight' && nextEntity) {
-        goToEntity(nextEntity);
+      } else if (e.key === 'ArrowLeft') {
+        // Search context wins over temporal: the most common use is stepping
+        // through the result list the user just clicked into.
+        if (searchNav?.prevId != null) {
+          goToEntity(searchNav.prevId);
+        } else if (previousEntity) {
+          goToEntity(previousEntity);
+        }
+      } else if (e.key === 'ArrowRight') {
+        if (searchNav?.nextId != null) {
+          goToEntity(searchNav.nextId);
+        } else if (nextEntity) {
+          goToEntity(nextEntity);
+        }
       }
     }
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [goToEntity, goToHome, nextEntity, previousEntity]);
+  }, [goToEntity, goToHome, nextEntity, previousEntity, searchNav]);
 
   useEffect(() => {
     if (!contextData) return;
@@ -140,18 +186,53 @@ function EntityPage() {
   if (isError) return <ErrorState error={error} onRetry={() => void refetch()} />;
   if (!entity) return <p className="p-4">Entity not found.</p>;
 
-  const homeButton = (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      className="h-8 w-8 text-muted-foreground hover:text-foreground"
-      onClick={goToHome}
-      aria-label="Home"
-      title="Home"
-    >
-      <Home size={18} />
-    </Button>
+  const leftCluster = (
+    <div className="flex items-center gap-1">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+        onClick={goToHome}
+        aria-label="Home"
+        title="Home (Esc)"
+      >
+        <Home size={18} />
+      </Button>
+      {searchNav && (
+        <div className="ml-1 flex items-center gap-1 border-l border-border pl-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            disabled={searchNav.prevId == null}
+            onClick={() => searchNav.prevId != null && goToEntity(searchNav.prevId)}
+            aria-label="Previous result"
+            title="Previous result (←)"
+          >
+            <ChevronLeft size={16} />
+          </Button>
+          <span className="min-w-[3.5rem] text-center font-mono text-[11px] tabular-nums text-muted-foreground">
+            <span className="text-foreground">{searchNav.index + 1}</span>
+            <span className="mx-1 opacity-50">/</span>
+            {searchNav.total}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            disabled={searchNav.nextId == null}
+            onClick={() => searchNav.nextId != null && goToEntity(searchNav.nextId)}
+            aria-label="Next result"
+            title="Next result (→)"
+          >
+            <ChevronRight size={16} />
+          </Button>
+        </div>
+      )}
+    </div>
   );
 
   const showContext = isRecordLibrary && !!contextData;
@@ -169,7 +250,7 @@ function EntityPage() {
                 entity={entity}
                 layout={layout}
                 onLayoutChange={setLayout}
-                leftAction={homeButton}
+                leftAction={leftCluster}
               />
               <div className="mt-3 flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
                 {showImage && (

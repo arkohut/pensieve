@@ -44,6 +44,14 @@ function HomePage() {
   const [localQuery, setLocalQuery] = useState(search.q);
   const [isScrolled, setIsScrolled] = useState(false);
 
+  const openEntity = useCallback(
+    (entityId: number) => {
+      void navigate({ to: '/entities/$id', params: { id: String(entityId) } });
+    },
+    [navigate],
+  );
+  const { data, isLoading, isError, error, refetch, isFetching } = useSearch(search);
+
   // Snapshot the home search so the entity page can restore it on Esc/Home.
   // sessionStorage is per-tab and clears with the tab, which matches the
   // intuition that the "previous home" only makes sense within this session.
@@ -56,13 +64,22 @@ function HomePage() {
     }
   }, [search]);
 
-  const openEntity = useCallback(
-    (entityId: number) => {
-      void navigate({ to: '/entities/$id', params: { id: String(entityId) } });
-    },
-    [navigate],
-  );
-  const { data, isLoading, isError, error, refetch, isFetching } = useSearch(search);
+  // Also snapshot the ordered hit ids so the entity page can offer "next /
+  // prev result" navigation across the current search session. Coerce to
+  // numbers because the API returns ids as strings even though the type
+  // declares number, and the entity route parses its param via Number().
+  useEffect(() => {
+    if (!data) return;
+    try {
+      sessionStorage.setItem(
+        'memos:searchHitIds',
+        JSON.stringify(data.hits.map((h) => Number(h.document.id))),
+      );
+    } catch {
+      // Same trade-off as above — without storage, the entity page falls
+      // back to plain temporal navigation.
+    }
+  }, [data]);
 
   useEffect(() => {
     function handleScroll() {
