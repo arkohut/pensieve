@@ -31,7 +31,7 @@ export function EntityImage({ entity, showIdentifier = true, className }: Props)
   // the bytes are cached.
   const [displayUrl, setDisplayUrl] = useState(targetUrl);
   useEffect(() => {
-    if (!targetUrl || targetUrl === displayUrl) return;
+    if (!targetUrl) return;
     let cancelled = false;
     const img = new Image();
     img.decoding = 'async';
@@ -44,7 +44,7 @@ export function EntityImage({ entity, showIdentifier = true, className }: Props)
     return () => {
       cancelled = true;
     };
-  }, [targetUrl, displayUrl]);
+  }, [targetUrl]);
 
   return (
     <div className={`flex min-w-0 flex-col ${className ?? ''}`}>
