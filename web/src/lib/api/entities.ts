@@ -9,10 +9,14 @@ export const entityKeys = {
     [...entityKeys.all, id, 'context', libraryId, size] as const,
 };
 
+export function fetchEntity(id: number, signal?: AbortSignal) {
+  return apiFetch<Entity>(`/entities/${id}`, { signal });
+}
+
 export function useEntity(id: number) {
   return useQuery({
     queryKey: entityKeys.detail(id),
-    queryFn: ({ signal }) => apiFetch<Entity>(`/entities/${id}`, { signal }),
+    queryFn: ({ signal }) => fetchEntity(id, signal),
     enabled: Number.isFinite(id) && id > 0,
   });
 }

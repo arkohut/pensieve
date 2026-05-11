@@ -11,6 +11,7 @@ import { ErrorState } from '$/components/common/ErrorState';
 import {
   entityFileUrl,
   entityKeys,
+  fetchEntity,
   fetchEntityContext,
   useEntity,
   useEntityContext,
@@ -104,10 +105,13 @@ function EntityPage() {
   );
   const previousEntity = useMemo(() => contextData?.prev.at(-1), [contextData?.prev]);
   const nextEntity = useMemo(() => contextData?.next[0], [contextData?.next]);
-  const adjacentEntities = useMemo(
-    () => [previousEntity, nextEntity].filter((item): item is Entity => Boolean(item)),
-    [nextEntity, previousEntity],
-  );
+  // Widen the prefetch window: a few steps in each direction so rapid
+  // ← / → presses still hit warm caches instead of triggering a fresh
+  // network load on every keystroke.
+  const adjacentEntities = useMemo(() => {
+    if (!contextData) return [] as Entity[];
+    return [...contextData.prev.slice(-3), ...contextData.next.slice(0, 3)];
+  }, [contextData]);
 
   const goToEntity = useCallback(
     (target: Entity | number) => {
@@ -190,6 +194,31 @@ function EntityPage() {
       });
     }
   }, [adjacentEntities, queryClient]);
+
+  // Warm the cache for prev/next search hits too: their entity records and
+  // full images, so navigating with arrow keys feels instant instead of
+  // flashing through a blank frame.
+  useEffect(() => {
+    if (!searchNav) return;
+    const ids = [searchNav.prevId, searchNav.nextId].filter(
+      (x): x is number => x != null,
+    );
+    for (const id of ids) {
+      void queryClient
+        .prefetchQuery({
+          queryKey: entityKeys.detail(id),
+          queryFn: ({ signal }) => fetchEntity(id, signal),
+        })
+        .then(() => {
+          const cached = queryClient.getQueryData<Entity>(entityKeys.detail(id));
+          if (!cached) return;
+          const img = document.createElement('img');
+          img.decoding = 'async';
+          img.src = entityFileUrl(cached);
+          void img.decode().catch(() => undefined);
+        });
+    }
+  }, [searchNav, queryClient]);
 
   if (isLoading) {
     return (
