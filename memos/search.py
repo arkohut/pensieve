@@ -45,6 +45,11 @@ COUNT_CAP = 10000  # Stop counting beyond this; UI renders "{COUNT_CAP}+".
 # offers no real product value past a few thousand sampled rows. The cap is
 # applied inside the CTE so all UNION ALL branches see the same sample.
 STATS_CAP = 5000
+# Cap for FTS rank scoring. ts_rank_cd is computed per match before sorting;
+# capping early lets PostgreSQL stop scanning once enough matches are
+# collected. RRF still pairs this with vector search top-K so the final
+# hybrid ranking remains relevance-driven even when FTS is approximate.
+FTS_RANK_CAP = 5000
 
 
 def _assemble_stats(rows, sampled: bool = False) -> dict:
@@ -524,6 +529,11 @@ class PostgreSQLSearchProvider(SearchProvider):
         end: Optional[int] = None,
         app_names: Optional[List[str]] = None,
     ) -> List[int]:
+        # Inner CTE scans FTS + filters up to FTS_RANK_CAP rows, computing
+        # ts_rank_cd for each. The outer query sorts that capped subset and
+        # returns the top :limit. For high-frequency keywords this avoids
+        # ranking the full match set (10k+ rows); for rare ones the LIMIT is
+        # never reached and behavior is identical.
         base_sql = """
         WITH search_results AS (
             SELECT e.id,
@@ -547,9 +557,9 @@ class PostgreSQLSearchProvider(SearchProvider):
             where_clauses.append(
                 """
                 EXISTS (
-                    SELECT 1 FROM metadata_entries me 
-                    WHERE me.entity_id = e.id 
-                    AND me.key = 'active_app' 
+                    SELECT 1 FROM metadata_entries me
+                    WHERE me.entity_id = e.id
+                    AND me.key = 'active_app'
                     AND me.value = ANY(:app_names)
                 )
             """
@@ -558,9 +568,12 @@ class PostgreSQLSearchProvider(SearchProvider):
         if where_clauses:
             base_sql += " AND " + " AND ".join(where_clauses)
 
-        base_sql += ")\nSELECT id FROM search_results ORDER BY rank DESC LIMIT :limit"
+        base_sql += (
+            " LIMIT :rank_cap"
+            ")\nSELECT id FROM search_results ORDER BY rank DESC LIMIT :limit"
+        )
 
-        params = {"query": query, "limit": limit}
+        params = {"query": query, "limit": limit, "rank_cap": FTS_RANK_CAP}
 
         if library_ids:
             params["library_ids"] = library_ids
