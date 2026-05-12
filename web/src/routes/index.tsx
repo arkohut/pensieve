@@ -339,13 +339,7 @@ function HomePage() {
                   <span>
                     {data.found > 0
                       ? t('searchSummary', {
-                          found:
-                            // Server caps the FTS scan at 5000 (returns 5001 as
-                            // the sentinel) so high-frequency keywords don't
-                            // pay the full scan cost. Render that as '5,000+'.
-                            data.found > 5000
-                              ? `${(5000).toLocaleString()}+`
-                              : data.found.toLocaleString(),
+                          found: data.found.toLocaleString(),
                           outOf: data.out_of.toLocaleString(),
                         })
                       : t('searchSummarySemantic', {

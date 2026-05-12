@@ -40,11 +40,6 @@ def _adaptive_bucket_unit(earliest, latest, threshold_days: int = 60) -> Optiona
 
 
 COUNT_CAP = 5000  # Stop counting beyond this; UI renders "{COUNT_CAP}+".
-# Cap for stats aggregation (facets / date buckets). High-frequency keywords
-# like "memos" hit 200k+ rows; aggregating all of them takes 5+ seconds and
-# offers no real product value past a few thousand sampled rows. The cap is
-# applied inside the CTE so all UNION ALL branches see the same sample.
-STATS_CAP = 5000
 # Cap for FTS rank scoring. ts_rank_cd is computed per match before sorting;
 # capping early lets PostgreSQL stop scanning once enough matches are
 # collected. RRF still pairs this with vector search top-K so the final
@@ -817,14 +812,12 @@ class PostgreSQLSearchProvider(SearchProvider):
             )
             params["app_names"] = app_names
 
-        # Cap +1 so we can tell apart "exactly STATS_CAP" from "more than".
-        # The CTE samples the most recent FTS matches by file_created_at,
-        # then breaks ties by id. Without an ORDER BY, parallel workers and
-        # buffer cache effects make the sampled subset non-deterministic and
-        # the facet counts visibly jitter between refreshes (see 3a6b335,
-        # which removed an earlier sample for the same reason). The DESC
-        # order rides idx_file_created_at, so this is faster than no order.
-        params["stats_cap"] = STATS_CAP + 1
+        # Stats must aggregate over the *full* FTS-matched set: facets are the
+        # user's map of what's behind their search ("4500 in iTerm2, 800 in
+        # Chrome..."), and a sample makes that map lie — the next drill into
+        # iTerm2 would surface more than the facet count promised, and rare
+        # apps falling outside the sample would simply not appear as options
+        # the user can pick. See 3a6b335 for the same lesson.
         sql = f"""
         WITH fts_matches AS MATERIALIZED (
             SELECT e.id, e.file_created_at
@@ -832,8 +825,6 @@ class PostgreSQLSearchProvider(SearchProvider):
             JOIN entities e ON e.id = f.id
             WHERE f.search_vector @@ websearch_to_tsquery('simple', :query)
             AND {" AND ".join(where_clauses)}
-            ORDER BY e.file_created_at DESC, e.id DESC
-            LIMIT :stats_cap
         )
         SELECT 'range'::text AS kind, NULL::text AS label,
                MIN(file_created_at)::timestamp AS earliest,
@@ -862,11 +853,7 @@ class PostgreSQLSearchProvider(SearchProvider):
         with logfire.span("fts_stats_aggregation {query=}", query=query):
             rows = db.execute(text(sql), params).all()
 
-        # Detect whether the cap clipped the scan — the 'range' row's count
-        # equals the materialized CTE size.
-        total = next((r.count for r in rows if r.kind == "range"), 0)
-        sampled = total > STATS_CAP
-        return _assemble_stats(rows, sampled=sampled)
+        return _assemble_stats(rows, sampled=False)
 
 
 class SqliteSearchProvider(SearchProvider):
@@ -1410,9 +1397,9 @@ class SqliteSearchProvider(SearchProvider):
             params["app_names"] = tuple(app_names)
             bindparams.append(bindparam("app_names", expanding=True))
 
-        # See PG provider above for the rationale on ORDER BY: the cap must
-        # be deterministic or facet counts jitter between refreshes.
-        params["stats_cap"] = STATS_CAP + 1
+        # See PG provider above: facets must reflect the full FTS-matched set
+        # or they mislead the user into picking options the search will then
+        # exceed (or hide rare options entirely).
         sql_str = f"""
         WITH fts_matches AS MATERIALIZED (
             SELECT e.id, e.file_created_at
@@ -1420,8 +1407,6 @@ class SqliteSearchProvider(SearchProvider):
             JOIN entities e ON e.id = f.id
             WHERE entities_fts MATCH jieba_query(:query)
             AND {" AND ".join(cte_filters)}
-            ORDER BY e.file_created_at DESC, e.id DESC
-            LIMIT :stats_cap
         )
         SELECT 'range' AS kind, NULL AS label,
                MIN(file_created_at) AS earliest,
@@ -1451,9 +1436,7 @@ class SqliteSearchProvider(SearchProvider):
         with logfire.span("fts_stats_aggregation {query=}", query=query):
             rows = db.execute(sql, params).all()
 
-        total = next((r.count for r in rows if r.kind == "range"), 0)
-        sampled = total > STATS_CAP
-        return _assemble_stats(rows, sampled=sampled)
+        return _assemble_stats(rows, sampled=False)
 
 
 def create_search_provider(database_url: str) -> SearchProvider:
