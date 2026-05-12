@@ -10,13 +10,6 @@ import pytest
 from memos.search import PostgreSQLSearchProvider, SqliteSearchProvider
 
 
-_sqlite_has_helper = hasattr(SqliteSearchProvider, "_build_fts_filters")
-sqlite_only = pytest.mark.skipif(
-    not _sqlite_has_helper,
-    reason="SqliteSearchProvider._build_fts_filters lands in the SQLite commit",
-)
-
-
 # --- PG -----------------------------------------------------------------
 
 @pytest.fixture
@@ -101,7 +94,6 @@ def sqlite_provider():
     return SqliteSearchProvider()
 
 
-@sqlite_only
 def test_sqlite_no_filters(sqlite_provider):
     where, params, bindparams = sqlite_provider._build_fts_filters(
         "memos", None, None, None, None
@@ -111,7 +103,6 @@ def test_sqlite_no_filters(sqlite_provider):
     assert bindparams == []
 
 
-@sqlite_only
 def test_sqlite_library_ids_uses_in_with_expanding_bindparam(sqlite_provider):
     where, params, bindparams = sqlite_provider._build_fts_filters(
         "memos", [1, 2, 3], None, None, None
@@ -121,7 +112,6 @@ def test_sqlite_library_ids_uses_in_with_expanding_bindparam(sqlite_provider):
     assert any(bp.key == "library_ids" and bp.expanding for bp in bindparams)
 
 
-@sqlite_only
 def test_sqlite_time_uses_strftime_column(sqlite_provider):
     where, params, _ = sqlite_provider._build_fts_filters(
         "memos", None, 1000, 2000, None
@@ -132,7 +122,6 @@ def test_sqlite_time_uses_strftime_column(sqlite_provider):
     assert any(":end" in c for c in time_clauses)
 
 
-@sqlite_only
 def test_sqlite_app_names_uses_in_with_expanding_bindparam(sqlite_provider):
     where, params, bindparams = sqlite_provider._build_fts_filters(
         "memos", None, None, None, ["iTerm2"]
@@ -143,7 +132,6 @@ def test_sqlite_app_names_uses_in_with_expanding_bindparam(sqlite_provider):
     assert any(bp.key == "app_names" and bp.expanding for bp in bindparams)
 
 
-@sqlite_only
 def test_sqlite_query_uses_and_words(sqlite_provider):
     # SQLite's jieba_query() extension does the segmentation, so the helper
     # only needs to and_words-join multi-token input.
