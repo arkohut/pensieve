@@ -11,6 +11,27 @@ from typing import Tuple, List, Dict, Optional
 
 from .config import settings
 
+
+# Windows process flags & pythonw resolution
+# CREATE_NO_WINDOW launches pythonw without flashing a console; CREATE_NEW_CONSOLE
+# would briefly pop one up, which is what we used to do by mistake.
+_WINDOWS_NO_WINDOW = 0x08000000
+
+
+def resolve_pythonw(python_path: str) -> str:
+    """Return the pythonw.exe sibling of python.exe, or fall back gracefully.
+
+    `str.replace("python.exe", "pythonw.exe")` is case-sensitive and fails on
+    PYTHON.EXE or non-CPython distributions. Path.with_name handles case and
+    arbitrary stems, and we only swap when the sibling actually exists.
+    """
+    p = Path(python_path)
+    pythonw = p.with_name("pythonw.exe")
+    if pythonw.exists():
+        return str(pythonw)
+    return python_path
+
+
 # 1. PID File Management
 def get_pid_dir() -> Path:
     """Returns the PID file directory"""
@@ -106,12 +127,12 @@ def start_service(service_name: str, log_dir: Optional[Path] = None) -> bool:
         # Choose startup method based on OS
         if platform.system() == "Windows":
             # On Windows, use pythonw for windowless execution
-            pythonw_path = python_path.replace("python.exe", "pythonw.exe")
+            pythonw_path = resolve_pythonw(python_path)
             process = subprocess.Popen(
                 [pythonw_path, "-m", "memos.commands", service_name],
                 stdout=open(log_file, "a"),
                 stderr=subprocess.STDOUT,
-                creationflags=subprocess.CREATE_NEW_CONSOLE
+                creationflags=_WINDOWS_NO_WINDOW,
             )
         else:
             # macOS/Linux
@@ -191,9 +212,10 @@ def restart_serve_service() -> bool:
     
     # Create restart script
     script_path = sys.executable
+    pythonw_path = resolve_pythonw(script_path)
     log_dir = settings.resolved_base_dir / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
-    
+
     restart_script = f"""
 import time
 import subprocess
@@ -225,30 +247,29 @@ def wait_for_process_exit(pid, timeout=5):
 
 try:
     logging.info(f"Restart script started with PID: {{os.getpid()}}")
-    
+
     # Wait for original service to terminate
     logging.info(f"Waiting for serve service (PID: {pid}) to terminate...")
     if not wait_for_process_exit({pid}, timeout=5):
         logging.warning("Old service did not terminate in time")
-    
+
     # Start new service
     logging.info("Starting serve service...")
     python_path = "{sys.executable}"
-    cmd = [python_path, "-m", "memos.commands", "serve"]
-    
+
     if sys.platform == "win32":
-        pythonw_path = python_path.replace("python.exe", "pythonw.exe")
+        pythonw_path = r"{pythonw_path}"
         with open("{log_dir}/serve.log", "a") as log_file:
             process = subprocess.Popen(
                 [pythonw_path, "-m", "memos.commands", "serve"],
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
-                creationflags=subprocess.CREATE_NEW_CONSOLE
+                creationflags=0x08000000,  # CREATE_NO_WINDOW
             )
     else:
         with open("{log_dir}/serve.log", "a") as log_file:
             process = subprocess.Popen(
-                cmd,
+                [python_path, "-m", "memos.commands", "serve"],
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
                 start_new_session=True
@@ -275,12 +296,12 @@ except Exception as e:
     # Start independent process to execute restart script
     try:
         if platform.system() == "Windows":
-            pythonw_path = script_path.replace("python.exe", "pythonw.exe")
+            pythonw_path = resolve_pythonw(script_path)
             process = subprocess.Popen(
                 [pythonw_path, str(script_file)],
                 stdout=open(log_dir / "restart_serve_launcher.log", "a"),
                 stderr=subprocess.STDOUT,
-                creationflags=subprocess.CREATE_NEW_CONSOLE
+                creationflags=_WINDOWS_NO_WINDOW,
             )
         else:
             process = subprocess.Popen(
@@ -289,9 +310,9 @@ except Exception as e:
                 stderr=subprocess.STDOUT,
                 start_new_session=True
             )
-        
+
         logging.info(f"Started restart script process with PID: {process.pid}")
-        
+
         # Stop current serve process
         logging.info(f"Preparing to stop current serve service (PID: {pid})")
         stop_result = stop_service("serve")
@@ -405,12 +426,12 @@ except Exception as e:
         
         try:
             if platform.system() == "Windows":
-                pythonw_path = script_path.replace("python.exe", "pythonw.exe")
+                pythonw_path = resolve_pythonw(script_path)
                 process = subprocess.Popen(
                     [pythonw_path, str(script_file)],
                     stdout=open(log_dir / "restart_api_launcher.log", "a"),
                     stderr=subprocess.STDOUT,
-                    creationflags=subprocess.CREATE_NEW_CONSOLE
+                    creationflags=_WINDOWS_NO_WINDOW,
                 )
             else:
                 process = subprocess.Popen(
