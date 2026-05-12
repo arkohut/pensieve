@@ -256,11 +256,21 @@ def record(
 ):
     """Record screenshots of the screen."""
     from .service_manager import register_service_signals, remove_pid_file
-    
+
     # 只有持续运行模式才需要注册信号处理
     if not once:
         register_service_signals("record")
-    
+
+    if is_macos() and check_screen_recording_permission() != "granted":
+        # Triggers the system prompt on first run, or registers this interpreter
+        # in the TCC list (disabled) so the user only has to flip the toggle.
+        request_screen_recording_permission()
+        logging.warning(
+            "Screen recording permission not granted. Open System Settings → "
+            "Privacy & Security → Screen & System Audio Recording and enable: %s",
+            sys.executable,
+        )
+
     try:
         from .record import (
             run_screen_recorder_once,
@@ -483,6 +493,38 @@ def is_windows():
     return platform.system() == "Windows"
 
 
+def check_screen_recording_permission():
+    """Probe macOS TCC screen-recording status without triggering the system dialog.
+
+    Returns one of: "granted", "denied", "unavailable", "n/a".
+    Uses CGPreflightScreenCaptureAccess (read-only — never prompts the user).
+    """
+    if not is_macos():
+        return "n/a"
+    try:
+        from Quartz import CGPreflightScreenCaptureAccess
+    except ImportError:
+        return "unavailable"
+    return "granted" if bool(CGPreflightScreenCaptureAccess()) else "denied"
+
+
+def request_screen_recording_permission():
+    """Ask macOS to register this interpreter in the TCC screen-recording list.
+
+    The first call shows the system prompt. Subsequent calls (after a denial)
+    silently add the binary to System Settings with a disabled toggle, so the
+    user only needs to flip it on instead of clicking "+" and hunting for the path.
+    No-op on non-macOS or when pyobjc is missing.
+    """
+    if not is_macos():
+        return
+    try:
+        from Quartz import CGRequestScreenCaptureAccess
+    except ImportError:
+        return
+    CGRequestScreenCaptureAccess()
+
+
 def remove_windows_autostart():
     startup_folder = (
         Path(os.getenv("APPDATA")) / r"Microsoft\Windows\Start Menu\Programs\Startup"
@@ -493,6 +535,94 @@ def remove_windows_autostart():
         shortcut_path.unlink()
         return True
     return False
+
+
+@app.command()
+def doctor():
+    """Run diagnostics to verify Pensieve is ready to start."""
+    import socket
+    import sqlite3
+
+    failures: List[str] = []
+    rows: List[tuple] = []
+
+    rows.append(("Python", f"{sys.version.split()[0]}  {sys.executable}"))
+
+    sqlite_status = sqlite3.sqlite_version
+    try:
+        probe = sqlite3.connect(":memory:")
+        probe.enable_load_extension(True)
+        probe.close()
+        sqlite_status += ", enable_load_extension: OK"
+    except AttributeError:
+        sqlite_status += ", enable_load_extension: NOT SUPPORTED"
+        failures.append("sqlite3")
+    rows.append(("sqlite3", sqlite_status))
+
+    base = settings.resolved_base_dir
+    try:
+        base.mkdir(parents=True, exist_ok=True)
+        probe_path = base / ".doctor_probe"
+        probe_path.write_text("ok")
+        probe_path.unlink()
+        rows.append(("Base directory", f"{base} (writable)"))
+    except OSError as e:
+        rows.append(("Base directory", f"{base} (NOT writable: {e})"))
+        failures.append("base_dir")
+
+    port = settings.server_port
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        in_use = s.connect_ex(("127.0.0.1", port)) == 0
+    if not in_use:
+        rows.append((f"Server port {port}", "free"))
+    elif check_server_health():
+        rows.append((f"Server port {port}", "in use by memos serve (healthy)"))
+    else:
+        rows.append((f"Server port {port}", "OCCUPIED by another process — memos serve will conflict"))
+        failures.append("port_conflict")
+
+    if is_macos():
+        status = check_screen_recording_permission()
+        rows.append(("Screen recording", status.upper()))
+        if status == "denied":
+            # Register this interpreter in the TCC list so the user only has
+            # to toggle it on in System Settings rather than hunt for the path.
+            request_screen_recording_permission()
+            failures.append("screen_recording")
+
+    typer.echo("Pensieve diagnostics")
+    typer.echo("=" * 64)
+    for k, v in rows:
+        typer.echo(f"  {k:<22}{v}")
+    typer.echo("=" * 64)
+
+    if not failures:
+        typer.echo("All checks passed.")
+        return
+
+    typer.echo("")
+    if "sqlite3" in failures:
+        typer.echo("sqlite3 cannot load extensions in this Python build.")
+        typer.echo("  Reinstall Python via conda/miniforge or pipx, then retry:")
+        typer.echo("    pipx install --python /path/to/good/python memos")
+        typer.echo("")
+    if "port_conflict" in failures:
+        typer.echo(f"Port {settings.server_port} is held by a non-memos process.")
+        typer.echo("  Either stop that process, or change server_port in ~/.memos/config.yaml")
+        typer.echo("  Find the offender with:  lsof -i :{port}".format(port=settings.server_port))
+        typer.echo("")
+    if "screen_recording" in failures:
+        typer.echo("Screen recording permission is required.")
+        typer.echo("  1. Open: System Settings → Privacy & Security → Screen & System Audio Recording")
+        typer.echo("  2. Find or add this interpreter and enable it:")
+        typer.echo(f"     {sys.executable}")
+        typer.echo("  3. Restart: memos stop && memos start")
+        typer.echo("")
+        typer.echo("If the entry is broken (e.g. after a Python upgrade), reset and retry:")
+        typer.echo("    tccutil reset ScreenCapture")
+        typer.echo("    memos doctor")
+        typer.echo("")
+    raise typer.Exit(code=1)
 
 
 @app.command()
