@@ -40,6 +40,11 @@ def _adaptive_bucket_unit(earliest, latest, threshold_days: int = 60) -> Optiona
 
 
 COUNT_CAP = 5000  # Stop counting beyond this; UI renders "{COUNT_CAP}+".
+# Cap for FTS rank scoring. ts_rank_cd is computed per match before sorting;
+# capping early lets PostgreSQL stop scanning once enough matches are
+# collected. RRF still pairs this with vector search top-K so the final
+# hybrid ranking remains relevance-driven even when FTS is approximate.
+FTS_RANK_CAP = 5000
 
 
 def _time_window_clauses(
@@ -62,11 +67,6 @@ def _time_window_clauses(
         clauses.append(f"{column_sql} <= :end")
         params["end"] = end
     return clauses
-# Cap for FTS rank scoring. ts_rank_cd is computed per match before sorting;
-# capping early lets PostgreSQL stop scanning once enough matches are
-# collected. RRF still pairs this with vector search top-K so the final
-# hybrid ranking remains relevance-driven even when FTS is approximate.
-FTS_RANK_CAP = 5000
 
 
 def _assemble_stats(rows) -> dict:
