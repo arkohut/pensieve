@@ -32,7 +32,8 @@
   "searchLog": {
     "handleSearchStringChange": "handleSearchStringChange"
   },
-  "slogan": "Record, Retrieve, Review",
+  "slogan": "Record, Retrieve, Review.",
+  "heroIndexedSuffix": "screens indexed.",
   "back": "Back",
   "config": {
     "title": "Configuration",
