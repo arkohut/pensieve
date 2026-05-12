@@ -1091,6 +1091,47 @@ class SqliteSearchProvider(SearchProvider):
             db.rollback()
             raise
 
+    def _build_fts_filters(
+        self,
+        query: str,
+        library_ids: Optional[List[int]],
+        start: Optional[int],
+        end: Optional[int],
+        app_names: Optional[List[str]],
+    ) -> Tuple[List[str], dict, list]:
+        """Sister to the PG helper — same shape, dialect-specific SQL.
+
+        Returns `(where_clauses, params, bindparams)`. SQLite's IN-list
+        filters need `bindparam(..., expanding=True)` to expand tuples; the
+        list collects those so callers can attach them to the bound `text()`.
+
+        `params["query"]` is and_words-joined; the jieba segmentation itself
+        runs inside SQLite via the `jieba_query(:query)` extension.
+        """
+        params: dict = {"query": self.and_words(query)}
+        where_clauses: List[str] = ["e.file_type_group = 'image'"]
+        bindparams: list = []
+        if library_ids:
+            where_clauses.append("e.library_id IN :library_ids")
+            params["library_ids"] = tuple(library_ids)
+            bindparams.append(bindparam("library_ids", expanding=True))
+        where_clauses.extend(
+            _time_window_clauses(
+                "strftime('%s', e.file_created_at, 'utc')", start, end, params
+            )
+        )
+        if app_names:
+            where_clauses.append(
+                "EXISTS ("
+                "SELECT 1 FROM metadata_entries me "
+                "WHERE me.entity_id = e.id "
+                "AND me.key = 'active_app' "
+                "AND me.value IN :app_names)"
+            )
+            params["app_names"] = tuple(app_names)
+            bindparams.append(bindparam("app_names", expanding=True))
+        return where_clauses, params, bindparams
+
     def full_text_search(
         self,
         query: str,
@@ -1103,48 +1144,24 @@ class SqliteSearchProvider(SearchProvider):
     ) -> List[int]:
         start_time = time.time()
 
-        and_query = self.and_words(query)
-
-        sql_query = """
+        where_clauses, params, bindparams = self._build_fts_filters(
+            query, library_ids, start, end, app_names
+        )
+        params["limit"] = limit
+        sql = text(
+            f"""
         WITH fts_matches AS (
             SELECT id, rank
             FROM entities_fts
             WHERE entities_fts MATCH jieba_query(:query)
         )
-        SELECT e.id 
+        SELECT e.id
         FROM fts_matches f
         JOIN entities e ON e.id = f.id
-        WHERE e.file_type_group = 'image'
+        WHERE {" AND ".join(where_clauses)}
+        ORDER BY f.rank LIMIT :limit
         """
-
-        params = {"query": and_query, "limit": limit}
-        bindparams = []
-
-        if library_ids:
-            sql_query += " AND e.library_id IN :library_ids"
-            params["library_ids"] = tuple(library_ids)
-            bindparams.append(bindparam("library_ids", expanding=True))
-
-        for clause in _time_window_clauses(
-            "strftime('%s', e.file_created_at, 'utc')", start, end, params
-        ):
-            sql_query += f" AND {clause}"
-
-        if app_names:
-            sql_query += """
-            AND EXISTS (
-                SELECT 1 FROM metadata_entries me
-                WHERE me.entity_id = e.id
-                AND me.key = 'active_app'
-                AND me.value IN :app_names
-            )
-            """
-            params["app_names"] = tuple(app_names)
-            bindparams.append(bindparam("app_names", expanding=True))
-
-        sql_query += " ORDER BY f.rank LIMIT :limit"
-
-        sql = text(sql_query)
+        )
         if bindparams:
             sql = sql.bindparams(*bindparams)
 
@@ -1166,49 +1183,26 @@ class SqliteSearchProvider(SearchProvider):
     ) -> int:
         # Cap the inner FTS scan so very broad queries don't pay the full
         # COUNT cost. UI surfaces COUNT_CAP+ as "{COUNT_CAP}+".
-        and_query = self.and_words(query)
-
-        inner_sql = """
-        WITH fts_matches AS (
-            SELECT id
-            FROM entities_fts
-            WHERE entities_fts MATCH jieba_query(:query)
+        where_clauses, params, bindparams = self._build_fts_filters(
+            query, library_ids, start, end, app_names
         )
-        SELECT 1
-        FROM fts_matches f
-        JOIN entities e ON e.id = f.id
-        WHERE e.file_type_group = 'image'
-        """
-
-        params = {"query": and_query, "cap": COUNT_CAP + 1}
-        bindparams = []
-
-        if library_ids:
-            inner_sql += " AND e.library_id IN :library_ids"
-            params["library_ids"] = tuple(library_ids)
-            bindparams.append(bindparam("library_ids", expanding=True))
-
-        for clause in _time_window_clauses(
-            "strftime('%s', e.file_created_at, 'utc')", start, end, params
-        ):
-            inner_sql += f" AND {clause}"
-
-        if app_names:
-            inner_sql += """
-            AND EXISTS (
-                SELECT 1 FROM metadata_entries me
-                WHERE me.entity_id = e.id
-                AND me.key = 'active_app'
-                AND me.value IN :app_names
+        params["cap"] = COUNT_CAP + 1
+        sql = text(
+            f"""
+        SELECT COUNT(*) FROM (
+            WITH fts_matches AS (
+                SELECT id
+                FROM entities_fts
+                WHERE entities_fts MATCH jieba_query(:query)
             )
-            """
-            params["app_names"] = tuple(app_names)
-            bindparams.append(bindparam("app_names", expanding=True))
-
-        inner_sql += " LIMIT :cap"
-        sql_query = f"SELECT COUNT(*) FROM ({inner_sql}) sub"
-
-        sql = text(sql_query)
+            SELECT 1
+            FROM fts_matches f
+            JOIN entities e ON e.id = f.id
+            WHERE {" AND ".join(where_clauses)}
+            LIMIT :cap
+        ) sub
+        """
+        )
         if bindparams:
             sql = sql.bindparams(*bindparams)
 
@@ -1347,48 +1341,21 @@ class SqliteSearchProvider(SearchProvider):
 
         Vector neighbors are intentionally excluded here so facet counts match
         the keyword-match semantics of `found`.
+
+        See PG provider above: facets must reflect the full FTS-matched set
+        or they mislead the user into picking options the search will then
+        exceed (or hide rare options entirely).
         """
-        and_query = self.and_words(query)
-
-        cte_filters = ["e.file_type_group = 'image'"]
-        params: dict = {"query": and_query}
-        bindparams = []
-
-        if library_ids:
-            cte_filters.append("e.library_id IN :library_ids")
-            params["library_ids"] = tuple(library_ids)
-            bindparams.append(bindparam("library_ids", expanding=True))
-
-        cte_filters.extend(
-            _time_window_clauses(
-                "strftime('%s', e.file_created_at, 'utc')", start, end, params
-            )
+        where_clauses, params, bindparams = self._build_fts_filters(
+            query, library_ids, start, end, app_names
         )
-
-        if app_names:
-            cte_filters.append(
-                """
-                EXISTS (
-                    SELECT 1 FROM metadata_entries me
-                    WHERE me.entity_id = e.id
-                    AND me.key = 'active_app'
-                    AND me.value IN :app_names
-                )
-                """
-            )
-            params["app_names"] = tuple(app_names)
-            bindparams.append(bindparam("app_names", expanding=True))
-
-        # See PG provider above: facets must reflect the full FTS-matched set
-        # or they mislead the user into picking options the search will then
-        # exceed (or hide rare options entirely).
         sql_str = f"""
         WITH fts_matches AS MATERIALIZED (
             SELECT e.id, e.file_created_at
             FROM entities_fts f
             JOIN entities e ON e.id = f.id
             WHERE entities_fts MATCH jieba_query(:query)
-            AND {" AND ".join(cte_filters)}
+            AND {" AND ".join(where_clauses)}
         )
         SELECT 'range' AS kind, NULL AS label,
                MIN(file_created_at) AS earliest,
