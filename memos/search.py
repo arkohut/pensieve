@@ -538,6 +538,46 @@ class PostgreSQLSearchProvider(SearchProvider):
             db.rollback()
             raise
 
+    def _build_fts_filters(
+        self,
+        query: str,
+        library_ids: Optional[List[int]],
+        start: Optional[int],
+        end: Optional[int],
+        app_names: Optional[List[str]],
+    ) -> Tuple[List[str], dict, list]:
+        """Shared WHERE-clause and bind-param assembly for FTS queries.
+
+        Returns `(where_clauses, params, bindparams)`. `bindparams` is always
+        empty on PG (native array binding via `= ANY(:...)`); the slot is
+        kept for symmetry with the SQLite provider, whose IN-list filters
+        need `bindparam("...", expanding=True)`.
+
+        `params["query"]` is pre-tokenized with jieba so a Chinese phrase
+        matches the same tokens the index was built from. The 'simple'
+        tsvector tokenizer can't segment CJK runs on its own.
+        """
+        params: dict = {"query": self.tokenize_text(query)}
+        where_clauses: List[str] = ["e.file_type_group = 'image'"]
+        if library_ids:
+            where_clauses.append("e.library_id = ANY(:library_ids)")
+            params["library_ids"] = library_ids
+        where_clauses.extend(
+            _time_window_clauses(
+                "EXTRACT(EPOCH FROM e.file_created_at)", start, end, params
+            )
+        )
+        if app_names:
+            where_clauses.append(
+                "EXISTS ("
+                "SELECT 1 FROM metadata_entries me "
+                "WHERE me.entity_id = e.id "
+                "AND me.key = 'active_app' "
+                "AND me.value = ANY(:app_names))"
+            )
+            params["app_names"] = app_names
+        return where_clauses, params, []
+
     def full_text_search(
         self,
         query: str,
@@ -553,55 +593,24 @@ class PostgreSQLSearchProvider(SearchProvider):
         # returns the top :limit. For high-frequency keywords this avoids
         # ranking the full match set (10k+ rows); for rare ones the LIMIT is
         # never reached and behavior is identical.
-        base_sql = """
+        where_clauses, params, _ = self._build_fts_filters(
+            query, library_ids, start, end, app_names
+        )
+        params["limit"] = limit
+        params["rank_cap"] = FTS_RANK_CAP
+        sql = text(
+            f"""
         WITH search_results AS (
             SELECT e.id,
                 ts_rank_cd(f.search_vector, websearch_to_tsquery('simple', :query)) as rank
             FROM entities_fts f
             JOIN entities e ON e.id = f.id
             WHERE f.search_vector @@ websearch_to_tsquery('simple', :query)
-            AND e.file_type_group = 'image'
-        """
-
-        params = {
-            # PG's `simple` tokenizer can't segment CJK runs (a multi-character
-            # phrase stays one token), but the index was built from jieba-
-            # segmented text. Pre-tokenize the query the same way so a Chinese
-            # phrase matches the same tokens that were indexed.
-            "query": self.tokenize_text(query),
-            "limit": limit,
-            "rank_cap": FTS_RANK_CAP,
-        }
-        where_clauses = []
-        if library_ids:
-            where_clauses.append("e.library_id = ANY(:library_ids)")
-            params["library_ids"] = library_ids
-
-        where_clauses.extend(
-            _time_window_clauses(
-                "EXTRACT(EPOCH FROM e.file_created_at)", start, end, params
-            )
+            AND {" AND ".join(where_clauses)}
+            LIMIT :rank_cap
         )
-
-        if app_names:
-            where_clauses.append(
-                """
-                EXISTS (
-                    SELECT 1 FROM metadata_entries me
-                    WHERE me.entity_id = e.id
-                    AND me.key = 'active_app'
-                    AND me.value = ANY(:app_names)
-                )
-            """
-            )
-            params["app_names"] = app_names
-
-        if where_clauses:
-            base_sql += " AND " + " AND ".join(where_clauses)
-
-        base_sql += (
-            " LIMIT :rank_cap"
-            ")\nSELECT id FROM search_results ORDER BY rank DESC LIMIT :limit"
+        SELECT id FROM search_results ORDER BY rank DESC LIMIT :limit
+        """
         )
 
         logfire.info(
@@ -610,7 +619,6 @@ class PostgreSQLSearchProvider(SearchProvider):
             limit=limit,
         )
 
-        sql = text(base_sql)
         result = db.execute(sql, params).fetchall()
         return [row[0] for row in result]
 
@@ -625,47 +633,23 @@ class PostgreSQLSearchProvider(SearchProvider):
     ) -> int:
         # Cap the inner scan so very broad queries (155k+ matches) don't pay
         # the full COUNT cost. UI surfaces COUNT_CAP+ as "{COUNT_CAP}+".
-        inner_sql = """
-        SELECT 1
-        FROM entities_fts f
-        JOIN entities e ON e.id = f.id
-        WHERE f.search_vector @@ websearch_to_tsquery('simple', :query)
-        AND e.file_type_group = 'image'
-        """
-
-        # Match index-time jieba segmentation — see full_text_search comment.
-        params = {"query": self.tokenize_text(query), "cap": COUNT_CAP + 1}
-        where_clauses = []
-        if library_ids:
-            where_clauses.append("e.library_id = ANY(:library_ids)")
-            params["library_ids"] = library_ids
-
-        where_clauses.extend(
-            _time_window_clauses(
-                "EXTRACT(EPOCH FROM e.file_created_at)", start, end, params
-            )
+        where_clauses, params, _ = self._build_fts_filters(
+            query, library_ids, start, end, app_names
         )
-
-        if app_names:
-            where_clauses.append(
-                """
-                EXISTS (
-                    SELECT 1 FROM metadata_entries me
-                    WHERE me.entity_id = e.id
-                    AND me.key = 'active_app'
-                    AND me.value = ANY(:app_names)
-                )
-            """
-            )
-            params["app_names"] = app_names
-
-        if where_clauses:
-            inner_sql += " AND " + " AND ".join(where_clauses)
-
-        inner_sql += " LIMIT :cap"
-        base_sql = f"SELECT COUNT(*) FROM ({inner_sql}) sub"
-
-        result = db.execute(text(base_sql), params).scalar()
+        params["cap"] = COUNT_CAP + 1
+        sql = text(
+            f"""
+        SELECT COUNT(*) FROM (
+            SELECT 1
+            FROM entities_fts f
+            JOIN entities e ON e.id = f.id
+            WHERE f.search_vector @@ websearch_to_tsquery('simple', :query)
+            AND {" AND ".join(where_clauses)}
+            LIMIT :cap
+        ) sub
+        """
+        )
+        result = db.execute(sql, params).scalar()
         return int(result or 0)
 
     def vector_search(
@@ -802,40 +786,17 @@ class PostgreSQLSearchProvider(SearchProvider):
 
         Vector neighbors are intentionally excluded here so facet counts match
         the keyword-match semantics of `found`.
+
+        Stats must aggregate over the *full* FTS-matched set: facets are the
+        user's map of what's behind their search ("4500 in iTerm2, 800 in
+        Chrome..."), and a sample makes that map lie — the next drill into
+        iTerm2 would surface more than the facet count promised, and rare
+        apps falling outside the sample would simply not appear as options
+        the user can pick. See 3a6b335 for the same lesson.
         """
-        where_clauses = ["e.file_type_group = 'image'"]
-        # Match index-time jieba segmentation — see full_text_search comment.
-        params = {"query": self.tokenize_text(query)}
-
-        if library_ids:
-            where_clauses.append("e.library_id = ANY(:library_ids)")
-            params["library_ids"] = library_ids
-
-        where_clauses.extend(
-            _time_window_clauses(
-                "EXTRACT(EPOCH FROM e.file_created_at)", start, end, params
-            )
+        where_clauses, params, _ = self._build_fts_filters(
+            query, library_ids, start, end, app_names
         )
-
-        if app_names:
-            where_clauses.append(
-                """
-                EXISTS (
-                    SELECT 1 FROM metadata_entries me
-                    WHERE me.entity_id = e.id
-                    AND me.key = 'active_app'
-                    AND me.value = ANY(:app_names)
-                )
-                """
-            )
-            params["app_names"] = app_names
-
-        # Stats must aggregate over the *full* FTS-matched set: facets are the
-        # user's map of what's behind their search ("4500 in iTerm2, 800 in
-        # Chrome..."), and a sample makes that map lie — the next drill into
-        # iTerm2 would surface more than the facet count promised, and rare
-        # apps falling outside the sample would simply not appear as options
-        # the user can pick. See 3a6b335 for the same lesson.
         sql = f"""
         WITH fts_matches AS MATERIALIZED (
             SELECT e.id, e.file_created_at
