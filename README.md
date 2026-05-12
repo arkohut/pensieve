@@ -75,6 +75,8 @@ This project draws heavily from two other projects: one called [Rewind](https://
 pip install memos
 ```
 
+> On Windows, prefer `uv tool install memos` or `pipx install memos` over bare `pip install` — see [Windows Installation Notes](#windows-installation-notes) for the full setup checklist.
+
 ### 2. Initialize
 
 Initialize the pensieve configuration file and sqlite database:
@@ -124,6 +126,43 @@ memos stop && memos start
 ```
 
 To avoid this churn, install via `pipx install memos` or `uv tool install memos` — both pin the interpreter path so authorization survives memos upgrades.
+
+### Windows Installation Notes
+
+For a smoother Windows setup, install memos as an isolated tool rather than into the global site-packages:
+
+```powershell
+# Option A: uv (fast, single binary)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+uv tool install memos
+
+# Option B: pipx
+pip install --user pipx
+python -m pipx ensurepath
+pipx install memos
+```
+
+Both keep memos in a dedicated venv so the Python interpreter path stays stable across upgrades. After install, run `memos doctor` to verify the environment.
+
+Before `memos enable && memos start`, two preparations make a real difference:
+
+```powershell
+# Run in an Admin PowerShell
+
+# Enable long paths — some ML wheels (torch, modelscope) have deep paths
+Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1
+
+# Exclude ~/.memos from Defender so screenshot writes aren't scanned
+Add-MpPreference -ExclusionPath "$env:USERPROFILE\.memos"
+```
+
+If your `%USERPROFILE%` is redirected to OneDrive, `~/.memos` may sync ~400MB of screenshots per day to the cloud. Change `base_dir` in `~/.memos/config.yaml` to a local, non-synced path.
+
+**Avoid these setups on Windows:**
+
+- Python from the Microsoft Store — sandboxed filesystem breaks `~/.memos` paths and subprocess behavior
+- Running memos inside WSL — WSL can't capture the Windows host's screen
+- A `%USERPROFILE%` synced by OneDrive (see above)
 
 ## 🚀 Using PostgreSQL Database
 

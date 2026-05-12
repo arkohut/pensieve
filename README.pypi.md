@@ -60,6 +60,8 @@ This project draws heavily from two other projects: one called [Rewind](https://
 pip install memos
 ```
 
+> On Windows, prefer `uv tool install memos` or `pipx install memos` — see [Windows Installation Notes](#windows-installation-notes) for the full setup checklist.
+
 ### 2. Initialize
 
 Initialize the pensieve configuration file and sqlite database:
@@ -103,6 +105,31 @@ memos stop && memos start
 ```
 
 Installing via `pipx install memos` or `uv tool install memos` pins the interpreter path and prevents this churn.
+
+### Windows Installation Notes
+
+Use an isolated tool installer to keep the Python interpreter path stable across upgrades:
+
+```powershell
+# Option A: uv
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+uv tool install memos
+
+# Option B: pipx
+pip install --user pipx && python -m pipx ensurepath
+pipx install memos
+```
+
+Run `memos doctor` after install. Before `memos enable && memos start`, in an Admin PowerShell:
+
+```powershell
+# Required for some ML wheels with deep paths (torch, modelscope)
+Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1
+# Skip Defender scans on the screenshot store
+Add-MpPreference -ExclusionPath "$env:USERPROFILE\.memos"
+```
+
+Avoid: Microsoft Store Python (sandboxed filesystem), running inside WSL (no host screen capture), and a `%USERPROFILE%` synced by OneDrive (would upload ~400MB of screenshots a day).
 
 ## User Guide
 
