@@ -365,26 +365,18 @@ def get_python_path():
 
 
 def generate_windows_bat():
+    from .service_manager import resolve_pythonw
+
     memos_dir = settings.resolved_base_dir
     python_path = get_python_path()
-    pythonw_path = python_path.replace("python.exe", "pythonw.exe")
-    conda_prefix = os.environ.get("CONDA_PREFIX")
+    pythonw_path = resolve_pythonw(python_path)
     log_dir = memos_dir / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    if conda_prefix:
-        # If we're in a Conda environment
-        activate_path = os.path.join(conda_prefix, "Scripts", "activate.bat")
-        content = f"""@echo off
-call "{activate_path}"
-start /B "" "{pythonw_path}" -m memos.commands record > "{log_dir / 'record.log'}" 2>&1
-start /B "" "{pythonw_path}" -m memos.commands serve > "{log_dir / 'serve.log'}" 2>&1
-REM watch service will automatically retry until serve is ready
-start /B "" "{pythonw_path}" -m memos.commands watch > "{log_dir / 'watch.log'}" 2>&1
-"""
-    else:
-        # If we're not in a Conda environment
-        content = f"""@echo off
+    # Absolute pythonw resolves its own venv/site-packages, so no `call activate.bat`
+    # is needed. `chcp 65001` keeps log files readable when memos writes UTF-8.
+    content = f"""@echo off
+chcp 65001 >nul
 start /B "" "{pythonw_path}" -m memos.commands record > "{log_dir / 'record.log'}" 2>&1
 start /B "" "{pythonw_path}" -m memos.commands serve > "{log_dir / 'serve.log'}" 2>&1
 REM watch service will automatically retry until serve is ready
@@ -508,6 +500,27 @@ def check_screen_recording_permission():
     return "granted" if bool(CGPreflightScreenCaptureAccess()) else "denied"
 
 
+def check_windows_autostart():
+    """Inspect the Windows Startup shortcut without requiring win32com.
+
+    Returns "registered" / "not registered" / "broken" / "n/a".
+    "broken" means the shortcut exists but its target launch.bat is missing —
+    usually because the user reinstalled Python or moved ~/.memos.
+    """
+    if not is_windows():
+        return "n/a"
+    appdata = os.getenv("APPDATA")
+    if not appdata:
+        return "unavailable"
+    shortcut_path = (
+        Path(appdata) / r"Microsoft\Windows\Start Menu\Programs\Startup" / "Memos.lnk"
+    )
+    if not shortcut_path.exists():
+        return "not registered"
+    bat_path = settings.resolved_base_dir / "launch.bat"
+    return "registered" if bat_path.exists() else "broken"
+
+
 def request_screen_recording_permission():
     """Ask macOS to register this interpreter in the TCC screen-recording list.
 
@@ -590,6 +603,12 @@ def doctor():
             request_screen_recording_permission()
             failures.append("screen_recording")
 
+    if is_windows():
+        autostart = check_windows_autostart()
+        rows.append(("Startup autostart", autostart))
+        if autostart == "broken":
+            failures.append("autostart")
+
     typer.echo("Pensieve diagnostics")
     typer.echo("=" * 64)
     for k, v in rows:
@@ -610,6 +629,10 @@ def doctor():
         typer.echo(f"Port {settings.server_port} is held by a non-memos process.")
         typer.echo("  Either stop that process, or change server_port in ~/.memos/config.yaml")
         typer.echo("  Find the offender with:  lsof -i :{port}".format(port=settings.server_port))
+        typer.echo("")
+    if "autostart" in failures:
+        typer.echo("Startup shortcut exists but launch.bat is missing.")
+        typer.echo("  Re-run:  memos enable")
         typer.echo("")
     if "screen_recording" in failures:
         typer.echo("Screen recording permission is required.")
