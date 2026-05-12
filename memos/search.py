@@ -40,6 +40,28 @@ def _adaptive_bucket_unit(earliest, latest, threshold_days: int = 60) -> Optiona
 
 
 COUNT_CAP = 5000  # Stop counting beyond this; UI renders "{COUNT_CAP}+".
+
+
+def _time_window_clauses(
+    column_sql: str, start: Optional[int], end: Optional[int], params: dict
+) -> List[str]:
+    """Build WHERE clauses for an optional time window and add the matching
+    bind parameters in-place.
+
+    Each bound is independent — a half-open window (start only or end only)
+    applies just that side. The previous `start AND end` gating silently
+    dropped the filter when one bound was missing (e.g. the user picked a
+    'from' date but no 'to' in the custom date picker), making the query
+    scan the whole index.
+    """
+    clauses: List[str] = []
+    if start is not None:
+        clauses.append(f"{column_sql} >= :start")
+        params["start"] = start
+    if end is not None:
+        clauses.append(f"{column_sql} <= :end")
+        params["end"] = end
+    return clauses
 # Cap for FTS rank scoring. ts_rank_cd is computed per match before sorting;
 # capping early lets PostgreSQL stop scanning once enough matches are
 # collected. RRF still pairs this with vector search top-K so the final
@@ -541,14 +563,17 @@ class PostgreSQLSearchProvider(SearchProvider):
             AND e.file_type_group = 'image'
         """
 
+        params = {"query": query, "limit": limit, "rank_cap": FTS_RANK_CAP}
         where_clauses = []
         if library_ids:
             where_clauses.append("e.library_id = ANY(:library_ids)")
+            params["library_ids"] = library_ids
 
-        if start is not None and end is not None:
-            where_clauses.append(
-                "EXTRACT(EPOCH FROM e.file_created_at) BETWEEN :start AND :end"
+        where_clauses.extend(
+            _time_window_clauses(
+                "EXTRACT(EPOCH FROM e.file_created_at)", start, end, params
             )
+        )
 
         if app_names:
             where_clauses.append(
@@ -561,6 +586,7 @@ class PostgreSQLSearchProvider(SearchProvider):
                 )
             """
             )
+            params["app_names"] = app_names
 
         if where_clauses:
             base_sql += " AND " + " AND ".join(where_clauses)
@@ -569,18 +595,6 @@ class PostgreSQLSearchProvider(SearchProvider):
             " LIMIT :rank_cap"
             ")\nSELECT id FROM search_results ORDER BY rank DESC LIMIT :limit"
         )
-
-        params = {"query": query, "limit": limit, "rank_cap": FTS_RANK_CAP}
-
-        if library_ids:
-            params["library_ids"] = library_ids
-
-        if start is not None and end is not None:
-            params["start"] = start
-            params["end"] = end
-
-        if app_names:
-            params["app_names"] = app_names
 
         logfire.info(
             "full text search {query=} {limit=}",
@@ -611,14 +625,17 @@ class PostgreSQLSearchProvider(SearchProvider):
         AND e.file_type_group = 'image'
         """
 
+        params = {"query": query, "cap": COUNT_CAP + 1}
         where_clauses = []
         if library_ids:
             where_clauses.append("e.library_id = ANY(:library_ids)")
+            params["library_ids"] = library_ids
 
-        if start is not None and end is not None:
-            where_clauses.append(
-                "EXTRACT(EPOCH FROM e.file_created_at) BETWEEN :start AND :end"
+        where_clauses.extend(
+            _time_window_clauses(
+                "EXTRACT(EPOCH FROM e.file_created_at)", start, end, params
             )
+        )
 
         if app_names:
             where_clauses.append(
@@ -631,21 +648,13 @@ class PostgreSQLSearchProvider(SearchProvider):
                 )
             """
             )
+            params["app_names"] = app_names
 
         if where_clauses:
             inner_sql += " AND " + " AND ".join(where_clauses)
 
         inner_sql += " LIMIT :cap"
         base_sql = f"SELECT COUNT(*) FROM ({inner_sql}) sub"
-
-        params = {"query": query, "cap": COUNT_CAP + 1}
-        if library_ids:
-            params["library_ids"] = library_ids
-        if start is not None and end is not None:
-            params["start"] = start
-            params["end"] = end
-        if app_names:
-            params["app_names"] = app_names
 
         result = db.execute(text(base_sql), params).scalar()
         return int(result or 0)
@@ -677,10 +686,10 @@ class PostgreSQLSearchProvider(SearchProvider):
             sql_query += " AND library_id = ANY(:library_ids)"
             params["library_ids"] = library_ids
 
-        if start is not None and end is not None:
-            sql_query += " AND file_created_at_timestamp BETWEEN :start AND :end"
-            params["start"] = start
-            params["end"] = end
+        for clause in _time_window_clauses(
+            "file_created_at_timestamp", start, end, params
+        ):
+            sql_query += f" AND {clause}"
 
         if app_names:
             sql_query += " AND app_name = ANY(:app_names)"
@@ -792,12 +801,11 @@ class PostgreSQLSearchProvider(SearchProvider):
             where_clauses.append("e.library_id = ANY(:library_ids)")
             params["library_ids"] = library_ids
 
-        if start is not None and end is not None:
-            where_clauses.append(
-                "EXTRACT(EPOCH FROM e.file_created_at) BETWEEN :start AND :end"
+        where_clauses.extend(
+            _time_window_clauses(
+                "EXTRACT(EPOCH FROM e.file_created_at)", start, end, params
             )
-            params["start"] = start
-            params["end"] = end
+        )
 
         if app_names:
             where_clauses.append(
@@ -1146,19 +1154,17 @@ class SqliteSearchProvider(SearchProvider):
             params["library_ids"] = tuple(library_ids)
             bindparams.append(bindparam("library_ids", expanding=True))
 
-        if start is not None and end is not None:
-            sql_query += (
-                " AND strftime('%s', e.file_created_at, 'utc') BETWEEN :start AND :end"
-            )
-            params["start"] = start
-            params["end"] = end
+        for clause in _time_window_clauses(
+            "strftime('%s', e.file_created_at, 'utc')", start, end, params
+        ):
+            sql_query += f" AND {clause}"
 
         if app_names:
             sql_query += """
             AND EXISTS (
-                SELECT 1 FROM metadata_entries me 
-                WHERE me.entity_id = e.id 
-                AND me.key = 'active_app' 
+                SELECT 1 FROM metadata_entries me
+                WHERE me.entity_id = e.id
+                AND me.key = 'active_app'
                 AND me.value IN :app_names
             )
             """
@@ -1211,12 +1217,10 @@ class SqliteSearchProvider(SearchProvider):
             params["library_ids"] = tuple(library_ids)
             bindparams.append(bindparam("library_ids", expanding=True))
 
-        if start is not None and end is not None:
-            inner_sql += (
-                " AND strftime('%s', e.file_created_at, 'utc') BETWEEN :start AND :end"
-            )
-            params["start"] = start
-            params["end"] = end
+        for clause in _time_window_clauses(
+            "strftime('%s', e.file_created_at, 'utc')", start, end, params
+        ):
+            inner_sql += f" AND {clause}"
 
         if app_names:
             inner_sql += """
@@ -1250,11 +1254,16 @@ class SqliteSearchProvider(SearchProvider):
         end: Optional[int] = None,
         app_names: Optional[List[str]] = None,
     ) -> List[int]:
-        start_date = None
-        end_date = None
-        if start is not None and end is not None:
-            start_date = datetime.fromtimestamp(start).strftime("%Y-%m-%d")
-            end_date = datetime.fromtimestamp(end).strftime("%Y-%m-%d")
+        start_date = (
+            datetime.fromtimestamp(start).strftime("%Y-%m-%d")
+            if start is not None
+            else None
+        )
+        end_date = (
+            datetime.fromtimestamp(end).strftime("%Y-%m-%d")
+            if end is not None
+            else None
+        )
 
         sql_query = f"""
         SELECT rowid
@@ -1262,8 +1271,10 @@ class SqliteSearchProvider(SearchProvider):
         WHERE embedding MATCH :embedding
           AND file_type_group = 'image'
           AND K = :limit
-          {"AND file_created_at_date BETWEEN :start_date AND :end_date" if start_date is not None and end_date is not None else ""}
-          {"AND file_created_at_timestamp BETWEEN :start AND :end" if start is not None and end is not None else ""}
+          {"AND file_created_at_date >= :start_date" if start_date is not None else ""}
+          {"AND file_created_at_date <= :end_date" if end_date is not None else ""}
+          {"AND file_created_at_timestamp >= :start" if start is not None else ""}
+          {"AND file_created_at_timestamp <= :end" if end is not None else ""}
           {"AND library_id IN :library_ids" if library_ids else ""}
           {"AND app_name IN :app_names" if app_names else ""}
         ORDER BY distance ASC
@@ -1274,10 +1285,11 @@ class SqliteSearchProvider(SearchProvider):
             "limit": limit,
         }
 
-        if start is not None and end is not None:
+        if start is not None:
             params["start"] = int(start)
-            params["end"] = int(end)
             params["start_date"] = start_date
+        if end is not None:
+            params["end"] = int(end)
             params["end_date"] = end_date
         if library_ids:
             params["library_ids"] = tuple(library_ids)
@@ -1376,12 +1388,11 @@ class SqliteSearchProvider(SearchProvider):
             params["library_ids"] = tuple(library_ids)
             bindparams.append(bindparam("library_ids", expanding=True))
 
-        if start is not None and end is not None:
-            cte_filters.append(
-                "strftime('%s', e.file_created_at, 'utc') BETWEEN :start AND :end"
+        cte_filters.extend(
+            _time_window_clauses(
+                "strftime('%s', e.file_created_at, 'utc')", start, end, params
             )
-            params["start"] = start
-            params["end"] = end
+        )
 
         if app_names:
             cte_filters.append(

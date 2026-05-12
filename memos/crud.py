@@ -617,14 +617,14 @@ def list_entities(
     if library_ids:
         query = query.filter(EntityModel.library_id.in_(library_ids))
 
-    if start is not None and end is not None:
-        # Convert timestamp to Unix timestamp using EXTRACT(EPOCH FROM timestamp)
-        # This works in both PostgreSQL and SQLite (SQLite will use its own implementation)
-        query = query.filter(
-            func.extract("epoch", EntityModel.file_created_at)
-            .cast(BigInteger)
-            .between(start, end)
-        )
+    # Each bound is independent — a half-open window (only start or only end)
+    # applies just that side. EXTRACT(EPOCH FROM timestamp) works in both PG
+    # and SQLite.
+    epoch_col = func.extract("epoch", EntityModel.file_created_at).cast(BigInteger)
+    if start is not None:
+        query = query.filter(epoch_col >= start)
+    if end is not None:
+        query = query.filter(epoch_col <= end)
 
     entities = query.order_by(EntityModel.file_created_at.desc()).limit(limit).all()
 
@@ -645,12 +645,11 @@ def count_entities(
     if library_ids:
         query = query.filter(EntityModel.library_id.in_(library_ids))
 
-    if start is not None and end is not None:
-        query = query.filter(
-            func.extract("epoch", EntityModel.file_created_at)
-            .cast(BigInteger)
-            .between(start, end)
-        )
+    epoch_col = func.extract("epoch", EntityModel.file_created_at).cast(BigInteger)
+    if start is not None:
+        query = query.filter(epoch_col >= start)
+    if end is not None:
+        query = query.filter(epoch_col <= end)
 
     return query.count()
 
