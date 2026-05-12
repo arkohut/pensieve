@@ -1163,7 +1163,7 @@ async def search_entities_v2(
                 Facet(
                     field_name="app_names",
                     counts=app_name_facet_counts,
-                    sampled=False,
+                    sampled=bool(stats.get("sampled")) if stats else False,
                     stats=FacetStats(total_values=len(app_name_facet_counts)),
                 )
             ]

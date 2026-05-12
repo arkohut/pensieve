@@ -40,9 +40,14 @@ def _adaptive_bucket_unit(earliest, latest, threshold_days: int = 60) -> Optiona
 
 
 COUNT_CAP = 10000  # Stop counting beyond this; UI renders "{COUNT_CAP}+".
+# Cap for stats aggregation (facets / date buckets). High-frequency keywords
+# like "memos" hit 200k+ rows; aggregating all of them takes 5+ seconds and
+# offers no real product value past a few thousand sampled rows. The cap is
+# applied inside the CTE so all UNION ALL branches see the same sample.
+STATS_CAP = 5000
 
 
-def _assemble_stats(rows) -> dict:
+def _assemble_stats(rows, sampled: bool = False) -> dict:
     """Fold the kind-tagged UNION ALL rows from get_search_stats SQL into the
     public stats dict (date_range, app_name_counts, date_buckets, bucket_unit).
 
@@ -71,6 +76,7 @@ def _assemble_stats(rows) -> dict:
             "app_name_counts": {},
             "date_buckets": [],
             "bucket_unit": None,
+            "sampled": False,
         }
 
     bucket_unit = _adaptive_bucket_unit(earliest, latest)
@@ -90,6 +96,7 @@ def _assemble_stats(rows) -> dict:
         "app_name_counts": sorted_apps,
         "date_buckets": date_buckets,
         "bucket_unit": bucket_unit,
+        "sampled": sampled,
     }
 
 
@@ -777,6 +784,8 @@ class PostgreSQLSearchProvider(SearchProvider):
             )
             params["app_names"] = app_names
 
+        # Cap +1 so we can tell apart "exactly STATS_CAP" from "more than".
+        params["stats_cap"] = STATS_CAP + 1
         sql = f"""
         WITH fts_matches AS MATERIALIZED (
             SELECT e.id, e.file_created_at
@@ -784,6 +793,7 @@ class PostgreSQLSearchProvider(SearchProvider):
             JOIN entities e ON e.id = f.id
             WHERE f.search_vector @@ websearch_to_tsquery('simple', :query)
             AND {" AND ".join(where_clauses)}
+            LIMIT :stats_cap
         )
         SELECT 'range'::text AS kind, NULL::text AS label,
                MIN(file_created_at)::timestamp AS earliest,
@@ -812,7 +822,11 @@ class PostgreSQLSearchProvider(SearchProvider):
         with logfire.span("fts_stats_aggregation {query=}", query=query):
             rows = db.execute(text(sql), params).all()
 
-        return _assemble_stats(rows)
+        # Detect whether the cap clipped the scan — the 'range' row's count
+        # equals the materialized CTE size.
+        total = next((r.count for r in rows if r.kind == "range"), 0)
+        sampled = total > STATS_CAP
+        return _assemble_stats(rows, sampled=sampled)
 
 
 class SqliteSearchProvider(SearchProvider):
@@ -1356,6 +1370,7 @@ class SqliteSearchProvider(SearchProvider):
             params["app_names"] = tuple(app_names)
             bindparams.append(bindparam("app_names", expanding=True))
 
+        params["stats_cap"] = STATS_CAP + 1
         sql_str = f"""
         WITH fts_matches AS MATERIALIZED (
             SELECT e.id, e.file_created_at
@@ -1363,6 +1378,7 @@ class SqliteSearchProvider(SearchProvider):
             JOIN entities e ON e.id = f.id
             WHERE entities_fts MATCH jieba_query(:query)
             AND {" AND ".join(cte_filters)}
+            LIMIT :stats_cap
         )
         SELECT 'range' AS kind, NULL AS label,
                MIN(file_created_at) AS earliest,
@@ -1392,7 +1408,9 @@ class SqliteSearchProvider(SearchProvider):
         with logfire.span("fts_stats_aggregation {query=}", query=query):
             rows = db.execute(sql, params).all()
 
-        return _assemble_stats(rows)
+        total = next((r.count for r in rows if r.kind == "range"), 0)
+        sampled = total > STATS_CAP
+        return _assemble_stats(rows, sampled=sampled)
 
 
 def create_search_provider(database_url: str) -> SearchProvider:
