@@ -30,6 +30,7 @@ This project draws heavily from two other projects: one called [Rewind](https://
 
 ## 📰 Latest News
 
+- **Pensieve Agent Skill**: Version `v0.33.0` ships an [agent skill](skills/pensieve-search/SKILL.md) so any Skill-aware AI tool — Claude Code, Codex, opencode, etc. — can search your screenshot archive in natural language and link straight to the entity detail page. See [Searching with an Agent Skill](#searching-with-an-agent-skill).
 - **Application Blacklist Feature**: Version `v0.30.0` introduces an application blacklist feature that allows you to exclude specific applications from screenshot recording. This feature includes blacklist checking in both recording and file watching processes, with an enhanced UI for blacklist management in the configuration panel.
 - **Enhanced Entity Detail View**: Version `v0.29.0` introduces a new entity detail page with interactive context navigation, allowing you to browse through screenshots chronologically with improved visual context and metadata display.
 - **OCR Processing Upgrade**: Updated RapidOCR version to use default models, reducing package size (~15MB reduction).
@@ -221,7 +222,7 @@ Below are the migration commands for Mac and Windows:
 ```sh
 # Mac
 memos migrate \
-  --sqlite-url "sqlite:///~/memos/database.db" \
+  --sqlite-url "sqlite:///~/.memos/database.db" \
   --pg-url "postgresql://postgres:mysecretpassword@localhost:5432/postgres"
 ```
 
@@ -251,6 +252,18 @@ Pensieve v0.29.0 introduces a comprehensive entity detail view that provides dee
 4. **Enhanced Visual Context**: Get better understanding of your digital activities with improved metadata capture
 
 The new entity view makes it easier to reconstruct your digital timeline and find related content around specific moments.
+
+### Searching with an Agent Skill
+
+Pensieve v0.33.0 ships an [agent skill](skills/pensieve-search/SKILL.md) — a portable, agent-agnostic instruction file that teaches any Skill-aware AI tool (Claude Code, Codex, opencode, …) how to query your screenshot archive over the HTTP API.
+
+What you get:
+
+1. **Natural-language queries**: ask things like *"find that thing I looked at last week"* or *"show me when I was working on the Mastra integration"* — the agent translates them into `/api/search` calls with the right text, time window, and `active_app` filters.
+2. **Verifiable answers**: results come back as ranked entity ids with links to `/entities/<id>`, so every citation is one click away from the actual screenshot.
+3. **Explore-first recipe**: the skill instructs the agent to run one wide query and inspect the `active_app` / `url` distribution before narrowing — because the topic you ask about rarely appears as its literal string in the captured corpus.
+
+To use it, point your agent at the skill file. If you open this repo as the working directory, the skill is auto-discovered from `skills/pensieve-search/SKILL.md`. To use it from any other project, copy or symlink that file into whichever skills directory your agent loads from — for example `~/.claude/skills/pensieve-search/` (Claude Code) or `~/.agents/skills/pensieve-search/` (Codex / opencode and others that follow the shared `.agents/` convention). Make sure `memos` is running locally first — the skill talks to `http://127.0.0.1:8839` by default.
 
 ### Using the Configuration Management UI
 
