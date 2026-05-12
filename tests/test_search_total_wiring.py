@@ -46,8 +46,20 @@ class FakeProvider:
         }
         return self.canned_total
 
-    def get_search_stats(self, *a, **k):
-        return {}
+    def get_search_stats(
+        self, query, db, library_ids=None, start=None, end=None, app_names=None
+    ):
+        # Server reads `found` from here when use_facet is on, skipping the
+        # separate count call. Record args under the same shape as count so
+        # the test asserts the filter inputs reach whichever path runs.
+        self.last_count_args = {
+            "query": query,
+            "library_ids": library_ids,
+            "start": start,
+            "end": end,
+            "app_names": app_names,
+        }
+        return {"total": self.canned_total, "sampled": False}
 
 
 def test_found_reflects_total_matches_out_of_reflects_collection(monkeypatch):
@@ -160,9 +172,10 @@ def test_collection_size_is_cached_across_requests(monkeypatch):
     assert call_count["n"] == 1, f"expected cache to coalesce 5 requests into 1 count, got {call_count['n']}"
 
 
-def test_hybrid_search_and_count_run_in_parallel(monkeypatch):
-    """hybrid_search and count_full_text_matches are independent — they must
-    run concurrently so total wall time is max(search, count), not sum."""
+def test_hybrid_search_and_stats_run_in_parallel(monkeypatch):
+    """hybrid_search and get_search_stats are independent — they must run
+    concurrently (use_facet path) so total wall time is max(search, stats)
+    rather than the sum."""
     import time as _time
 
     _reset_collection_cache()
@@ -170,7 +183,7 @@ def test_hybrid_search_and_count_run_in_parallel(monkeypatch):
     class SlowProvider:
         def __init__(self):
             self.search_window = []
-            self.count_window = []
+            self.stats_window = []
 
         def hybrid_search(self, query, db, limit, **kw):
             self.search_window.append(_time.monotonic())
@@ -179,13 +192,13 @@ def test_hybrid_search_and_count_run_in_parallel(monkeypatch):
             return []
 
         def count_full_text_matches(self, query, db, **kw):
-            self.count_window.append(_time.monotonic())
-            _time.sleep(0.3)
-            self.count_window.append(_time.monotonic())
             return 0
 
-        def get_search_stats(self, *a, **k):
-            return {}
+        def get_search_stats(self, query, db, **kw):
+            self.stats_window.append(_time.monotonic())
+            _time.sleep(0.3)
+            self.stats_window.append(_time.monotonic())
+            return {"total": 0, "sampled": False}
 
     fake = SlowProvider()
     monkeypatch.setattr(app.state, "search_provider", fake)
@@ -194,18 +207,17 @@ def test_hybrid_search_and_count_run_in_parallel(monkeypatch):
 
     client = TestClient(app)
     t0 = _time.monotonic()
-    resp = client.get("/api/search", params={"q": "x", "limit": 1})
+    resp = client.get("/api/search", params={"q": "x", "limit": 1, "facet": "true"})
     elapsed = _time.monotonic() - t0
 
     assert resp.status_code == 200
-    # Sequential would be ≥ 0.6s; parallel should be ≈ 0.3s. Use 0.5s as a
-    # generous ceiling that still proves we're not running serially.
+    # Sequential would be ≥ 0.6s; parallel should be ≈ 0.3s. 0.5s ceiling
+    # proves we're not running serially.
     assert elapsed < 0.5, f"expected parallel execution (~0.3s), got {elapsed:.2f}s"
-    # And the windows must overlap (search and count ran simultaneously)
     s_start, s_end = fake.search_window
-    c_start, c_end = fake.count_window
-    overlap = min(s_end, c_end) - max(s_start, c_start)
-    assert overlap > 0, "search and count windows did not overlap"
+    st_start, st_end = fake.stats_window
+    overlap = min(s_end, st_end) - max(s_start, st_start)
+    assert overlap > 0, "hybrid_search and get_search_stats windows did not overlap"
 
 
 def test_collection_size_cache_keys_by_library_ids(monkeypatch):
