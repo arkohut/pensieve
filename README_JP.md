@@ -73,6 +73,8 @@ Pensieveはプライバシーに焦点を当てたパッシブレコーディン
 pip install memos
 ```
 
+> Windowsでは素の `pip install` よりも `uv tool install memos` か `pipx install memos` を推奨します。詳細は [Windows インストールガイド](#windows-インストールガイド) を参照してください。
+
 ### 2. 初期化
 
 pensieveの設定ファイルとsqliteデータベースを初期化します：
@@ -122,6 +124,43 @@ memos stop && memos start
 ```
 
 この煩雑さを避けるには `pipx install memos` か `uv tool install memos` でのインストールを推奨します。インタプリタのパスが固定されるため、memos のアップグレードで権限が失効しません。
+
+### Windows インストールガイド
+
+Windowsでは memos をグローバルの site-packages に入れるのではなく、隔離されたツール venv にインストールするのが安定です：
+
+```powershell
+# 方法 A: uv（単一バイナリ、高速）
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+uv tool install memos
+
+# 方法 B: pipx
+pip install --user pipx
+python -m pipx ensurepath
+pipx install memos
+```
+
+どちらも memos 専用の venv に格納されるため、アップグレード時にもインタプリタのパスが変わりません。インストール後は `memos doctor` で環境を確認してください。
+
+`memos enable && memos start` の前に、2点だけ準備しておくと体験が大きく改善します：
+
+```powershell
+# 管理者 PowerShell で実行
+
+# 長いパスを有効化 — torch や modelscope などの ML パッケージはパスが深い
+Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1
+
+# ~/.memos を Defender の除外対象に追加（スクリーンショット書き込みのたびにスキャンされないように）
+Add-MpPreference -ExclusionPath "$env:USERPROFILE\.memos"
+```
+
+`%USERPROFILE%` が OneDrive にリダイレクトされている場合、`~/.memos` 配下のスクリーンショット（1日 ~400MB）がクラウドに同期されてしまいます。`~/.memos/config.yaml` の `base_dir` を非同期のローカルパスに変更してください。
+
+**Windowsで推奨しない構成：**
+
+- Microsoft Store 版 Python — サンドボックス化されたファイルシステムで `~/.memos` や subprocess が正しく動作しない
+- WSL 内で memos を実行 — WSL は Windows ホストの画面をキャプチャできない
+- `%USERPROFILE%` が OneDrive 同期される構成（上記参照）
 
 ## 🚀 PostgreSQLデータベースの使用
 
