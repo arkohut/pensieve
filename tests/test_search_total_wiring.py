@@ -22,7 +22,15 @@ class FakeProvider:
         self.canned_ids = []
 
     def hybrid_search(
-        self, query, db, limit, library_ids=None, start=None, end=None, app_names=None
+        self,
+        query,
+        db,
+        limit,
+        library_ids=None,
+        start=None,
+        end=None,
+        app_names=None,
+        phase_ms=None,
     ):
         return self.canned_ids
 

@@ -711,25 +711,43 @@ class PostgreSQLSearchProvider(SearchProvider):
         start: Optional[int] = None,
         end: Optional[int] = None,
         app_names: Optional[List[str]] = None,
+        phase_ms: Optional[dict] = None,
     ) -> List[int]:
+        def _measure(name: str, fn):
+            if phase_ms is None:
+                return fn()
+            t0 = time.perf_counter()
+            try:
+                return fn()
+            finally:
+                phase_ms[name] = round((time.perf_counter() - t0) * 1000)
+
         with logfire.span("full_text_search {query=}", query=query):
-            fts_results = self.full_text_search(
-                query, db, limit, library_ids, start, end, app_names
+            fts_results = _measure(
+                "fts",
+                lambda: self.full_text_search(
+                    query, db, limit, library_ids, start, end, app_names
+                ),
             )
         logger.info(f"Full-text search obtained {len(fts_results)} results")
 
         with logfire.span("vector_search {query=}", query=query):
-            embeddings = get_embeddings([query])
+            embeddings = _measure("embed", lambda: get_embeddings([query]))
             if embeddings and embeddings[0]:
-                vec_results = self.vector_search(
-                    embeddings[0], db, limit * 2, library_ids, start, end, app_names
+                vec_results = _measure(
+                    "vec",
+                    lambda: self.vector_search(
+                        embeddings[0], db, limit * 2, library_ids, start, end, app_names
+                    ),
                 )
                 logger.info(f"Vector search obtained {len(vec_results)} results")
             else:
                 vec_results = []
 
         with logfire.span("reciprocal_rank_fusion {query=}", query=query):
-            combined_results = self.reciprocal_rank_fusion(fts_results, vec_results)
+            combined_results = _measure(
+                "rrf", lambda: self.reciprocal_rank_fusion(fts_results, vec_results)
+            )
 
         sorted_ids = [id for id, _ in combined_results][:limit]
         logger.info(f"Hybrid search results (sorted IDs): {sorted_ids}")

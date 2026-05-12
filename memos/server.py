@@ -1030,6 +1030,7 @@ async def search_entities_v2(
             def _run_hybrid_search():
                 worker_db = SessionLocal()
                 t0 = time.perf_counter()
+                sub_ms: dict = {}
                 try:
                     result = search_provider.hybrid_search(
                         query=q,
@@ -1039,8 +1040,9 @@ async def search_entities_v2(
                         start=eff_start,
                         end=eff_end,
                         app_names=app_name_list,
+                        phase_ms=sub_ms,
                     )
-                    return result, round((time.perf_counter() - t0) * 1000)
+                    return result, round((time.perf_counter() - t0) * 1000), sub_ms
                 finally:
                     worker_db.close()
 
@@ -1081,13 +1083,15 @@ async def search_entities_v2(
                 f_search = ex.submit(_run_hybrid_search)
                 f_count = ex.submit(_run_count)
                 f_stats = ex.submit(_run_stats) if use_facet else None
-                entity_ids, hybrid_ms = f_search.result()
+                entity_ids, hybrid_ms, hybrid_sub_ms = f_search.result()
                 total_matches, count_ms = f_count.result()
                 if f_stats is not None:
                     stats, stats_ms = f_stats.result()
                 else:
                     stats, stats_ms = {}, 0
             phase_ms["hybrid_search"] = hybrid_ms
+            for name, ms in hybrid_sub_ms.items():
+                phase_ms[f"hybrid.{name}"] = ms
             phase_ms["count_full_text_matches"] = count_ms
             if use_facet:
                 phase_ms["get_search_stats"] = stats_ms
