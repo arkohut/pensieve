@@ -954,6 +954,23 @@ def _get_collection_size(db: Session, library_ids):
     return value
 
 
+def _timed_in_worker(fn):
+    """Open a worker DB session, time `fn(worker_db)`, close the session.
+
+    Returns `(result, elapsed_ms)`. The three search-phase workers
+    (hybrid_search, count_full_text_matches, get_search_stats) all need
+    their own session because SQLAlchemy sync sessions are not
+    thread-safe; this helper hides the open/time/close boilerplate so
+    the search_entities_v2 closures stay one-liners.
+    """
+    worker_db = SessionLocal()
+    t0 = time.perf_counter()
+    try:
+        return fn(worker_db), round((time.perf_counter() - t0) * 1000)
+    finally:
+        worker_db.close()
+
+
 @api_router.get("/search", response_model=SearchResult, tags=["search"])
 async def search_entities_v2(
     q: str,
@@ -1023,13 +1040,11 @@ async def search_entities_v2(
             # sum. Each worker needs its own DB session because SQLAlchemy
             # sync sessions are not thread-safe.
             def _run_hybrid_search():
-                worker_db = SessionLocal()
-                t0 = time.perf_counter()
                 sub_ms: dict = {}
-                try:
-                    result = search_provider.hybrid_search(
+                ids, ms = _timed_in_worker(
+                    lambda db: search_provider.hybrid_search(
                         query=q,
-                        db=worker_db,
+                        db=db,
                         limit=limit,
                         library_ids=library_ids,
                         start=eff_start,
@@ -1037,41 +1052,32 @@ async def search_entities_v2(
                         app_names=app_name_list,
                         phase_ms=sub_ms,
                     )
-                    return result, round((time.perf_counter() - t0) * 1000), sub_ms
-                finally:
-                    worker_db.close()
+                )
+                return ids, ms, sub_ms
 
             def _run_count():
-                worker_db = SessionLocal()
-                t0 = time.perf_counter()
-                try:
-                    result = search_provider.count_full_text_matches(
+                return _timed_in_worker(
+                    lambda db: search_provider.count_full_text_matches(
                         query=q,
-                        db=worker_db,
+                        db=db,
                         library_ids=library_ids,
                         start=eff_start,
                         end=eff_end,
                         app_names=app_name_list,
                     )
-                    return result, round((time.perf_counter() - t0) * 1000)
-                finally:
-                    worker_db.close()
+                )
 
             def _run_stats():
-                worker_db = SessionLocal()
-                t0 = time.perf_counter()
-                try:
-                    result = search_provider.get_search_stats(
+                return _timed_in_worker(
+                    lambda db: search_provider.get_search_stats(
                         query=q,
-                        db=worker_db,
+                        db=db,
                         library_ids=library_ids,
                         start=eff_start,
                         end=eff_end,
                         app_names=app_name_list,
                     )
-                    return result, round((time.perf_counter() - t0) * 1000)
-                finally:
-                    worker_db.close()
+                )
 
             # When use_facet is on, stats already computes the FTS hit count
             # (capped at STATS_CAP) — we read it back and skip the dedicated
