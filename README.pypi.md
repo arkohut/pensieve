@@ -91,7 +91,18 @@ Open your browser and visit `http://localhost:8839`
 
 ### Mac Permission Issues
 
-On Mac, Pensieve needs screen recording permission. When the program starts, Mac will prompt for screen recording permission - please allow it to proceed.
+On Mac, Pensieve needs screen recording permission. The first time `memos start` runs, macOS will prompt you to allow screen recording — please allow it.
+
+Run `memos doctor` to verify the current authorization state without triggering a prompt; it also prints the exact interpreter path you need to authorize in **System Settings → Privacy & Security → Screen & System Audio Recording**.
+
+If you upgrade Python, the granted permission can become stale (TCC is keyed on the binary path). Reset and re-authorize:
+
+```sh
+tccutil reset ScreenCapture
+memos stop && memos start
+```
+
+Installing via `pipx install memos` or `uv tool install memos` pins the interpreter path and prevents this churn.
 
 ## User Guide
 

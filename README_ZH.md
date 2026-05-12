@@ -105,9 +105,26 @@ memos start
 
 ### Mac 下的权限问题
 
-在 Mac 下，Pensieve 需要获取截图权限，程序启动的时候，Mac 就会提示需要录屏的权限，请允许即可。
+在 Mac 下，Pensieve 需要获取录屏权限。第一次执行 `memos start` 时，macOS 会弹出录屏授权对话框，允许即可。
 
 ![mac permission](docs/images/mac-security-permission.jpg)
+
+要在不触发弹窗的情况下检查当前授权状态，运行：
+
+```sh
+memos doctor
+```
+
+它会打印出需要被授权的 Python 解释器路径，并告诉你去 **系统设置 → 隐私与安全性 → 屏幕与系统音频录制** 里找哪一条开启。
+
+如果你升级了 Python（`brew upgrade python`、切了新的 `pyenv` 版本、重建了 conda 环境等），原来的授权会失效——因为 macOS 的 TCC 是按二进制路径记账的。复位后重新授权即可：
+
+```sh
+tccutil reset ScreenCapture
+memos stop && memos start
+```
+
+如果想避免这种反复，建议用 `pipx install memos` 或 `uv tool install memos` 安装——它们会把解释器路径固定下来，memos 自身升级时不会影响录屏授权。
 
 ## 🚀 使用 PostgreSQL 数据库
 
