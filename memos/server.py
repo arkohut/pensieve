@@ -1021,10 +1021,12 @@ async def search_entities_v2(
             )
             stats = {}
         else:
-            # hybrid_search and count_full_text_matches are independent — run
-            # them in parallel so total wall time is max(search, count) rather
-            # than the sum. Each worker needs its own DB session because
-            # SQLAlchemy sync sessions are not thread-safe.
+            # hybrid_search, count_full_text_matches, and get_search_stats are
+            # all independent functions of the same filter inputs — none of
+            # them depends on entity_ids from hybrid_search. Run them in one
+            # parallel block so total wall time is max(slowest) rather than
+            # sum. Each worker needs its own DB session because SQLAlchemy
+            # sync sessions are not thread-safe.
             def _run_hybrid_search():
                 worker_db = SessionLocal()
                 t0 = time.perf_counter()
@@ -1058,34 +1060,42 @@ async def search_entities_v2(
                 finally:
                     worker_db.close()
 
+            def _run_stats():
+                worker_db = SessionLocal()
+                t0 = time.perf_counter()
+                try:
+                    result = search_provider.get_search_stats(
+                        query=q,
+                        db=worker_db,
+                        library_ids=library_ids,
+                        start=eff_start,
+                        end=eff_end,
+                        app_names=app_name_list,
+                    )
+                    return result, round((time.perf_counter() - t0) * 1000)
+                finally:
+                    worker_db.close()
+
             parallel_t0 = time.perf_counter()
-            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
                 f_search = ex.submit(_run_hybrid_search)
                 f_count = ex.submit(_run_count)
+                f_stats = ex.submit(_run_stats) if use_facet else None
                 entity_ids, hybrid_ms = f_search.result()
                 total_matches, count_ms = f_count.result()
+                if f_stats is not None:
+                    stats, stats_ms = f_stats.result()
+                else:
+                    stats, stats_ms = {}, 0
             phase_ms["hybrid_search"] = hybrid_ms
             phase_ms["count_full_text_matches"] = count_ms
+            if use_facet:
+                phase_ms["get_search_stats"] = stats_ms
             phase_ms["parallel_wall"] = round((time.perf_counter() - parallel_t0) * 1000)
 
             entities = _phase(
                 "find_entities_by_ids",
                 lambda: crud.find_entities_by_ids(entity_ids, db),
-            )
-            stats = (
-                _phase(
-                    "get_search_stats",
-                    lambda: search_provider.get_search_stats(
-                        query=q,
-                        db=db,
-                        library_ids=library_ids,
-                        start=eff_start,
-                        end=eff_end,
-                        app_names=app_name_list,
-                    ),
-                )
-                if use_facet
-                else {}
             )
 
         # Collection-scope size for out_of: Typesense convention says
