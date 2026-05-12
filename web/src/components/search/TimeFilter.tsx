@@ -39,7 +39,10 @@ function formatDateLabel(date: Date): string {
 function presetSeconds(p: Preset, nowSec: number): { start?: number; end?: number } {
   switch (p) {
     case 'unlimited':
-      return {};
+      // start=0 is the URL sentinel for "explicitly no lower bound" — it
+      // survives the schema and tells effectiveSearchParams to skip the
+      // default 3-month window.
+      return { start: 0, end: undefined };
     case 'threeHours':
       return { start: nowSec - 3 * HOUR, end: nowSec };
     case 'today':
@@ -55,9 +58,15 @@ function presetSeconds(p: Preset, nowSec: number): { start?: number; end?: numbe
   }
 }
 
+function initialPreset(start: number | undefined, end: number | undefined): Preset {
+  if (start === 0) return 'unlimited';
+  if (start !== undefined || end !== undefined) return 'custom';
+  return 'threeMonths';
+}
+
 export function TimeFilter({ start, end, onChange }: Props) {
   const { t } = useTranslation();
-  const [preset, setPreset] = useState<Preset>(start || end ? 'custom' : 'unlimited');
+  const [preset, setPreset] = useState<Preset>(() => initialPreset(start, end));
   const [customRange, setCustomRange] = useState<{ from?: Date; to?: Date }>({
     from: start ? new Date(start * 1000) : undefined,
     to: end ? new Date(end * 1000) : undefined,
@@ -107,9 +116,6 @@ export function TimeFilter({ start, end, onChange }: Props) {
         <DropdownMenuLabel>{t('timeFilter.label')}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuRadioGroup value={preset} onValueChange={(v) => pickPreset(v as Preset)}>
-          <DropdownMenuRadioItem value="unlimited">
-            {t('timeFilter.unlimited')}
-          </DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="threeHours">
             {t('timeFilter.threeHours')}
           </DropdownMenuRadioItem>
@@ -118,6 +124,14 @@ export function TimeFilter({ start, end, onChange }: Props) {
           <DropdownMenuRadioItem value="month">{t('timeFilter.month')}</DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="threeMonths">
             {t('timeFilter.threeMonths')}
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="unlimited">
+            <span className="flex w-full items-center justify-between gap-3">
+              <span>{t('timeFilter.unlimited')}</span>
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                {t('timeFilter.unlimitedHint')}
+              </span>
+            </span>
           </DropdownMenuRadioItem>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>{t('timeFilter.custom')}</DropdownMenuSubTrigger>

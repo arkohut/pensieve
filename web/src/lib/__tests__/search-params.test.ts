@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { searchSchema, buildSearchPath } from '$/lib/search-params';
+import {
+  buildSearchPath,
+  effectiveSearchParams,
+  searchSchema,
+  type SearchParams,
+} from '$/lib/search-params';
 
 describe('searchSchema', () => {
   it('parses empty object with defaults', () => {
@@ -67,5 +72,54 @@ describe('buildSearchPath', () => {
     });
     expect(path).toContain('library_ids=1%2C3');
     expect(path).toContain('app_names=Figma%2CChrome');
+  });
+
+  it('drops start=0 sentinel from the wire format', () => {
+    const path = buildSearchPath({
+      q: '',
+      submitted_q: '',
+      start: 0,
+      library_ids: [],
+      app_names: [],
+    });
+    expect(path).not.toContain('start=');
+  });
+});
+
+describe('effectiveSearchParams', () => {
+  const base: SearchParams = {
+    q: '',
+    submitted_q: '',
+    library_ids: [],
+    app_names: [],
+  };
+  const NOW = 1_715_000_000; // arbitrary fixed epoch
+  const NINETY_DAYS = 90 * 24 * 60 * 60;
+
+  it('applies the 3-month default when nothing is set', () => {
+    expect(effectiveSearchParams(base, NOW).start).toBe(NOW - NINETY_DAYS);
+  });
+
+  it('strips the start=0 sentinel without applying the default', () => {
+    const out = effectiveSearchParams({ ...base, start: 0 }, NOW);
+    expect(out.start).toBeUndefined();
+    expect(out.end).toBeUndefined();
+  });
+
+  it('leaves an explicit start untouched', () => {
+    const out = effectiveSearchParams({ ...base, start: 1234567 }, NOW);
+    expect(out.start).toBe(1234567);
+  });
+
+  it('skips the default when only end is set', () => {
+    const out = effectiveSearchParams({ ...base, end: 1234567 }, NOW);
+    expect(out.start).toBeUndefined();
+    expect(out.end).toBe(1234567);
+  });
+
+  it('skips the default when a date facet is selected', () => {
+    const out = effectiveSearchParams({ ...base, date: '2026-04' }, NOW);
+    expect(out.start).toBeUndefined();
+    expect(out.date).toBe('2026-04');
   });
 });

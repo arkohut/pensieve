@@ -7,7 +7,8 @@
   "language": "语言",
   "timeFilter": {
     "label": "时间筛选",
-    "unlimited": "不限时间",
+    "unlimited": "全部时间",
+    "unlimitedHint": "较慢",
     "threeHours": "最近3小时",
     "today": "今天",
     "week": "最近一周",
