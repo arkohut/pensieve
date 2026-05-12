@@ -915,6 +915,25 @@ _collection_size_cache: dict = {}
 _collection_size_lock = threading.Lock()
 
 
+### Search hit slimming
+# Metadata keys whose values are large (OCR boxes, VLM markdown) and only
+# consumed in the entity detail page — never in the result grid. The detail
+# page fetches /entities/{id} separately, which keeps these intact.
+#
+# `_result` suffix matches the VLM plugin convention (vlm/main.py emits keys
+# like `{model}_result` — e.g. `minicpm_v_result`, `qwen2.5_vl_32b_result`).
+# `structured_vlm_` prefix matches the structured-VLM plugin's versioned keys.
+# `ocr_result` is by far the heaviest (~15 KB/entry, 700+ KB over 48 hits).
+_SEARCH_HIT_EXCLUDED_PREFIXES: tuple[str, ...] = ("structured_vlm_",)
+_SEARCH_HIT_EXCLUDED_SUFFIXES: tuple[str, ...] = ("_result",)
+
+
+def _is_search_hit_excluded(key: str) -> bool:
+    return key.startswith(_SEARCH_HIT_EXCLUDED_PREFIXES) or key.endswith(
+        _SEARCH_HIT_EXCLUDED_SUFFIXES
+    )
+
+
 def _date_param_to_range(date_str: str) -> tuple[int, int]:
     """Translate 'YYYY-MM' or 'YYYY-MM-DD' to a UTC [start, end) UNIX-second range."""
     if len(date_str) == 7:
@@ -1102,6 +1121,7 @@ async def search_entities_v2(
                         source=metadata.source,
                     )
                     for metadata in entity.metadata_entries
+                    if not _is_search_hit_excluded(metadata.key)
                 ],
             )
 
@@ -1179,6 +1199,7 @@ async def search_entities_v2(
             ),
             search_cutoff=False,
             search_time_ms=round((time.perf_counter() - overall_t0) * 1000),
+            phase_timings_ms=phase_ms or None,
             date_range=date_range,
             date_buckets=date_buckets,
             bucket_unit=bucket_unit,

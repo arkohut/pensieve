@@ -52,6 +52,7 @@ export interface SearchResult {
   found: number;
   out_of: number;
   search_time_ms: number;
+  phase_timings_ms?: Record<string, number> | null;
   date_range?: DateRange | null;
   date_buckets?: DateBucket[] | null;
   bucket_unit?: 'day' | 'month' | null;
