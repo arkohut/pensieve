@@ -69,7 +69,7 @@ def _time_window_clauses(
 FTS_RANK_CAP = 5000
 
 
-def _assemble_stats(rows, sampled: bool = False) -> dict:
+def _assemble_stats(rows) -> dict:
     """Fold the kind-tagged UNION ALL rows from get_search_stats SQL into the
     public stats dict (date_range, app_name_counts, date_buckets, bucket_unit).
 
@@ -98,7 +98,6 @@ def _assemble_stats(rows, sampled: bool = False) -> dict:
             "app_name_counts": {},
             "date_buckets": [],
             "bucket_unit": None,
-            "sampled": False,
             "total": 0,
         }
 
@@ -119,7 +118,6 @@ def _assemble_stats(rows, sampled: bool = False) -> dict:
         "app_name_counts": sorted_apps,
         "date_buckets": date_buckets,
         "bucket_unit": bucket_unit,
-        "sampled": sampled,
         "total": total,
     }
 
@@ -832,7 +830,7 @@ class PostgreSQLSearchProvider(SearchProvider):
         with logfire.span("fts_stats_aggregation {query=}", query=query):
             rows = db.execute(text(sql), params).all()
 
-        return _assemble_stats(rows, sampled=False)
+        return _assemble_stats(rows)
 
 
 class SqliteSearchProvider(SearchProvider):
@@ -1385,7 +1383,7 @@ class SqliteSearchProvider(SearchProvider):
         with logfire.span("fts_stats_aggregation {query=}", query=query):
             rows = db.execute(sql, params).all()
 
-        return _assemble_stats(rows, sampled=False)
+        return _assemble_stats(rows)
 
 
 def create_search_provider(database_url: str) -> SearchProvider:

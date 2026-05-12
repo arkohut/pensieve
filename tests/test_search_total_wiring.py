@@ -59,7 +59,7 @@ class FakeProvider:
             "end": end,
             "app_names": app_names,
         }
-        return {"total": self.canned_total, "sampled": False}
+        return {"total": self.canned_total}
 
 
 def test_found_reflects_total_matches_out_of_reflects_collection(monkeypatch):
@@ -198,7 +198,7 @@ def test_hybrid_search_and_stats_run_in_parallel(monkeypatch):
             self.stats_window.append(_time.monotonic())
             _time.sleep(0.3)
             self.stats_window.append(_time.monotonic())
-            return {"total": 0, "sampled": False}
+            return {"total": 0}
 
     fake = SlowProvider()
     monkeypatch.setattr(app.state, "search_provider", fake)
