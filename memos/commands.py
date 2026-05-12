@@ -391,27 +391,19 @@ def generate_launch_sh():
     memos_dir = settings.resolved_base_dir
     python_path = get_python_path()
     content = f"""#!/bin/bash
-# activate current python environment
-if [ -f "$(dirname "$python_path")/activate" ]; then
-    source "$(dirname "$python_path")/activate"
-fi
-
-# run memos record
+# Use the absolute interpreter path so no venv activation is needed.
 {python_path} -m memos.commands record &
-
-# run memos serve
 {python_path} -m memos.commands serve &
-
-# run memos watch (watch service will automatically retry until serve is ready)
+# watch retries on its own until serve is ready
 {python_path} -m memos.commands watch &
 
-# wait for all background processes
 wait
 """
     launch_sh_path = memos_dir / "launch.sh"
     with open(launch_sh_path, "w") as f:
         f.write(content)
     launch_sh_path.chmod(0o755)
+    return launch_sh_path
 
 
 def setup_windows_autostart(bat_path):
@@ -457,7 +449,7 @@ def generate_plist():
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>{python_dir}:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <string>{python_dir}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     </dict>
 </dict>
 </plist>
@@ -481,15 +473,6 @@ def is_service_loaded(service_name):
         return "0" in result.stdout
     except subprocess.CalledProcessError:
         return False
-
-
-def load_plist(plist_path):
-    service_name = "com.user.memos"
-
-    if is_service_loaded(service_name):
-        subprocess.run(["launchctl", "unload", str(plist_path)], check=False)
-
-    subprocess.run(["launchctl", "load", str(plist_path)], check=True)
 
 
 def is_macos():
@@ -527,10 +510,11 @@ def disable():
     elif is_macos():
         plist_path = Path.home() / "Library/LaunchAgents/com.user.memos.plist"
         if plist_path.exists():
-            subprocess.run(["launchctl", "unload", str(plist_path)], check=True)
+            if is_service_loaded("com.user.memos"):
+                subprocess.run(["launchctl", "unload", str(plist_path)], check=False)
             plist_path.unlink()
             typer.echo(
-                "Unloaded and removed plist file. Memos will no longer run at startup."
+                "Removed plist file. Memos will no longer run at startup."
             )
         else:
             typer.echo("Plist file does not exist. Memos is not set to run at startup.")
@@ -558,9 +542,9 @@ def enable():
         typer.echo(f"Generated launch script at {launch_sh_path}")
         plist_path = generate_plist()
         typer.echo(f"Generated plist file at {plist_path}")
-        load_plist(plist_path)
         typer.echo(
-            "Loaded plist file. Memos is started and will run at next startup or when 'start' command is used."
+            "Memos will start automatically at next login. "
+            "Run 'memos start' to start the services now."
         )
     else:
         typer.echo("Unsupported operating system.")
