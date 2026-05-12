@@ -563,7 +563,15 @@ class PostgreSQLSearchProvider(SearchProvider):
             AND e.file_type_group = 'image'
         """
 
-        params = {"query": query, "limit": limit, "rank_cap": FTS_RANK_CAP}
+        params = {
+            # PG's `simple` tokenizer can't segment CJK runs (a multi-character
+            # phrase stays one token), but the index was built from jieba-
+            # segmented text. Pre-tokenize the query the same way so a Chinese
+            # phrase matches the same tokens that were indexed.
+            "query": self.tokenize_text(query),
+            "limit": limit,
+            "rank_cap": FTS_RANK_CAP,
+        }
         where_clauses = []
         if library_ids:
             where_clauses.append("e.library_id = ANY(:library_ids)")
@@ -625,7 +633,8 @@ class PostgreSQLSearchProvider(SearchProvider):
         AND e.file_type_group = 'image'
         """
 
-        params = {"query": query, "cap": COUNT_CAP + 1}
+        # Match index-time jieba segmentation — see full_text_search comment.
+        params = {"query": self.tokenize_text(query), "cap": COUNT_CAP + 1}
         where_clauses = []
         if library_ids:
             where_clauses.append("e.library_id = ANY(:library_ids)")
@@ -795,7 +804,8 @@ class PostgreSQLSearchProvider(SearchProvider):
         the keyword-match semantics of `found`.
         """
         where_clauses = ["e.file_type_group = 'image'"]
-        params = {"query": query}
+        # Match index-time jieba segmentation — see full_text_search comment.
+        params = {"query": self.tokenize_text(query)}
 
         if library_ids:
             where_clauses.append("e.library_id = ANY(:library_ids)")
