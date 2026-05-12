@@ -340,11 +340,11 @@ function HomePage() {
                     {data.found > 0
                       ? t('searchSummary', {
                           found:
-                            // Server caps very broad counts at 10000 (returns 10001
-                            // as the sentinel to avoid scanning hundreds of
-                            // thousands of FTS rows. Render that as '10,000+'.
-                            data.found > 10000
-                              ? `${(10000).toLocaleString()}+`
+                            // Server caps the FTS scan at 5000 (returns 5001 as
+                            // the sentinel) so high-frequency keywords don't
+                            // pay the full scan cost. Render that as '5,000+'.
+                            data.found > 5000
+                              ? `${(5000).toLocaleString()}+`
                               : data.found.toLocaleString(),
                           outOf: data.out_of.toLocaleString(),
                         })
