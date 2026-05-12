@@ -321,6 +321,7 @@ class SearchResult(BaseModel):
     request_params: RequestParams
     search_cutoff: bool
     search_time_ms: int
+    phase_timings_ms: Optional[Dict[str, int]] = None
     date_range: Optional[DateRange] = None
     date_buckets: Optional[List[DateBucket]] = None
     bucket_unit: Optional[str] = None  # 'day' | 'month'
