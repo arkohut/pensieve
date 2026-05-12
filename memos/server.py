@@ -916,22 +916,17 @@ _collection_size_lock = threading.Lock()
 
 
 ### Search hit slimming
-# Metadata keys whose values are large (OCR boxes, VLM markdown) and only
-# consumed in the entity detail page — never in the result grid. The detail
-# page fetches /entities/{id} separately, which keeps these intact.
-#
-# `_result` suffix matches the VLM plugin convention (vlm/main.py emits keys
-# like `{model}_result` — e.g. `minicpm_v_result`, `qwen2.5_vl_32b_result`).
-# `structured_vlm_` prefix matches the structured-VLM plugin's versioned keys.
-# `ocr_result` is by far the heaviest (~15 KB/entry, 700+ KB over 48 hits).
-_SEARCH_HIT_EXCLUDED_PREFIXES: tuple[str, ...] = ("structured_vlm_",)
-_SEARCH_HIT_EXCLUDED_SUFFIXES: tuple[str, ...] = ("_result",)
+# `ocr_result` is by far the heaviest metadata value (~15 KB/entry, ~700 KB
+# over 48 hits) and is only rendered in the entity detail page, which fetches
+# /entities/{id} separately. Strip it from search hits to keep responses
+# small. Other plugin outputs (structured_vlm_*, {model}_result) are small
+# enough to stay in hits — they power callers like the pensieve-search skill
+# that read summaries like `structured_vlm.primary.what` straight from search.
+_SEARCH_HIT_EXCLUDED_KEYS: frozenset[str] = frozenset({"ocr_result"})
 
 
 def _is_search_hit_excluded(key: str) -> bool:
-    return key.startswith(_SEARCH_HIT_EXCLUDED_PREFIXES) or key.endswith(
-        _SEARCH_HIT_EXCLUDED_SUFFIXES
-    )
+    return key in _SEARCH_HIT_EXCLUDED_KEYS
 
 
 def _date_param_to_range(date_str: str) -> tuple[int, int]:
