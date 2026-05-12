@@ -28,7 +28,6 @@ export interface FacetCount {
 export interface Facet {
   field_name: string;
   counts: FacetCount[];
-  sampled?: boolean;
 }
 
 export interface DateRange {

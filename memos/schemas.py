@@ -267,7 +267,6 @@ class FacetStats(BaseModel):
 class Facet(BaseModel):
     counts: List[FacetCount]
     field_name: str
-    sampled: bool
     stats: FacetStats
 
 
