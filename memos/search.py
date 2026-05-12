@@ -39,7 +39,7 @@ def _adaptive_bucket_unit(earliest, latest, threshold_days: int = 60) -> Optiona
     return "day" if (l - e).total_seconds() / 86400 <= threshold_days else "month"
 
 
-COUNT_CAP = 10000  # Stop counting beyond this; UI renders "{COUNT_CAP}+".
+COUNT_CAP = 5000  # Stop counting beyond this; UI renders "{COUNT_CAP}+".
 # Cap for stats aggregation (facets / date buckets). High-frequency keywords
 # like "memos" hit 200k+ rows; aggregating all of them takes 5+ seconds and
 # offers no real product value past a few thousand sampled rows. The cap is
@@ -82,6 +82,7 @@ def _assemble_stats(rows, sampled: bool = False) -> dict:
             "date_buckets": [],
             "bucket_unit": None,
             "sampled": False,
+            "total": 0,
         }
 
     bucket_unit = _adaptive_bucket_unit(earliest, latest)
@@ -102,6 +103,7 @@ def _assemble_stats(rows, sampled: bool = False) -> dict:
         "date_buckets": date_buckets,
         "bucket_unit": bucket_unit,
         "sampled": sampled,
+        "total": total,
     }
 
 

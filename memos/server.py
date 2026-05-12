@@ -1078,21 +1078,28 @@ async def search_entities_v2(
                 finally:
                     worker_db.close()
 
+            # When use_facet is on, stats already computes the FTS hit count
+            # (capped at STATS_CAP) — we read it back and skip the dedicated
+            # count_full_text_matches call entirely. Both caps now share the
+            # same value so 'found' has consistent semantics either way.
             parallel_t0 = time.perf_counter()
             with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
                 f_search = ex.submit(_run_hybrid_search)
-                f_count = ex.submit(_run_count)
                 f_stats = ex.submit(_run_stats) if use_facet else None
+                f_count = None if use_facet else ex.submit(_run_count)
                 entity_ids, hybrid_ms, hybrid_sub_ms = f_search.result()
-                total_matches, count_ms = f_count.result()
                 if f_stats is not None:
                     stats, stats_ms = f_stats.result()
+                    total_matches = int(stats.get("total") or 0)
+                    count_ms = None
                 else:
                     stats, stats_ms = {}, 0
+                    total_matches, count_ms = f_count.result()
             phase_ms["hybrid_search"] = hybrid_ms
             for name, ms in hybrid_sub_ms.items():
                 phase_ms[f"hybrid.{name}"] = ms
-            phase_ms["count_full_text_matches"] = count_ms
+            if count_ms is not None:
+                phase_ms["count_full_text_matches"] = count_ms
             if use_facet:
                 phase_ms["get_search_stats"] = stats_ms
             phase_ms["parallel_wall"] = round((time.perf_counter() - parallel_t0) * 1000)
