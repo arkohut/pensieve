@@ -818,6 +818,12 @@ class PostgreSQLSearchProvider(SearchProvider):
             params["app_names"] = app_names
 
         # Cap +1 so we can tell apart "exactly STATS_CAP" from "more than".
+        # The CTE samples the most recent FTS matches by file_created_at,
+        # then breaks ties by id. Without an ORDER BY, parallel workers and
+        # buffer cache effects make the sampled subset non-deterministic and
+        # the facet counts visibly jitter between refreshes (see 3a6b335,
+        # which removed an earlier sample for the same reason). The DESC
+        # order rides idx_file_created_at, so this is faster than no order.
         params["stats_cap"] = STATS_CAP + 1
         sql = f"""
         WITH fts_matches AS MATERIALIZED (
@@ -826,6 +832,7 @@ class PostgreSQLSearchProvider(SearchProvider):
             JOIN entities e ON e.id = f.id
             WHERE f.search_vector @@ websearch_to_tsquery('simple', :query)
             AND {" AND ".join(where_clauses)}
+            ORDER BY e.file_created_at DESC, e.id DESC
             LIMIT :stats_cap
         )
         SELECT 'range'::text AS kind, NULL::text AS label,
@@ -1403,6 +1410,8 @@ class SqliteSearchProvider(SearchProvider):
             params["app_names"] = tuple(app_names)
             bindparams.append(bindparam("app_names", expanding=True))
 
+        # See PG provider above for the rationale on ORDER BY: the cap must
+        # be deterministic or facet counts jitter between refreshes.
         params["stats_cap"] = STATS_CAP + 1
         sql_str = f"""
         WITH fts_matches AS MATERIALIZED (
@@ -1411,6 +1420,7 @@ class SqliteSearchProvider(SearchProvider):
             JOIN entities e ON e.id = f.id
             WHERE entities_fts MATCH jieba_query(:query)
             AND {" AND ".join(cte_filters)}
+            ORDER BY e.file_created_at DESC, e.id DESC
             LIMIT :stats_cap
         )
         SELECT 'range' AS kind, NULL AS label,
