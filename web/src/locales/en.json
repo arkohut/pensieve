@@ -7,7 +7,8 @@
   "language": "Language",
   "timeFilter": {
     "label": "Time Filter",
-    "unlimited": "No time limit",
+    "unlimited": "All time",
+    "unlimitedHint": "Slow",
     "threeHours": "Last 3 hours",
     "today": "Today",
     "week": "Last week",

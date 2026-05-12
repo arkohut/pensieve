@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { useCallback, useEffect, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2, Settings } from 'lucide-react';
 import { Button } from '$/components/ui/button';
@@ -14,7 +14,7 @@ import { FacetFilter } from '$/components/search/FacetFilter';
 import { LibraryFilter } from '$/components/search/LibraryFilter';
 import { TimeFilter } from '$/components/search/TimeFilter';
 import { DateBucketFilter } from '$/components/search/DateBucketFilter';
-import { searchSchema, type SearchParams } from '$/lib/search-params';
+import { effectiveSearchParams, searchSchema, type SearchParams } from '$/lib/search-params';
 import { useFacets, useSearch } from '$/lib/api/search';
 import { groupHits } from '$/lib/group-hits';
 import { cn } from '$/lib/utils';
@@ -52,7 +52,11 @@ function HomePage() {
     },
     [navigate],
   );
-  const { data, isLoading, isError, error, refetch, isFetching } = useSearch(search);
+  // Apply the default 3-month window unless the user explicitly opted into
+  // start=0 ("All time") or set start/end/date themselves. Recompute when the
+  // URL changes so navigating fresh picks up a current window.
+  const effective = useMemo(() => effectiveSearchParams(search), [search]);
+  const { data, isLoading, isError, error, refetch, isFetching } = useSearch(effective);
 
   // Snapshot the home search so the entity page can restore it on Esc/Home.
   // sessionStorage is per-tab and clears with the tab, which matches the
@@ -96,11 +100,11 @@ function HomePage() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
   const { data: facetData, isFetching: isFacetFetching } = useFacets({
-    submitted_q: search.submitted_q,
-    library_ids: search.library_ids,
-    start: search.start,
-    end: search.end,
-    date: search.date,
+    submitted_q: effective.submitted_q,
+    library_ids: effective.library_ids,
+    start: effective.start,
+    end: effective.end,
+    date: effective.date,
   });
   // Surface in-flight queries on the input (spinner) and on stale results
   // (faded grid). isLoading covers the very first fetch; isFetching covers
