@@ -22,10 +22,12 @@ Pensieve (`memos`) continuously captures screenshots and indexes them. This skil
 Before the first query in a session, verify the server is up:
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8839/api/search?q=test
+curl -s -o /dev/null -w "%{http_code}\n" "http://127.0.0.1:8839/api/search?q=test"
 ```
 
 `200` means good. `000` or connection-refused means memos isn't running — tell the user to start it (`memos serve` or system-service).
+
+**Always quote the URL** — the `?` and `&` are zsh glob characters and will fail with `no matches found` if unquoted. Every `curl` example below assumes a quoted URL.
 
 ## The endpoint
 
@@ -58,18 +60,53 @@ Returns `SearchResult { hits: [...] }`. Each hit:
       {"key": "active_app", "value": "iTerm2", "source": "..."},
       {"key": "active_window", "value": "✳ Debug memos service background job issue", "source": "..."},
       {"key": "ocr_result", "value": "...long JSON of OCR boxes...", "source": "ocr"},
-      {"key": "structured_vlm_v1_qwen36_35b", "value": "{\"primary\":{\"app\":\"Claude Code\",\"title_or_topic\":\"...\",\"what\":\"...\",\"workspace\":\"memos\"}}", "source": "structured_vlm"},
+      {"key": "structured_vlm_v1_qwen3_6_35b", "value": {"primary": {"app": "Claude Code", "title_or_topic": "...", "what": "...", "workspace": "memos"}}, "source": "structured_vlm"},
       ...
     ]
   }
 }
 ```
 
-The `metadata_entries` is the goldmine — the VLM-extracted structured fields (`primary.app`, `primary.title_or_topic`, `primary.what`, `primary.workspace`) are all there inside the `structured_vlm_v1_*` entry's stringified JSON.
+The `metadata_entries` is the goldmine — the VLM-extracted structured fields (`primary.app`, `primary.title_or_topic`, `primary.what`, `primary.workspace`) live inside the `structured_vlm_v1_*` entry's `value`. **The `value` is a parsed JSON object, not a string** — access fields directly with `.value.primary.what`. Do NOT pipe through `fromjson` (it will error with "only strings can be parsed"). The exact key suffix (e.g. `qwen3_6_35b`) varies per install — match with `select(.key | startswith("structured_vlm"))`.
 
 **Important**: that JSON metadata is also fully tokenized into the FTS index. So `q="Claude Code Mastra workspace"` will match a screenshot whose VLM said `app=Claude Code, what="...Mastra...", workspace=...` — even if "Mastra" doesn't appear in the OCR text.
 
 ## How to query well
+
+### Strategy 0 — look at raw results before narrowing
+
+Resist the urge to pre-anchor on what you think the user means. A "find 最终幻想" question sounds like it's about the *game*, but the same brand lives across YouTube videos, Bilibili clips, wallpaper engines, wikis, store pages, and game launchers. The user's casual phrasing names the topic, not the surface — only the corpus knows where they actually consumed it.
+
+So run one wide query first and let the results tell you what surfaces exist:
+
+```bash
+curl -s --get 'http://127.0.0.1:8839/api/search' \
+  --data-urlencode 'q=最终幻想' --data-urlencode 'facet=true' --data-urlencode 'limit=20' > /tmp/raw.json
+jq -r '.hits[].document
+  | "\(.file_created_at)  \([.metadata_entries[] | select(.key=="active_app") | .value][0] // "?")  \([.metadata_entries[] | select(.key=="url") | .value // "-"][0])  \([.metadata_entries[] | select(.key=="active_window") | .value // "-"][0] | .[0:80])"' /tmp/raw.json
+```
+
+Sample output (verified on a real install):
+
+```
+2026-04-03T15:26Z  Google Chrome  about:blank                                    (55) When Tifa played「Tifa's T…Rebirth🖤 Ru's Piano - YouTube
+2026-04-02T15:47Z  Google Chrome  about:blank                                    (55) Final Fantasy X「To Zanark… Medley | Ru's Piano - YouTube
+2026-02-15T15:59Z  Google Chrome  https://www.bilibili.com/video/BV1K2HQzbEAy…  “蒂法的审视 手机动态壁纸 wallpaper engine_哔哩哔哩_bilibili”🔊
+2026-01-30T05:17Z  Google Chrome  https://www.bilibili.com/                      哔哩哔哩 (゜-゜)つロ 干杯~-bilibili
+```
+
+Now you know: the user doesn't play Final Fantasy — they watch **Ru's Piano** play FF themes on YouTube, and **蒂法的审视 wallpaper engine** clips on Bilibili. If you'd anchored on `q=最终幻想 game` or guessed `app_names=Final Fantasy` you'd have found nothing. The corpus revealed both the surfaces (YouTube + Bilibili) AND the user's actual relationship to the topic (music + wallpapers, not gameplay).
+
+Now you can build **per-surface queries** anchored on each surface's stable identifier and merge the timelines.
+
+**Anchor on stable identifiers, not free-text names**, because free-text is noisy — short or common substrings match the `library_ids=` parameter inside memos's own URL bar, and a CJK brand name often matches OCR'd filenames of unrelated downloaded videos. Stable identifiers come from the URL or the exact app name:
+
+- Website: domain in the URL (`guancha.cn`, `youtube.com/watch?v=…`)
+- Bilibili channel: UID in `space.bilibili.com/<uid>` (e.g. `10330740`)
+- YouTube channel: handle in URL (`@mastra-ai`, `@RusPiano`)
+- App / brand on macOS: exact `active_app` value (`iTerm2`, `Google Chrome`, `企业微信`)
+
+Cross-check every match by filtering hits client-side on the URL or app fields — never trust the FTS hit list alone for "did the user actually visit / consume X" questions. The skill's job is to use multiple raw queries + client-side filtering to give the user a *true* answer, not to take the first FTS rank as gospel.
 
 ### Strategy 1 — content keywords first
 
@@ -234,7 +271,7 @@ curl -s 'http://127.0.0.1:8839/api/search?q=mastra&limit=10' > /tmp/hits.json
 jq -r '.hits[].document |
        "\(.file_created_at)  \([.metadata_entries[]
                                | select(.key | startswith("structured_vlm"))
-                               | .value | fromjson | .primary
+                               | .value.primary
                                | "app=\(.app // "?")  topic=\(.title_or_topic // "?")  what=\((.what // "?")[0:80])"][0])"' /tmp/hits.json
 ```
 
@@ -468,6 +505,8 @@ Don't open more than 2-3 at a time — overwhelming. Pick the top hit, show its 
 5. **Unicode in `q`**: URL-encode Chinese / emoji properly. `curl --data-urlencode 'q=...' -G ...` is safest.
 6. **Rate limit**: there isn't one, but each query also hits the embedding model for vector search. Don't burst > 20 queries in a tight loop without batching.
 7. **Old data without VLM**: screenshots predating structured_vlm rollout (or where VLM failed) only have OCR text. Their hits will lack the `structured_vlm_v1_*` entry — fall back to `ocr_result` for context.
+8. **`ocr_result` is not in search hits** — it's stripped from `/api/search` responses to keep them small (the full payload is ~15 KB per entry × 48 hits). The other metadata (timestamp, active_app, active_window, url, structured_vlm_*) is intact. If you genuinely need the OCR text for a specific entity, fetch `/api/entities/{id}` directly.
+9. **Chinese FTS noise is real**: the PG index uses jieba word segmentation, so a multi-character Chinese phrase gets split into smaller tokens. Common single-character morphemes (`网` / `站` / `中` etc.) match a lot of unrelated OCR (网络 / 网站 / 网址), so FTS will surface low-relevance hits mixed with the real ones. Hybrid RRF mitigates this somewhat via vector search, but for Chinese brand / site names always cross-check hits with URL or `active_app` filters (see Strategy 0) — don't trust the FTS rank alone.
 
 ## When to give up and ask
 
