@@ -229,31 +229,19 @@ function HomePage() {
       />
 
       <header className="mx-auto w-full max-w-screen-xl px-6 pb-6 pt-12">
-        <div className="flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground">
-          <span className="relative inline-flex h-1.5 w-1.5">
-            <span className="absolute inset-0 animate-ping rounded-full bg-brand/40" />
-            <span className="relative inline-block h-1.5 w-1.5 rounded-full bg-brand" />
-          </span>
-          <span>live · capturing</span>
-        </div>
-
-        <h1 className="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-[36px]">
-          <span className="text-brand">
-            {totalIndexed != null ? totalIndexed.toLocaleString() : '—'}
-          </span>{' '}
-          memories indexed.
+        <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-[36px]">
+          {t('slogan')}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          你电脑的私人记忆库
-          {totalIndexed != null && (
+          {totalIndexed != null ? (
             <>
-              {' '}
-              ——{' '}
-              <span className="font-mono text-[13px] tabular-nums">
+              <span className="font-mono text-[13px] tabular-nums text-brand">
                 {totalIndexed.toLocaleString()}
               </span>{' '}
-              张截图，覆盖所有应用与所有屏幕。
+              {t('heroIndexedSuffix')}
             </>
+          ) : (
+            '—'
           )}
         </p>
 

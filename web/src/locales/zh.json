@@ -32,7 +32,8 @@
   "searchLog": {
     "handleSearchStringChange": "处理搜索字符串变化"
   },
-  "slogan": "记录、检索、回顾",
+  "slogan": "记录、检索、回顾。",
+  "heroIndexedSuffix": "张截图已索引。",
   "back": "返回",
   "config": {
     "title": "配置",
