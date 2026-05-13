@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 import sqlite_vec
 
 from ..models import RawBase, PluginModel, LibraryModel, LibraryPluginModel
+from ..schemas import LibraryKind
 
 
 def setup_database(settings, **engine_kwargs):
@@ -27,9 +28,15 @@ def setup_database(settings, **engine_kwargs):
 
 
 def init_database(settings):
-    """Initialize the database."""
+    """Create database schema only. Seed data must be applied via seed_default_data() AFTER migrations."""
     engine, initializer = create_db_initializer(settings)
     return initializer.init_database()
+
+
+def seed_default_data(settings):
+    """Seed default plugins/libraries. Must run AFTER run_migrations() so ORM queries match the migrated schema."""
+    engine, initializer = create_db_initializer(settings)
+    return initializer.seed_default_data()
 
 
 def recreate_fts_and_vec_tables(settings):
@@ -81,8 +88,12 @@ def initialize_default_plugins(session, settings):
 
 def init_default_libraries(session, default_plugins, settings):
     """Initialize default libraries and associate them with plugins."""
+    # The default library is the continuous screen-capture stream, so kind=RECORD.
+    # The 33a9131fe2ab migration backfills this for existing rows; setting it
+    # explicitly here ensures fresh installs (where seed runs after migrations
+    # against an empty table) also get the right kind.
     default_libraries = [
-        LibraryModel(name=settings.default_library),
+        LibraryModel(name=settings.default_library, kind=LibraryKind.RECORD),
     ]
 
     for library in default_libraries:
@@ -157,7 +168,7 @@ class DatabaseInitializer:
         self.settings = settings
 
     def init_database(self) -> bool:
-        """Initialize the database with common tables and data."""
+        """Create schema only: tables + db-specific features. ORM-based seed runs separately via seed_default_data() after migrations."""
         try:
             # Create all tables defined in SQLAlchemy models
             RawBase.metadata.create_all(self.engine)
@@ -166,15 +177,21 @@ class DatabaseInitializer:
             # Initialize database-specific features
             self.init_specific_features()
 
-            # Initialize default data
+            return True
+        except OperationalError as e:
+            print(f"Error initializing database: {e}")
+            return False
+
+    def seed_default_data(self) -> bool:
+        """Seed default plugins/libraries via ORM. Must run AFTER migrations bring the DB schema in line with current models."""
+        try:
             Session = sessionmaker(bind=self.engine)
             with Session() as session:
                 default_plugins = initialize_default_plugins(session, self.settings)
                 init_default_libraries(session, default_plugins, self.settings)
-
             return True
         except OperationalError as e:
-            print(f"Error initializing database: {e}")
+            print(f"Error seeding default data: {e}")
             return False
 
     def init_extensions(self):
