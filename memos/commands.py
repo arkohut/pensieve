@@ -87,13 +87,14 @@ def serve():
     register_service_signals("serve")
     
     try:
-        from .databases.initializers import init_database
+        from .databases.initializers import init_database, seed_default_data
         from .migrations import run_migrations
-        
+
         db_success = init_database(settings)
         if db_success:
             run_migrations()
-            
+            seed_default_data(settings)
+
             from .server import run_server
             run_server()
         else:
@@ -106,12 +107,13 @@ def serve():
 @app.command()
 def init():
     """Initialize the database."""
-    from .databases.initializers import init_database
+    from .databases.initializers import init_database, seed_default_data
     from .migrations import run_migrations
 
     db_success = init_database(settings)
     if db_success:
         run_migrations()
+        seed_default_data(settings)
         print("Initialization completed successfully.")
     else:
         print("Initialization failed. Please check the error messages above.")
@@ -827,7 +829,7 @@ def migrate_sqlite_to_pg(
         EntityTagModel, EntityMetadataModel, PluginModel,
         LibraryPluginModel, EntityPluginStatusModel
     )
-    from .databases.initializers import init_database
+    from .databases.initializers import init_database, seed_default_data
     from .migrations import run_migrations
 
     # Reorder tables to handle foreign key dependencies
@@ -911,7 +913,8 @@ def migrate_sqlite_to_pg(
             # Run migrations
             typer.echo("Running migrations...")
             run_migrations()
-            
+            seed_default_data(settings)
+
             # Create sessions after initialization
             SQLiteSession = sessionmaker(bind=sqlite_engine)
             PGSession = sessionmaker(bind=pg_engine)
