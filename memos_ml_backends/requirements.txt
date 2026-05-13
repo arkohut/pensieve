@@ -1,7 +1,0 @@
-einops
-timm
-transformers
-sentence-transformers
-transformers
-qwen-vl-utils
-optimum
