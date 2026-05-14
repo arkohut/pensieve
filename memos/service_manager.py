@@ -66,22 +66,67 @@ def remove_pid_file(service_name: str) -> None:
     if pid_file.exists():
         pid_file.unlink()
 
+def acquire_service_lock(service_name: str) -> Tuple[bool, Optional[int]]:
+    """Try to claim the PID-file lock for this service.
+
+    Returns (acquired, existing_pid). When acquired is False, existing_pid is
+    the live instance's PID. Stale PID files (process gone or running something
+    else) are cleaned up by is_service_running, so a process that died without
+    removing its file won't permanently block a fresh start. The actual claim
+    uses O_EXCL to turn the check-then-write TOCTOU window into a hard error.
+    """
+    self_pid = os.getpid()
+
+    # start_service pre-writes the child PID before the child is alive, so the
+    # subprocess will find a file containing its own PID. Treat that as already
+    # ours.
+    if read_pid_file(service_name) == self_pid:
+        return True, None
+
+    running, pid = is_service_running(service_name, exclude_pid=self_pid)
+    if running:
+        return False, pid
+
+    pid_file = get_pid_file(service_name)
+    try:
+        fd = os.open(str(pid_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        if read_pid_file(service_name) == self_pid:
+            return True, None
+        running, pid = is_service_running(service_name, exclude_pid=self_pid)
+        return False, pid
+    try:
+        os.write(fd, str(self_pid).encode())
+    finally:
+        os.close(fd)
+    return True, None
+
 # 2. Process Management and Detection
-def find_service_processes(service_name: str) -> List[psutil.Process]:
+def find_service_processes(
+    service_name: str, exclude_pid: Optional[int] = None
+) -> List[psutil.Process]:
     """Finds all processes for a specific service"""
     return [
         p for p in psutil.process_iter(["pid", "name", "cmdline"])
         if p.info["cmdline"] is not None  # Ensure cmdline is not None
+        and (exclude_pid is None or p.info["pid"] != exclude_pid)
         and "python" in p.info["name"].lower()
         and "memos.commands" in " ".join(p.info["cmdline"])
         and service_name in " ".join(p.info["cmdline"])
     ]
 
-def is_service_running(service_name: str) -> Tuple[bool, Optional[int]]:
-    """Checks if service is running, returns (running_status, PID)"""
+def is_service_running(
+    service_name: str, exclude_pid: Optional[int] = None
+) -> Tuple[bool, Optional[int]]:
+    """Checks if service is running, returns (running_status, PID).
+
+    exclude_pid lets a caller ignore a specific process (typically itself) so
+    a fresh service start doesn't detect its own python -m memos.commands ...
+    cmdline and refuse to come up.
+    """
     # First check PID file
     pid = read_pid_file(service_name)
-    if pid:
+    if pid and pid != exclude_pid:
         try:
             process = psutil.Process(pid)
             cmdline = " ".join(process.cmdline())
@@ -90,15 +135,15 @@ def is_service_running(service_name: str) -> Tuple[bool, Optional[int]]:
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             # Process doesn't exist or can't be accessed, clean up PID file
             remove_pid_file(service_name)
-    
+
     # If PID file doesn't exist or is invalid, try finding through process list
-    processes = find_service_processes(service_name)
+    processes = find_service_processes(service_name, exclude_pid=exclude_pid)
     if processes:
         pid = processes[0].info["pid"]
         # After finding process, update PID file
         write_pid_file(service_name, pid)
         return True, pid
-    
+
     return False, None
 
 # 3. Service Start Function
