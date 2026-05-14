@@ -9,6 +9,7 @@ import { Checkbox } from '$/components/ui/checkbox';
 import { Textarea } from '$/components/ui/textarea';
 import { Alert, AlertDescription } from '$/components/ui/alert';
 import { HealthCheck } from '$/components/common/HealthCheck';
+import { Logo } from '$/components/common/Logo';
 import { PageHeader } from '$/components/common/PageHeader';
 import { ConfigSection } from './ConfigSection';
 import { apiEndpoint } from '$/lib/api/client';
@@ -219,17 +220,15 @@ export function Config({ onBack }: Props) {
 
       <PageHeader
         sticky
-        maxWidth="max-w-5xl"
+        maxWidth="max-w-screen-xl"
         left={
           <>
             <Button variant="ghost" size="sm" onClick={onBack}>
               <ArrowLeft size={16} className="mr-2" />
               {t('back')}
             </Button>
-            <span className="font-semibold tracking-tight">
-              Pensieve<span className="text-brand">.</span>
-            </span>
-            <span className="ml-2 hidden font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground sm:inline">
+            <Logo size={40} withBorder={false} className="shrink-0" />
+            <span className="hidden font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground sm:inline">
               / configuration
             </span>
           </>
@@ -258,7 +257,7 @@ export function Config({ onBack }: Props) {
         }
       />
 
-      <div className="container mx-auto max-w-5xl px-6 pb-16 pt-10">
+      <div className="container mx-auto max-w-screen-xl px-6 pb-16 pt-10">
         <header className="mb-10 border-b border-border pb-8">
           <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-[36px]">
             {t('config.title')}<span className="text-brand">.</span>

@@ -7,6 +7,7 @@ import { Input } from '$/components/ui/input';
 import { Skeleton } from '$/components/ui/skeleton';
 import { ErrorState } from '$/components/common/ErrorState';
 import { LanguageSwitcher } from '$/components/common/LanguageSwitcher';
+import { Logo } from '$/components/common/Logo';
 import { PageHeader } from '$/components/common/PageHeader';
 import { ThemeToggle } from '$/components/common/ThemeToggle';
 import { HitCard } from '$/components/search/HitCard';
@@ -205,13 +206,8 @@ function HomePage() {
       <PageHeader
         maxWidth="max-w-screen-xl"
         left={
-          <Link to="/" className="flex items-baseline gap-3">
-            <span className="text-base font-semibold tracking-tight">
-              Pensieve<span className="text-brand">.</span>
-            </span>
-            <span className="hidden font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground sm:inline">
-              / a private archive of your screen
-            </span>
+          <Link to="/" aria-label="Pensieve home" className="flex items-center">
+            <Logo size={40} withBorder={false} />
           </Link>
         }
         right={
@@ -279,8 +275,8 @@ function HomePage() {
         aria-hidden={!isScrolled}
       >
         <div className="mx-auto flex max-w-screen-xl items-center gap-4 px-6 py-2.5">
-          <Link to="/" className="shrink-0 text-sm font-semibold tracking-tight">
-            Pensieve<span className="text-brand">.</span>
+          <Link to="/" aria-label="Pensieve home" className="flex shrink-0 items-center">
+            <Logo size={28} withBorder={false} />
           </Link>
           <div className="relative min-w-0 flex-1">
             <Input
