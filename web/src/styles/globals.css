@@ -3,54 +3,54 @@
 @tailwind utilities;
 
 @layer base {
-  /* Linear-Swiss palette · zinc neutrals + indigo brand accent */
+  /* Slate-ink neutrals + coral brand accent, aligned to the Pensieve logo (ink → coral). */
   :root {
     --background: 0 0% 100%;          /* #ffffff */
-    --foreground: 240 6% 10%;         /* #18181b zinc-900 */
+    --foreground: 218 24% 15%;        /* #1E2530 logo ink */
     --card: 0 0% 100%;
-    --card-foreground: 240 6% 10%;
+    --card-foreground: 218 24% 15%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 6% 10%;
-    --primary: 240 6% 10%;
+    --popover-foreground: 218 24% 15%;
+    --primary: 218 24% 15%;
     --primary-foreground: 0 0% 100%;
     --secondary: 240 5% 96%;          /* #f4f4f5 zinc-100 */
-    --secondary-foreground: 240 6% 10%;
+    --secondary-foreground: 218 24% 15%;
     --muted: 240 5% 96%;
     --muted-foreground: 240 4% 46%;   /* #71717a zinc-500 */
     --accent: 240 5% 96%;             /* shadcn semantic: hover surface */
-    --accent-foreground: 240 6% 10%;
+    --accent-foreground: 218 24% 15%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
     --border: 240 6% 90%;             /* #e4e4e7 zinc-200 */
     --input: 240 6% 90%;
-    --ring: 234 56% 60%;              /* #5e6ad2 indigo focus */
-    --brand: 234 56% 60%;             /* Linear indigo */
+    --ring: 11 70% 64%;               /* coral focus, matches --brand */
+    --brand: 11 70% 64%;              /* #E27B6A logo coral accent */
     --brand-foreground: 0 0% 100%;
     --radius: 0.5rem;
   }
 
   .dark {
-    --background: 240 10% 4%;         /* #09090b zinc-950 */
-    --foreground: 0 0% 98%;            /* #fafafa zinc-50 */
-    --card: 240 10% 4%;
+    --background: 218 24% 6%;         /* slate-ink family, matches logo */
+    --foreground: 0 0% 98%;
+    --card: 218 24% 6%;
     --card-foreground: 0 0% 98%;
-    --popover: 240 10% 4%;
+    --popover: 218 24% 6%;
     --popover-foreground: 0 0% 98%;
     --primary: 0 0% 98%;
-    --primary-foreground: 240 6% 10%;
+    --primary-foreground: 218 24% 6%;
     --secondary: 240 6% 10%;
     --secondary-foreground: 0 0% 98%;
     --muted: 240 6% 10%;
-    --muted-foreground: 240 5% 46%;
+    --muted-foreground: 218 10% 60%;
     --accent: 240 6% 10%;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 4% 16%;             /* #27272a zinc-800 */
+    --border: 240 4% 16%;
     --input: 240 4% 16%;
-    --ring: 234 89% 74%;              /* #818cf8 indigo-300 */
-    --brand: 234 89% 74%;
-    --brand-foreground: 240 10% 4%;
+    --ring: 11 75% 70%;               /* lifted coral for dark contrast */
+    --brand: 11 75% 70%;
+    --brand-foreground: 218 24% 6%;
   }
 
   * {
