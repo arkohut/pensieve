@@ -49,6 +49,13 @@ export default {
           'Consolas',
           'monospace',
         ],
+        display: [
+          'Caveat',
+          '"Ma Shan Zheng"',
+          '"PingFang SC"',
+          '"Microsoft YaHei"',
+          'cursive',
+        ],
       },
       borderRadius: {
         lg: 'var(--radius)',

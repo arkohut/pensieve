@@ -7,6 +7,8 @@ import { Toaster } from 'sonner';
 
 import '@fontsource-variable/geist';
 import '@fontsource-variable/jetbrains-mono';
+import '@fontsource/caveat';
+import '@fontsource/ma-shan-zheng';
 
 import { ThemeProvider } from '$/components/common/ThemeProvider';
 import { routeTree } from './routeTree.gen';
