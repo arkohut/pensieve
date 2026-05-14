@@ -1,6 +1,6 @@
-<!-- <div align="center">
-  <img src="web/static/logos/memos_logo_512.png" width="250"/>
-</div> -->
+<div align="center">
+  <img src="web/public/logos/pensieve_logo_512.png" width="250"/>
+</div>
 
 English | [简体中文](README_ZH.md) | [日本語](README_JP.md)
 
@@ -33,13 +33,7 @@ This project draws heavily from two other projects: one called [Rewind](https://
 - **Pensieve Agent Skill**: Version `v0.33.0` ships an [agent skill](skills/pensieve-search/SKILL.md) so any Skill-aware AI tool — Claude Code, Codex, opencode, etc. — can search your screenshot archive in natural language and link straight to the entity detail page. See [Searching with an Agent Skill](#searching-with-an-agent-skill).
 - **Application Blacklist Feature**: Version `v0.30.0` introduces an application blacklist feature that allows you to exclude specific applications from screenshot recording. This feature includes blacklist checking in both recording and file watching processes, with an enhanced UI for blacklist management in the configuration panel.
 - **Enhanced Entity Detail View**: Version `v0.29.0` introduces a new entity detail page with interactive context navigation, allowing you to browse through screenshots chronologically with improved visual context and metadata display.
-- **OCR Processing Upgrade**: Updated RapidOCR version to use default models, reducing package size (~15MB reduction).
 - **Configuration Management UI**: Version `v0.27.0` introduces an intuitive configuration management interface that allows you to easily configure all Pensieve settings through the web interface.
-- **API Structure Optimization**: All API endpoints now use a standard `/api` prefix for improved consistency and maintainability.
-- **Intelligent Idle Processing Strategy**: Starting from version `v0.26.0`, Pensieve introduces an intelligent idle processing strategy that automatically processes pending files during system idle time. This feature maximizes screenshot processing while minimizing performance impact during active system use. For more details, please refer to the [Idle Processing Strategy](#idle-processing-strategy) section.
-- **PostgreSQL Support**: Starting from version `v0.25.4`, Pensieve now fully supports using PostgreSQL as the backend database. This enhancement allows for improved retrieval performance, especially with large data volumes. If you have extensive screenshot data or require high-speed retrieval, we strongly recommend using PostgreSQL.
-
-  For more details on setting up PostgreSQL, please refer to the [Using PostgreSQL Database](#-using-postgresql-database) section.
 
 ## Quick Start
 
