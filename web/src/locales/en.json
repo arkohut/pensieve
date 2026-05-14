@@ -28,7 +28,7 @@
   "searchSummary": "✨ {{found}} matches in {{outOf}} screenshots",
   "searchSummarySemantic": "✨ {{hits}} semantically related (no exact keyword match)",
   "noResults": "No results found.",
-  "copyright": "© 2024 Arkohut Qinini. All rights reserved.",
+  "copyright": "© 2026 Arkohut Qinini. All rights reserved.",
   "github": "GitHub",
   "searchLog": {
     "handleSearchStringChange": "handleSearchStringChange"
