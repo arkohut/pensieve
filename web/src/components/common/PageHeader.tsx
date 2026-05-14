@@ -26,7 +26,7 @@ export function PageHeader({
     >
       <div
         className={cn(
-          'mx-auto flex items-center justify-between gap-2 px-4 py-2',
+          'mx-auto flex items-center justify-between gap-2 px-6 py-2',
           maxWidth,
         )}
       >

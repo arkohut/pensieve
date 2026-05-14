@@ -229,7 +229,7 @@ function HomePage() {
       />
 
       <header className="mx-auto w-full max-w-screen-xl px-6 pb-6 pt-12">
-        <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-[36px]">
+        <h1 className="font-display text-3xl font-normal tracking-tight text-foreground sm:text-[40px]">
           {t('slogan')}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
