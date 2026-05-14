@@ -257,10 +257,21 @@ def record(
     once: bool = typer.Option(False, help="Run once and exit"),
 ):
     """Record screenshots of the screen."""
-    from .service_manager import register_service_signals, remove_pid_file
+    from .service_manager import (
+        acquire_service_lock,
+        register_service_signals,
+        remove_pid_file,
+    )
 
     # 只有持续运行模式才需要注册信号处理
     if not once:
+        acquired, existing_pid = acquire_service_lock("record")
+        if not acquired:
+            typer.echo(
+                f"record service is already running (pid {existing_pid}). "
+                "Use 'pen ps' to inspect or 'pen stop record' to stop it first."
+            )
+            raise typer.Exit(code=1)
         register_service_signals("record")
 
     if is_macos() and check_screen_recording_permission() != "granted":
@@ -329,8 +340,20 @@ def watch_default_library(
     ),
 ):
     """Watch the default library for file changes and sync automatically."""
-    from .service_manager import register_service_signals, remove_pid_file
-    
+    from .service_manager import (
+        acquire_service_lock,
+        register_service_signals,
+        remove_pid_file,
+    )
+
+    acquired, existing_pid = acquire_service_lock("watch")
+    if not acquired:
+        typer.echo(
+            f"watch service is already running (pid {existing_pid}). "
+            "Use 'pen ps' to inspect or 'pen stop watch' to stop it first."
+        )
+        raise typer.Exit(code=1)
+
     # 注册信号处理
     register_service_signals("watch")
     
