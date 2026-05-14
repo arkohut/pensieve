@@ -377,7 +377,7 @@ def generate_windows_bat():
 
     # Absolute pythonw resolves its own venv/site-packages, so no `call activate.bat`
     # is needed. `chcp 65001` keeps log files readable when memos writes UTF-8.
-    content = f"""@echo off
+    bat_content = f"""@echo off
 chcp 65001 >nul
 start /B "" "{pythonw_path}" -m memos.commands record > "{log_dir / 'record.log'}" 2>&1
 start /B "" "{pythonw_path}" -m memos.commands serve > "{log_dir / 'serve.log'}" 2>&1
@@ -387,8 +387,21 @@ start /B "" "{pythonw_path}" -m memos.commands watch > "{log_dir / 'watch.log'}"
 
     bat_path = memos_dir / "launch.bat"
     with open(bat_path, "w") as f:
-        f.write(content)
-    return bat_path
+        f.write(bat_content)
+
+    # A startup-folder shortcut to a .bat flashes a cmd window for one frame at
+    # login even with WindowStyle=Minimized, because Explorer spawns cmd.exe to
+    # interpret it. Wrapping the .bat in a wscript-hosted .vbs that calls
+    # WshShell.Run with intWindowStyle=0 keeps the launch completely silent.
+    vbs_content = f'''Set WshShell = CreateObject("WScript.Shell")
+WshShell.Run """{bat_path}""", 0, False
+Set WshShell = Nothing
+'''
+    vbs_path = memos_dir / "launch.vbs"
+    with open(vbs_path, "w") as f:
+        f.write(vbs_content)
+
+    return bat_path, vbs_path
 
 
 def generate_launch_sh():
@@ -410,7 +423,7 @@ wait
     return launch_sh_path
 
 
-def setup_windows_autostart(bat_path):
+def setup_windows_autostart(launcher_path):
     import win32com.client
 
     startup_folder = (
@@ -418,11 +431,15 @@ def setup_windows_autostart(bat_path):
     )
     shortcut_path = startup_folder / "Memos.lnk"
 
+    # Target wscript.exe with the .vbs launcher (not the .bat directly) so the
+    # whole startup chain — wscript → vbs → hidden bat → pythonw — never paints
+    # a console window.
     shell = win32com.client.Dispatch("WScript.Shell")
     shortcut = shell.CreateShortCut(str(shortcut_path))
-    shortcut.Targetpath = str(bat_path)
-    shortcut.WorkingDirectory = str(bat_path.parent)
-    shortcut.WindowStyle = 7  # Minimized
+    shortcut.Targetpath = "wscript.exe"
+    shortcut.Arguments = f'"{launcher_path}"'
+    shortcut.WorkingDirectory = str(launcher_path.parent)
+    shortcut.WindowStyle = 7
     shortcut.save()
 
 
@@ -688,9 +705,10 @@ def enable():
     memos_dir.mkdir(parents=True, exist_ok=True)
 
     if is_windows():
-        bat_path = generate_windows_bat()
+        bat_path, vbs_path = generate_windows_bat()
         typer.echo(f"Generated launch script at {bat_path}")
-        setup_windows_autostart(bat_path)
+        typer.echo(f"Generated VBS launcher at {vbs_path}")
+        setup_windows_autostart(vbs_path)
         typer.echo("Created startup shortcut for Windows.")
     elif is_macos():
         launch_sh_path = generate_launch_sh()
