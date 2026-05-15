@@ -10,6 +10,7 @@ import { LanguageSwitcher } from '$/components/common/LanguageSwitcher';
 import { Logo } from '$/components/common/Logo';
 import { PageHeader } from '$/components/common/PageHeader';
 import { ThemeToggle } from '$/components/common/ThemeToggle';
+import { HitViewerModal } from '$/components/entity/HitViewerModal';
 import { HitCard } from '$/components/search/HitCard';
 import { FacetFilter } from '$/components/search/FacetFilter';
 import { LibraryFilter } from '$/components/search/LibraryFilter';
@@ -49,14 +50,36 @@ function HomePage() {
 
   const openEntity = useCallback(
     (entityId: number) => {
-      void navigate({ to: '/entities/$id', params: { id: String(entityId) } });
+      void navigate({
+        search: (s: SearchParams) => ({ ...s, open: entityId }),
+      });
     },
     [navigate],
   );
+
+  const closeHitModal = useCallback(() => {
+    // Replace so closing doesn't leave a "no-modal" entry behind a "modal-open"
+    // entry — browser back after closing should return to whatever was there
+    // before the user clicked into a hit, not re-open the modal.
+    void navigate({
+      search: (s: SearchParams) => ({ ...s, open: undefined }),
+      replace: true,
+    });
+  }, [navigate]);
   // Apply the default 3-month window unless the user explicitly opted into
   // start=0 ("All time") or set start/end/date themselves. Recompute when the
   // URL changes so navigating fresh picks up a current window.
-  const effective = useMemo(() => effectiveSearchParams(search), [search]);
+  // Strip `open` from the params that feed the search/facet queries and the
+  // sessionStorage snapshot — it is purely a modal-visibility flag and must
+  // not invalidate query caches or persist across navigations.
+  const searchWithoutOpen = useMemo(() => {
+    const { open: _open, ...rest } = search;
+    return rest as SearchParams;
+  }, [search]);
+  const effective = useMemo(
+    () => effectiveSearchParams(searchWithoutOpen),
+    [searchWithoutOpen],
+  );
   const { data, isLoading, isError, error, refetch, isFetching } = useSearch(effective);
 
   // Snapshot the home search so the entity page can restore it on Esc/Home.
@@ -64,12 +87,12 @@ function HomePage() {
   // intuition that the "previous home" only makes sense within this session.
   useEffect(() => {
     try {
-      sessionStorage.setItem('memos:homeSearch', JSON.stringify(search));
+      sessionStorage.setItem('memos:homeSearch', JSON.stringify(searchWithoutOpen));
     } catch {
       // Storage may be disabled (private mode quotas, etc). Falling back to
       // an unparameterized home is still a valid behavior.
     }
-  }, [search]);
+  }, [searchWithoutOpen]);
 
   // Also snapshot the ordered hit ids so the entity page can offer "next /
   // prev result" navigation across the current search session. Coerce to
@@ -362,6 +385,9 @@ function HomePage() {
           </div>
         </div>
       </main>
+      {search.open != null && (
+        <HitViewerModal entityId={search.open} onClose={closeHitModal} />
+      )}
     </div>
   );
 }
