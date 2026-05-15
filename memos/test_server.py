@@ -163,6 +163,7 @@ def test_new_library(client):
     assert response.json() == {
         "id": 1,
         "name": "Test Library",
+        "kind": "static",
         "folders": [],
         "plugins": [],
     }
@@ -205,6 +206,7 @@ def test_list_libraries(client):
         {
             "id": 1,
             "name": "Sample Library",
+            "kind": "static",
             "folders": [
                 {
                     "id": 1,
