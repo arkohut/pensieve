@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Tooltip,
   TooltipContent,
@@ -40,6 +41,7 @@ function Kbd({ children }: { children: React.ReactNode }) {
 }
 
 export function ContextNavigationBar({ entity, contextData, onSelectEntity }: Props) {
+  const { t } = useTranslation();
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const currentRef = useRef<HTMLDivElement | null>(null);
 
@@ -85,10 +87,10 @@ export function ContextNavigationBar({ entity, contextData, onSelectEntity }: Pr
         <span className="flex items-center gap-1.5">
           <Kbd>←</Kbd>
           <Kbd>→</Kbd>
-          <span>navigate</span>
+          <span>{t('entityViewer.hintNavigate')}</span>
           <span className="mx-1 opacity-50">·</span>
           <Kbd>Esc</Kbd>
-          <span>home</span>
+          <span>{t('entityViewer.hintHome')}</span>
         </span>
         {first && last && (
           <span className="uppercase tracking-[0.08em]">
@@ -99,7 +101,9 @@ export function ContextNavigationBar({ entity, contextData, onSelectEntity }: Pr
             <strong className="font-medium text-foreground tabular-nums">
               {shortTime(last.file_created_at)}
             </strong>
-            <span className="ml-3 opacity-70">· {timeline.length} frames</span>
+            <span className="ml-3 opacity-70">
+              · {t('entityViewer.frames', { count: timeline.length })}
+            </span>
           </span>
         )}
       </div>
