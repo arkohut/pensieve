@@ -307,6 +307,87 @@ def test_update_entity(client):
     assert invalid_update_response.json() == {"detail": "Entity not found"}
 
 
+def test_update_entity_merges_metadata(client):
+    """PUT /entities/{id} with metadata_entries must merge with existing keys,
+    not wipe them. Plugin webhooks (OCR, VLM, structured_vlm) write metadata
+    asynchronously; a subsequent scan PUT carrying only filename-derived keys
+    must not erase those plugin outputs.
+    """
+    library_id, _, entity_id = setup_library_with_entity(client)
+
+    # Simulate plugin webhooks writing metadata.
+    seed = UpdateEntityMetadataParam(
+        metadata_entries=[
+            EntityMetadataParam(
+                key="ocr_result",
+                value="hello world",
+                source="ocr",
+                data_type=MetadataType.TEXT_DATA,
+            ),
+            EntityMetadataParam(
+                key="qwen3_6_35b_result",
+                value='{"caption":"a screenshot"}',
+                source="vlm",
+                data_type=MetadataType.JSON_DATA,
+            ),
+        ]
+    )
+    seed_response = client.patch(
+        f"/api/entities/{entity_id}/metadata",
+        json=seed.model_dump(mode="json"),
+    )
+    assert seed_response.status_code == 200
+
+    # Now simulate `pen lib scan ... --force` which PUTs the entity with
+    # filename-derived metadata only.
+    scan_update = UpdateEntityParam(
+        size=200,
+        metadata_entries=[
+            EntityMetadataParam(
+                key="timestamp",
+                value="20241101-154443",
+                source="title_regex",
+                data_type=MetadataType.TEXT_DATA,
+            ),
+        ],
+    )
+    put_response = client.put(
+        f"/api/entities/{entity_id}",
+        json=scan_update.model_dump(mode="json"),
+    )
+    assert put_response.status_code == 200
+
+    # Pre-existing plugin keys must survive; the new key must be added.
+    keys_by_name = {m["key"]: m for m in put_response.json()["metadata_entries"]}
+    assert "ocr_result" in keys_by_name, "scan PUT wiped ocr_result"
+    assert "qwen3_6_35b_result" in keys_by_name, "scan PUT wiped vlm result"
+    assert keys_by_name["timestamp"]["value"] == "20241101-154443"
+
+    # A second PUT updating an existing key must upsert in place, not duplicate.
+    overwrite = UpdateEntityParam(
+        metadata_entries=[
+            EntityMetadataParam(
+                key="ocr_result",
+                value="updated text",
+                source="ocr",
+                data_type=MetadataType.TEXT_DATA,
+            ),
+        ],
+    )
+    overwrite_response = client.put(
+        f"/api/entities/{entity_id}",
+        json=overwrite.model_dump(mode="json"),
+    )
+    assert overwrite_response.status_code == 200
+    entries = overwrite_response.json()["metadata_entries"]
+    ocr_entries = [m for m in entries if m["key"] == "ocr_result"]
+    assert len(ocr_entries) == 1, f"ocr_result duplicated: {ocr_entries}"
+    assert ocr_entries[0]["value"] == "updated text"
+    # Sibling keys still present.
+    assert any(m["key"] == "qwen3_6_35b_result" for m in entries)
+    assert any(m["key"] == "timestamp" for m in entries)
+
+
 # Test for getting an entity by filepath
 def test_get_entity_by_filepath(client):
     # Setup data: Create a new library and entity
