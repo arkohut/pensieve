@@ -51,8 +51,11 @@ export function HitViewerModal({ entityId, onClose }: Props) {
 
   const index = useMemo(() => hitIds.indexOf(entityId), [hitIds, entityId]);
   const onHit = index >= 0;
-  const olderId = onHit && index < hitIds.length - 1 ? hitIds[index + 1] : null;
-  const newerId = onHit && index > 0 ? hitIds[index - 1] : null;
+  // List-position semantics: ← steps to the previous hit (one up in the grid),
+  // → steps to the next hit (one down). No mixing with temporal direction —
+  // the context view owns that, this modal only walks the result list.
+  const prevId = onHit && index > 0 ? hitIds[index - 1] : null;
+  const nextId = onHit && index < hitIds.length - 1 ? hitIds[index + 1] : null;
 
   const [layout, setLayoutState] = useState<ViewerLayout>(() => {
     if (typeof window === 'undefined') return 'both';
@@ -99,21 +102,21 @@ export function HitViewerModal({ entityId, onClose }: Props) {
       if (e.key === 'Escape') {
         e.preventDefault();
         onClose();
-      } else if (e.key === 'ArrowLeft' && olderId != null) {
+      } else if (e.key === 'ArrowLeft' && prevId != null) {
         e.preventDefault();
-        goToHit(olderId);
-      } else if (e.key === 'ArrowRight' && newerId != null) {
+        goToHit(prevId);
+      } else if (e.key === 'ArrowRight' && nextId != null) {
         e.preventDefault();
-        goToHit(newerId);
+        goToHit(nextId);
       }
     }
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [goToHit, olderId, newerId, onClose]);
+  }, [goToHit, prevId, nextId, onClose]);
 
   // Warm the cache for the immediate ±1 neighbors so ← / → feels instant.
   useEffect(() => {
-    const adjacent = [olderId, newerId].filter((x): x is number => x != null);
+    const adjacent = [prevId, nextId].filter((x): x is number => x != null);
     for (const id of adjacent) {
       void queryClient
         .ensureQueryData({
@@ -123,7 +126,7 @@ export function HitViewerModal({ entityId, onClose }: Props) {
         .then(preloadEntityImage)
         .catch(() => undefined);
     }
-  }, [olderId, newerId, queryClient]);
+  }, [prevId, nextId, queryClient]);
 
   // Lock background scroll while the modal is up — the home grid sits right
   // behind it and would otherwise scroll on wheel/trackpad.
@@ -155,10 +158,10 @@ export function HitViewerModal({ entityId, onClose }: Props) {
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            disabled={olderId == null}
-            onClick={() => olderId != null && goToHit(olderId)}
-            aria-label="Older result"
-            title="Older result (←)"
+            disabled={prevId == null}
+            onClick={() => prevId != null && goToHit(prevId)}
+            aria-label="Previous result"
+            title="Previous result (←)"
           >
             <ChevronLeft size={16} />
           </Button>
@@ -178,10 +181,10 @@ export function HitViewerModal({ entityId, onClose }: Props) {
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            disabled={newerId == null}
-            onClick={() => newerId != null && goToHit(newerId)}
-            aria-label="Newer result"
-            title="Newer result (→)"
+            disabled={nextId == null}
+            onClick={() => nextId != null && goToHit(nextId)}
+            aria-label="Next result"
+            title="Next result (→)"
           >
             <ChevronRight size={16} />
           </Button>
@@ -189,20 +192,6 @@ export function HitViewerModal({ entityId, onClose }: Props) {
       )}
     </div>
   );
-
-  const rightAction = canExpandContext ? (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      className="h-8 w-8 text-muted-foreground hover:text-foreground"
-      onClick={expandContext}
-      aria-label="Expand context"
-      title="Expand context"
-    >
-      <Maximize2 size={18} />
-    </Button>
-  ) : undefined;
 
   if (isLoading) {
     return (
@@ -231,7 +220,6 @@ export function HitViewerModal({ entityId, onClose }: Props) {
                 layout={layout}
                 onLayoutChange={setLayout}
                 leftAction={leftCluster}
-                rightAction={rightAction}
               />
               <div className="mt-3 flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
                 {showImage && (
@@ -258,6 +246,19 @@ export function HitViewerModal({ entityId, onClose }: Props) {
               </div>
             </div>
           </div>
+          {canExpandContext && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={expandContext}
+              className="absolute bottom-6 left-1/2 z-30 -translate-x-1/2 shadow-lg"
+              aria-label="Explore context"
+              title="Explore temporal context"
+            >
+              <Maximize2 size={16} className="mr-2" />
+              Explore context
+            </Button>
+          )}
         </div>
       </div>
     </div>
