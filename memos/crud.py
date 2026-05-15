@@ -413,27 +413,34 @@ def update_entity(
             db.add(entity_tag)
         db.commit()
 
-    # Handle attrs separately
+    # Upsert metadata by key. A blanket delete here would wipe metadata
+    # written by plugin webhooks (ocr_result, <model>_result, structured_vlm_*)
+    # whenever scan PUTs the filename-derived entries.
     if updated_entity.metadata_entries is not None:
-        # Clear existing attrs
-        db.query(EntityMetadataModel).filter(
-            EntityMetadataModel.entity_id == entity_id
-        ).delete()
-        db.commit()
-
+        existing_by_key = {m.key: m for m in db_entity.metadata_entries}
         for attr in updated_entity.metadata_entries:
-            entity_metadata = EntityMetadataModel(
-                entity_id=db_entity.id,
-                key=attr.key,
-                value=attr.value,
-                source=attr.source if attr.source is not None else None,
-                source_type=(
-                    MetadataSource.PLUGIN_GENERATED if attr.source is not None else None
-                ),
-                data_type=attr.data_type,
-            )
-            db.add(entity_metadata)
-            db_entity.metadata_entries.append(entity_metadata)
+            existing = existing_by_key.get(attr.key)
+            if existing is not None:
+                existing.value = attr.value
+                if attr.source is not None:
+                    existing.source = attr.source
+                    existing.source_type = MetadataSource.PLUGIN_GENERATED
+                existing.data_type = attr.data_type
+            else:
+                entity_metadata = EntityMetadataModel(
+                    entity_id=db_entity.id,
+                    key=attr.key,
+                    value=attr.value,
+                    source=attr.source if attr.source is not None else None,
+                    source_type=(
+                        MetadataSource.PLUGIN_GENERATED
+                        if attr.source is not None
+                        else None
+                    ),
+                    data_type=attr.data_type,
+                )
+                db.add(entity_metadata)
+                db_entity.metadata_entries.append(entity_metadata)
 
     # If force is True, clear all plugin_status entries
     if force:
