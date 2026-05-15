@@ -18,7 +18,11 @@ interface Props {
 }
 
 function shortTime(iso: string): string {
-  const d = new Date(iso);
+  // The API returns naive ISO strings (no trailing 'Z') for UTC instants;
+  // without the suffix JS parses them as local, producing a different
+  // moment and the wrong displayed hours. Mirror formatDate's behavior.
+  const utcIso = iso.endsWith('Z') ? iso : iso + 'Z';
+  const d = new Date(utcIso);
   if (Number.isNaN(d.getTime())) return '';
   const hh = String(d.getHours()).padStart(2, '0');
   const mm = String(d.getMinutes()).padStart(2, '0');
