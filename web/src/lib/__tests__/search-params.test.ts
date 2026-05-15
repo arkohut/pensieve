@@ -37,6 +37,21 @@ describe('searchSchema', () => {
     const parsed = searchSchema.parse({ library_ids: 'oops' });
     expect(parsed.library_ids).toEqual([]);
   });
+
+  it('coerces open to a positive integer', () => {
+    const parsed = searchSchema.parse({ open: '1684643' });
+    expect(parsed.open).toBe(1684643);
+  });
+
+  it('drops invalid open values via catch', () => {
+    const parsed = searchSchema.parse({ open: 'not-a-number' });
+    expect(parsed.open).toBeUndefined();
+  });
+
+  it('omits open by default', () => {
+    const parsed = searchSchema.parse({});
+    expect(parsed.open).toBeUndefined();
+  });
 });
 
 describe('buildSearchPath', () => {

@@ -17,6 +17,10 @@ export const searchSchema = z.object({
   library_ids: z.array(z.coerce.number().int()).catch([]),
   app_names: z.array(z.string()).catch([]),
   date: dateParam,
+  // `open` is a transient UI flag: when set, HomePage renders the hit modal
+  // on top of the grid. It is intentionally not included in buildSearchPath
+  // so canonical search URLs stay clean.
+  open: z.coerce.number().int().positive().optional().catch(undefined),
 });
 
 export type SearchParams = z.infer<typeof searchSchema>;
