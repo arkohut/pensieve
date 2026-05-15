@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, Loader, Maximize2, X } from 'lucide-react';
 import { Button } from '$/components/ui/button';
 import { ErrorState } from '$/components/common/ErrorState';
@@ -33,6 +34,7 @@ function Kbd({ children }: { children: React.ReactNode }) {
 }
 
 export function HitViewerModal({ entityId, onClose }: Props) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -252,11 +254,11 @@ export function HitViewerModal({ entityId, onClose }: Props) {
               variant="secondary"
               onClick={expandContext}
               className="absolute bottom-6 left-1/2 z-30 -translate-x-1/2 shadow-lg"
-              aria-label="Explore context"
-              title="Explore temporal context"
+              aria-label={t('entityViewer.exploreContext')}
+              title={t('entityViewer.exploreContextTitle')}
             >
               <Maximize2 size={16} className="mr-2" />
-              Explore context
+              {t('entityViewer.exploreContext')}
             </Button>
           )}
         </div>
