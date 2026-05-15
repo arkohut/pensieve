@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Home, Loader } from 'lucide-react';
 import { z } from 'zod';
 import { Button } from '$/components/ui/button';
@@ -31,6 +32,7 @@ export const Route = createFileRoute('/entities/$id')({
 });
 
 function EntityPage() {
+  const { t } = useTranslation();
   const { id } = Route.useParams();
   const search = Route.useSearch();
   const fromHit = search.from === 'hit';
@@ -152,8 +154,8 @@ function EntityPage() {
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
           onClick={goBackOrHome}
-          aria-label="Back to search"
-          title="Back to search (Esc)"
+          aria-label={t('entityViewer.backToSearch')}
+          title={t('entityViewer.backToSearchTitle')}
         >
           <ArrowLeft size={18} />
         </Button>
@@ -164,8 +166,8 @@ function EntityPage() {
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
           onClick={goBackOrHome}
-          aria-label="Home"
-          title="Home (Esc)"
+          aria-label={t('entityViewer.home')}
+          title={t('entityViewer.homeTitle')}
         >
           <Home size={18} />
         </Button>
