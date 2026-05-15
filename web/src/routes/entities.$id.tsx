@@ -143,7 +143,7 @@ function EntityPage() {
     );
   }
   if (isError) return <ErrorState error={error} onRetry={() => void refetch()} />;
-  if (!entity) return <p className="p-4">Entity not found.</p>;
+  if (!entity) return <p className="p-4">{t('entityViewer.entityNotFound')}</p>;
 
   const leftCluster = (
     <div className="flex items-center gap-1">

@@ -39,7 +39,11 @@
     "home": "Home",
     "homeTitle": "Home (Esc)",
     "hintResults": "results",
-    "hintClose": "close"
+    "hintClose": "close",
+    "hintNavigate": "navigate",
+    "hintHome": "home",
+    "frames": "{{count}} frames",
+    "entityNotFound": "Entity not found."
   },
   "searchSummary": "✨ {{found}} matches in {{outOf}} screenshots",
   "searchSummarySemantic": "✨ {{hits}} semantically related (no exact keyword match)",
