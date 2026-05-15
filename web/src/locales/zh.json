@@ -25,6 +25,10 @@
     "dateBucketsDayInScope": "{{scope}}（按日）",
     "clearDate": "清除"
   },
+  "entityViewer": {
+    "exploreContext": "查看上下文",
+    "exploreContextTitle": "查看时间上下文"
+  },
   "searchSummary": "✨ 找到 {{found}} 个，共 {{outOf}} 张截图",
   "searchSummarySemantic": "✨ {{hits}} 个语义相关结果（无关键词精确匹配）",
   "noResults": "未找到结果。",

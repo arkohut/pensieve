@@ -25,6 +25,10 @@
     "dateBucketsDayInScope": "{{scope}} (by day)",
     "clearDate": "clear"
   },
+  "entityViewer": {
+    "exploreContext": "Explore context",
+    "exploreContextTitle": "Explore temporal context"
+  },
   "searchSummary": "✨ {{found}} matches in {{outOf}} screenshots",
   "searchSummarySemantic": "✨ {{hits}} semantically related (no exact keyword match)",
   "noResults": "No results found.",
