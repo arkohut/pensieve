@@ -238,29 +238,35 @@ export function HitViewerModal({ entityId, onClose }: Props) {
                   />
                 )}
               </div>
-              <div className="mt-2 flex items-center gap-1.5 font-mono text-[10.5px] text-muted-foreground">
-                <Kbd>←</Kbd>
-                <Kbd>→</Kbd>
-                <span>{t('entityViewer.hintResults')}</span>
-                <span className="mx-1 opacity-50">·</span>
-                <Kbd>Esc</Kbd>
-                <span>{t('entityViewer.hintClose')}</span>
-              </div>
             </div>
           </div>
-          {canExpandContext && (
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={expandContext}
-              className="absolute bottom-6 left-1/2 z-30 -translate-x-1/2 shadow-lg"
-              aria-label={t('entityViewer.exploreContext')}
-              title={t('entityViewer.exploreContextTitle')}
-            >
-              <Maximize2 size={16} className="mr-2" />
-              {t('entityViewer.exploreContext')}
-            </Button>
-          )}
+          {/* Floating bottom cluster: prominent Expand-context action (when
+              available) over a small key-hint pill. Pinned to the modal box
+              (not the scroll container) so it stays put regardless of
+              content length, and centered horizontally for visual balance. */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-6 z-30 flex flex-col items-center gap-2">
+            {canExpandContext && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={expandContext}
+                className="pointer-events-auto shadow-lg"
+                aria-label={t('entityViewer.exploreContext')}
+                title={t('entityViewer.exploreContextTitle')}
+              >
+                <Maximize2 size={16} className="mr-2" />
+                {t('entityViewer.exploreContext')}
+              </Button>
+            )}
+            <div className="pointer-events-none flex items-center gap-1.5 rounded-md bg-background/80 px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground shadow-sm backdrop-blur">
+              <Kbd>←</Kbd>
+              <Kbd>→</Kbd>
+              <span>{t('entityViewer.hintResults')}</span>
+              <span className="mx-1 opacity-50">·</span>
+              <Kbd>Esc</Kbd>
+              <span>{t('entityViewer.hintClose')}</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
