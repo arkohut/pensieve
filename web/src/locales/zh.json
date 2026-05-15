@@ -27,7 +27,19 @@
   },
   "entityViewer": {
     "exploreContext": "查看上下文",
-    "exploreContextTitle": "查看时间上下文"
+    "exploreContextTitle": "查看时间上下文",
+    "close": "关闭",
+    "closeTitle": "关闭 (Esc)",
+    "previousResult": "上一项",
+    "previousResultTitle": "上一项 (←)",
+    "nextResult": "下一项",
+    "nextResultTitle": "下一项 (→)",
+    "backToSearch": "返回搜索",
+    "backToSearchTitle": "返回搜索 (Esc)",
+    "home": "主页",
+    "homeTitle": "主页 (Esc)",
+    "hintResults": "结果",
+    "hintClose": "关闭"
   },
   "searchSummary": "✨ 找到 {{found}} 个，共 {{outOf}} 张截图",
   "searchSummarySemantic": "✨ {{hits}} 个语义相关结果（无关键词精确匹配）",

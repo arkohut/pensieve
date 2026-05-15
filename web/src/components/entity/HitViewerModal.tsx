@@ -148,8 +148,8 @@ export function HitViewerModal({ entityId, onClose }: Props) {
         size="icon"
         className="h-8 w-8 text-muted-foreground hover:text-foreground"
         onClick={onClose}
-        aria-label="Close"
-        title="Close (Esc)"
+        aria-label={t('entityViewer.close')}
+        title={t('entityViewer.closeTitle')}
       >
         <X size={18} />
       </Button>
@@ -162,8 +162,8 @@ export function HitViewerModal({ entityId, onClose }: Props) {
             className="h-8 w-8 text-muted-foreground hover:text-foreground"
             disabled={prevId == null}
             onClick={() => prevId != null && goToHit(prevId)}
-            aria-label="Previous result"
-            title="Previous result (←)"
+            aria-label={t('entityViewer.previousResult')}
+            title={t('entityViewer.previousResultTitle')}
           >
             <ChevronLeft size={16} />
           </Button>
@@ -185,8 +185,8 @@ export function HitViewerModal({ entityId, onClose }: Props) {
             className="h-8 w-8 text-muted-foreground hover:text-foreground"
             disabled={nextId == null}
             onClick={() => nextId != null && goToHit(nextId)}
-            aria-label="Next result"
-            title="Next result (→)"
+            aria-label={t('entityViewer.nextResult')}
+            title={t('entityViewer.nextResultTitle')}
           >
             <ChevronRight size={16} />
           </Button>
@@ -241,10 +241,10 @@ export function HitViewerModal({ entityId, onClose }: Props) {
               <div className="mt-2 flex items-center gap-1.5 font-mono text-[10.5px] text-muted-foreground">
                 <Kbd>←</Kbd>
                 <Kbd>→</Kbd>
-                <span>results</span>
+                <span>{t('entityViewer.hintResults')}</span>
                 <span className="mx-1 opacity-50">·</span>
                 <Kbd>Esc</Kbd>
-                <span>close</span>
+                <span>{t('entityViewer.hintClose')}</span>
               </div>
             </div>
           </div>

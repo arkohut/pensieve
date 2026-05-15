@@ -27,7 +27,19 @@
   },
   "entityViewer": {
     "exploreContext": "Explore context",
-    "exploreContextTitle": "Explore temporal context"
+    "exploreContextTitle": "Explore temporal context",
+    "close": "Close",
+    "closeTitle": "Close (Esc)",
+    "previousResult": "Previous result",
+    "previousResultTitle": "Previous result (←)",
+    "nextResult": "Next result",
+    "nextResultTitle": "Next result (→)",
+    "backToSearch": "Back to search",
+    "backToSearchTitle": "Back to search (Esc)",
+    "home": "Home",
+    "homeTitle": "Home (Esc)",
+    "hintResults": "results",
+    "hintClose": "close"
   },
   "searchSummary": "✨ {{found}} matches in {{outOf}} screenshots",
   "searchSummarySemantic": "✨ {{hits}} semantically related (no exact keyword match)",
