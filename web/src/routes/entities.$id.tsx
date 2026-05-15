@@ -1,7 +1,8 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Home, Loader } from 'lucide-react';
+import { ArrowLeft, Home, Loader } from 'lucide-react';
+import { z } from 'zod';
 import { Button } from '$/components/ui/button';
 import { EntityImage } from '$/components/entity/EntityImage';
 import { EntityDetail } from '$/components/entity/EntityDetail';
@@ -10,7 +11,6 @@ import { ContextNavigationBar } from '$/components/entity/ContextNavigationBar';
 import { ErrorState } from '$/components/common/ErrorState';
 import {
   entityKeys,
-  fetchEntity,
   fetchEntityContext,
   preloadEntityImage,
   useEntity,
@@ -19,12 +19,21 @@ import {
 import { useLibraries } from '$/lib/api/libraries';
 import type { Entity } from '$/lib/api/types';
 
+const entitySearchSchema = z.object({
+  // 'hit' marks "I came from a search hit modal" — drives the back-to-search
+  // button and the Esc/back behavior. Any other value is dropped.
+  from: z.enum(['hit']).optional().catch(undefined),
+});
+
 export const Route = createFileRoute('/entities/$id')({
+  validateSearch: entitySearchSchema,
   component: EntityPage,
 });
 
 function EntityPage() {
   const { id } = Route.useParams();
+  const search = Route.useSearch();
+  const fromHit = search.from === 'hit';
   const entityId = Number(id);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -45,59 +54,6 @@ function EntityPage() {
   const { data: entity, isLoading, isError, error, refetch } = useEntity(entityId);
   const { data: libraries } = useLibraries();
   const library = libraries?.find((l) => l.id === entity?.library_id);
-
-  // Read the search hit list captured by HomePage so we can offer
-  // "previous / next result" navigation when the user opened this entity
-  // from a search. The list is plain ids — when an id lands here we know
-  // it's part of the active search session.
-  const [searchHitIds, setSearchHitIds] = useState<number[]>(() => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const raw = sessionStorage.getItem('memos:searchHitIds');
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
-  });
-  useEffect(() => {
-    // Refresh on entity change in case the storage was updated mid-session.
-    try {
-      const raw = sessionStorage.getItem('memos:searchHitIds');
-      setSearchHitIds(raw ? JSON.parse(raw) : []);
-    } catch {
-      setSearchHitIds([]);
-    }
-  }, [entityId]);
-
-  // Anchor sticks at the last hit visited so the indicator stays put even
-  // when the user temporarily wanders into a temporal neighbor that wasn't
-  // in the search results. Pressing ←/→ pulls them back onto hits land.
-  const [anchorIndex, setAnchorIndex] = useState<number | null>(null);
-  useEffect(() => {
-    if (searchHitIds.length === 0) {
-      setAnchorIndex(null);
-      return;
-    }
-    const idx = searchHitIds.indexOf(entityId);
-    if (idx >= 0) setAnchorIndex(idx);
-    // else: keep the previous anchor so the session indicator stays visible.
-  }, [entityId, searchHitIds]);
-
-  const searchNav = useMemo(() => {
-    if (searchHitIds.length === 0 || anchorIndex === null) return null;
-    const onHit = searchHitIds[anchorIndex] === entityId;
-    return {
-      index: anchorIndex,
-      total: searchHitIds.length,
-      onHit,
-      prevId: anchorIndex > 0 ? searchHitIds[anchorIndex - 1] : null,
-      nextId:
-        anchorIndex < searchHitIds.length - 1 ? searchHitIds[anchorIndex + 1] : null,
-    };
-  }, [searchHitIds, anchorIndex, entityId]);
-
-  // Treat libraries with unknown kind as 'record' to stay backward-compatible
-  // until everyone is on a server that exposes the field.
   const isRecordLibrary = library?.kind !== 'static';
   const { data: contextData } = useEntityContext(
     isRecordLibrary ? entity?.library_id : undefined,
@@ -105,9 +61,6 @@ function EntityPage() {
   );
   const previousEntity = useMemo(() => contextData?.prev.at(-1), [contextData?.prev]);
   const nextEntity = useMemo(() => contextData?.next[0], [contextData?.next]);
-  // Widen the prefetch window: a few steps in each direction so rapid
-  // ← / → presses still hit warm caches instead of triggering a fresh
-  // network load on every keystroke.
   const adjacentEntities = useMemo(() => {
     if (!contextData) return [] as Entity[];
     return [...contextData.prev.slice(-3), ...contextData.next.slice(0, 3)];
@@ -121,23 +74,24 @@ function EntityPage() {
         queryClient.setQueryData(entityKeys.detail(targetId), target);
       }
 
-      // Replace instead of push: entity-to-entity navigation should not
-      // accumulate history, so a later Esc / Home reliably lands on the
-      // place the user came from (typically the home page) rather than
-      // unwinding through each entity they visited.
+      // Replace so a long temporal walk doesn't pile up history — pressing
+      // browser-back from here should land on whatever was before the entity
+      // page (typically the hit modal that opened it).
       void navigate({
         to: '/entities/$id',
         params: { id: String(targetId) },
+        search: (s) => s,
         replace: true,
       });
     },
     [navigate, queryClient],
   );
 
-  const goToHome = useCallback(() => {
-    // Restore the home search params snapshotted by HomePage so the user lands
-    // back on their previous query / filters. Falls back to a bare home when
-    // there's no snapshot (direct visit to /entities/$id, fresh tab, etc).
+  const goBackOrHome = useCallback(() => {
+    if (fromHit && window.history.length > 1) {
+      window.history.back();
+      return;
+    }
     let homeSearch: Record<string, unknown> = {};
     try {
       const saved = sessionStorage.getItem('memos:homeSearch');
@@ -146,43 +100,29 @@ function EntityPage() {
       // Ignore storage failures; navigate to bare home below.
     }
     void navigate({ to: '/', search: homeSearch });
-  }, [navigate]);
+  }, [navigate, fromHit]);
 
   useEffect(() => {
     function handler(e: KeyboardEvent) {
       if (e.key === 'Escape') {
-        goToHome();
+        goBackOrHome();
       } else if (e.key === 'ArrowLeft') {
-        // Search context wins over temporal: the most common use is stepping
-        // through the result list the user just clicked into.
-        if (searchNav?.prevId != null) {
-          goToEntity(searchNav.prevId);
-        } else if (previousEntity) {
-          goToEntity(previousEntity);
-        }
+        if (previousEntity) goToEntity(previousEntity);
       } else if (e.key === 'ArrowRight') {
-        if (searchNav?.nextId != null) {
-          goToEntity(searchNav.nextId);
-        } else if (nextEntity) {
-          goToEntity(nextEntity);
-        }
+        if (nextEntity) goToEntity(nextEntity);
       }
     }
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [goToEntity, goToHome, nextEntity, previousEntity, searchNav]);
+  }, [goToEntity, goBackOrHome, nextEntity, previousEntity]);
 
   useEffect(() => {
     if (!contextData) return;
-
     for (const contextEntity of [...contextData.prev, ...contextData.next]) {
       queryClient.setQueryData(entityKeys.detail(contextEntity.id), contextEntity);
     }
   }, [contextData, queryClient]);
 
-  // Warm the cache for likely next clicks: temporal neighbors come with
-  // entity data attached, so we can preload their images + prefetch their
-  // own context queries in one go.
   useEffect(() => {
     for (const e of adjacentEntities) {
       preloadEntityImage(e);
@@ -192,24 +132,6 @@ function EntityPage() {
       });
     }
   }, [adjacentEntities, queryClient]);
-
-  // Search hits come as bare ids — resolve the entity record first, then
-  // preload its image once we know the filepath.
-  useEffect(() => {
-    if (!searchNav) return;
-    const ids = [searchNav.prevId, searchNav.nextId].filter(
-      (x): x is number => x != null,
-    );
-    for (const id of ids) {
-      void queryClient
-        .ensureQueryData({
-          queryKey: entityKeys.detail(id),
-          queryFn: ({ signal }) => fetchEntity(id, signal),
-        })
-        .then(preloadEntityImage)
-        .catch(() => undefined);
-    }
-  }, [searchNav, queryClient]);
 
   if (isLoading) {
     return (
@@ -223,60 +145,30 @@ function EntityPage() {
 
   const leftCluster = (
     <div className="flex items-center gap-1">
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8 text-muted-foreground hover:text-foreground"
-        onClick={goToHome}
-        aria-label="Home"
-        title="Home (Esc)"
-      >
-        <Home size={18} />
-      </Button>
-      {searchNav && (
-        <div
-          className={`ml-1 flex items-center gap-1 border-l border-border pl-2 ${
-            searchNav.onHit ? '' : 'opacity-60'
-          }`}
-          title={
-            searchNav.onHit
-              ? 'Position within search results'
-              : 'Off search results — ← / → return to the list'
-          }
+      {fromHit ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          onClick={goBackOrHome}
+          aria-label="Back to search"
+          title="Back to search (Esc)"
         >
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            disabled={searchNav.prevId == null}
-            onClick={() => searchNav.prevId != null && goToEntity(searchNav.prevId)}
-            aria-label="Previous result"
-            title="Previous result (←)"
-          >
-            <ChevronLeft size={16} />
-          </Button>
-          <span className="min-w-[3.5rem] text-center font-mono text-[11px] tabular-nums text-muted-foreground">
-            <span className={searchNav.onHit ? 'text-foreground' : ''}>
-              {searchNav.index + 1}
-            </span>
-            <span className="mx-1 opacity-50">/</span>
-            {searchNav.total}
-          </span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            disabled={searchNav.nextId == null}
-            onClick={() => searchNav.nextId != null && goToEntity(searchNav.nextId)}
-            aria-label="Next result"
-            title="Next result (→)"
-          >
-            <ChevronRight size={16} />
-          </Button>
-        </div>
+          <ArrowLeft size={18} />
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          onClick={goBackOrHome}
+          aria-label="Home"
+          title="Home (Esc)"
+        >
+          <Home size={18} />
+        </Button>
       )}
     </div>
   );
