@@ -87,7 +87,7 @@ describe('groupHits', () => {
     expect(groups.map((g) => g.flatIndex)).toEqual([0, 2]);
   });
 
-  it('treats missing metadata as a single empty key (still groups together)', () => {
+  it('keeps hits without app/window metadata separate (static libraries do not fold)', () => {
     const bare = (id: number, ts: string): Hit => ({
       document: {
         id,
@@ -102,7 +102,9 @@ describe('groupHits', () => {
       },
     });
     const groups = groupHits([bare(1, '2026-05-10T00:11:13Z'), bare(2, '2026-05-10T00:11:10Z')]);
-    expect(groups).toHaveLength(1);
-    expect(groups[0].count).toBe(2);
+    expect(groups.map((g) => [g.rep.document.id, g.count])).toEqual([
+      [1, 1],
+      [2, 1],
+    ]);
   });
 });
