@@ -126,7 +126,11 @@ def get_or_create_default_library():
     """
     from .cmds.plugin import bind
 
-    response = httpx.get(f"{BASE_URL}/api/libraries")
+    try:
+        response = httpx.get(f"{BASE_URL}/api/libraries")
+    except httpx.RequestError as e:
+        print(f"Failed to reach memos server at {BASE_URL}: {e}")
+        return None
     if response.status_code != 200:
         print(f"Failed to retrieve libraries: {response.status_code} - {response.text}")
         return None
