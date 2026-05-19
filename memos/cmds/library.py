@@ -19,7 +19,6 @@ import typer
 import httpx
 from tqdm import tqdm
 from tabulate import tabulate
-import psutil
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from concurrent.futures import ThreadPoolExecutor
@@ -30,6 +29,7 @@ from memos.utils import get_image_metadata
 from memos.schemas import MetadataSource
 from memos.logging_config import LOGGING_CONFIG
 from memos.record import is_app_blacklisted, get_active_window_info
+from memos.utils.watch_state import is_on_battery as _is_on_battery_raw, is_within_idle_window
 
 
 logging.config.dictConfig(LOGGING_CONFIG)
@@ -731,13 +731,8 @@ def sync(
             raise typer.Exit(code=1)
 
 
-@lru_cache(maxsize=1)
-def is_on_battery():
-    try:
-        battery = psutil.sensors_battery()
-        return battery is not None and not battery.power_plugged
-    except:
-        return False  # If unable to detect battery status, assume not on battery
+# Re-export with caching to maintain 60-second cache behavior used by WatchHandler
+is_on_battery = lru_cache(maxsize=1)(_is_on_battery_raw)
 
 
 class LibraryFileHandler(FileSystemEventHandler):
@@ -792,12 +787,6 @@ class LibraryFileHandler(FileSystemEventHandler):
         self.state = "busy"
         self.last_activity_time = time.time()
         self.idle_timeout = settings.watch.idle_timeout
-        self.idle_process_start = datetime.strptime(
-            settings.watch.idle_process_interval[0], "%H:%M"
-        ).time()
-        self.idle_process_end = datetime.strptime(
-            settings.watch.idle_process_interval[1], "%H:%M"
-        ).time().replace(second=59)
 
         # Track retry attempts for failed files
         self.failed_retries = defaultdict(int)
@@ -816,16 +805,12 @@ class LibraryFileHandler(FileSystemEventHandler):
 
     def is_within_process_interval(self) -> bool:
         """Check if current time is within the idle process interval"""
-        current_time = datetime.now().time()
-
-        # If end time is less than start time, it means the interval crosses midnight
-        if self.idle_process_end < self.idle_process_start:
-            return (
-                current_time >= self.idle_process_start
-                or current_time <= self.idle_process_end
+        return is_within_idle_window(
+            (
+                settings.watch.idle_process_interval[0],
+                settings.watch.idle_process_interval[1],
             )
-
-        return self.idle_process_start <= current_time <= self.idle_process_end
+        )
 
     def handle_event(self, event):
         app_name, _, _ = get_active_window_info()
