@@ -59,7 +59,12 @@ from .schemas import (
     FacetStats,
     DateRange,
     DateBucket,
+    ProcessingBacklog,
+    ProcessingCoverageWindow,
+    ProcessingStatusResponse,
+    ProcessingWatchState,
 )
+from memos.utils import watch_state
 from .models import LibraryModel
 from .logging_config import LOGGING_CONFIG
 from .databases.initializers import create_db_initializer
@@ -228,6 +233,76 @@ def get_library_by_id(library_id: int, db: Session = Depends(get_db)):
             status_code=status.HTTP_404_NOT_FOUND,
         )
     return library
+
+
+@api_router.get(
+    "/libraries/{library_id}/processing-status",
+    response_model=ProcessingStatusResponse,
+    tags=["library"],
+)
+def get_processing_status(
+    library_id: int,
+    window_hours: Annotated[int, Query(ge=1, le=168)] = 24,
+    db: Session = Depends(get_db),
+):
+    library = crud.get_library_by_id(library_id, db)
+    if library is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Library not found"
+        )
+    if library.kind != LibraryKind.RECORD:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="processing-status is only defined for record-kind libraries",
+        )
+
+    key = (library_id, window_hours)
+    now_mono = time.monotonic()
+    with _processing_status_lock:
+        cached = _processing_status_cache.get(key)
+        if cached and now_mono - cached[1] < _PROCESSING_STATUS_TTL:
+            return cached[0]
+
+    total = crud.count_entities_in_window(library_id, window_hours, db)
+    done = crud.count_entities_fully_processed_in_window(library_id, window_hours, db)
+    pct = 1.0 if total == 0 else done / total
+
+    unprocessed_total = crud.count_unprocessed(library_id, db)
+    oldest_dt = crud.get_oldest_unprocessed_created_at(library_id, db)
+    if oldest_dt is None:
+        oldest_age_seconds = None
+    else:
+        # oldest_dt may be naive (SQLite). Coerce to UTC for arithmetic.
+        if oldest_dt.tzinfo is None:
+            oldest_dt = oldest_dt.replace(tzinfo=timezone.utc)
+        oldest_age_seconds = max(0, int((datetime.now(timezone.utc) - oldest_dt).total_seconds()))
+
+    idle_window = (
+        settings.watch.idle_process_interval[0],
+        settings.watch.idle_process_interval[1],
+    )
+    response = ProcessingStatusResponse(
+        library_id=library_id,
+        computed_at=datetime.now(timezone.utc),
+        window_hours=window_hours,
+        coverage_window=ProcessingCoverageWindow(
+            total=total, fully_processed=done, pct=pct
+        ),
+        backlog=ProcessingBacklog(
+            total_unprocessed=unprocessed_total,
+            oldest_age_seconds=oldest_age_seconds,
+        ),
+        watch=ProcessingWatchState(
+            is_alive=watch_state.is_alive(),
+            is_on_battery=watch_state.is_on_battery(),
+            is_within_idle_window=watch_state.is_within_idle_window(idle_window),
+            idle_window=idle_window,
+        ),
+    )
+
+    with _processing_status_lock:
+        _processing_status_cache[key] = (response, now_mono)
+    return response
 
 
 @api_router.patch("/libraries/{library_id}", response_model=Library, tags=["library"])
@@ -913,6 +988,13 @@ async def get_entity_thumbnail(
 _COLLECTION_SIZE_TTL = 10.0  # seconds
 _collection_size_cache: dict = {}
 _collection_size_lock = threading.Lock()
+
+# Processing-status cache: same shape and TTL story as the collection-size
+# one (cheap to recompute, harmless to be a few seconds stale, called by a
+# 30s frontend poll).
+_PROCESSING_STATUS_TTL = 10.0  # seconds
+_processing_status_cache: dict = {}
+_processing_status_lock = threading.Lock()
 
 
 ### Search hit slimming
