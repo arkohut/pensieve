@@ -761,3 +761,44 @@ def count_entities_in_window(library_id: int, window_hours: int, db: Session) ->
         .filter(EntityModel.created_at >= cutoff)
         .count()
     )
+
+
+def count_entities_fully_processed_in_window(
+    library_id: int, window_hours: int, db: Session
+) -> int:
+    """Count entities in the window that have an entity_plugin_status row
+    for *every* plugin bound to their library.
+
+    Returns 0 when the library has no plugins bound (caller will treat
+    coverage as 0/N to avoid a meaningless 100%).
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=window_hours)
+
+    library_plugin_ids = [
+        p.id
+        for p in db.query(PluginModel.id)
+        .join(LibraryPluginModel)
+        .filter(LibraryPluginModel.library_id == library_id)
+        .all()
+    ]
+    if not library_plugin_ids:
+        return 0
+
+    plugin_count_subq = (
+        db.query(
+            EntityPluginStatusModel.entity_id,
+            func.count(EntityPluginStatusModel.plugin_id).label("plugin_count"),
+        )
+        .filter(EntityPluginStatusModel.plugin_id.in_(library_plugin_ids))
+        .group_by(EntityPluginStatusModel.entity_id)
+        .subquery()
+    )
+
+    return (
+        db.query(EntityModel)
+        .filter(EntityModel.library_id == library_id)
+        .filter(EntityModel.created_at >= cutoff)
+        .join(plugin_count_subq, EntityModel.id == plugin_count_subq.c.entity_id)
+        .filter(plugin_count_subq.c.plugin_count == len(library_plugin_ids))
+        .count()
+    )

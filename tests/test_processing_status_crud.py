@@ -116,3 +116,36 @@ def test_count_entities_in_window_counts_inside_window_only(session):
 def test_count_entities_in_window_empty_returns_zero(session):
     lib_id, _ = _seed(session, entity_specs=[])
     assert crud.count_entities_in_window(lib_id, window_hours=24, db=session) == 0
+
+
+def test_count_fully_processed_only_counts_all_plugins_done(session):
+    # 2 plugins. Seed entities where:
+    # - inside window, all plugins done → counts
+    # - inside window, 1/2 plugins → does NOT count
+    # - inside window, 0/2 plugins → does NOT count
+    # - outside window, all plugins done → does NOT count
+    lib_id, _ = _seed(
+        session,
+        n_plugins=2,
+        entity_specs=[
+            (5, 2),   # in, fully processed
+            (10, 1),  # in, partial
+            (20, 0),  # in, none
+            (30, 2),  # in, fully processed
+            (90, 2),  # OUT
+        ],
+    )
+    n = crud.count_entities_fully_processed_in_window(lib_id, window_hours=1, db=session)
+    assert n == 2
+
+
+def test_count_fully_processed_returns_zero_when_no_plugins_bound(session):
+    # Edge: library has 0 plugins bound. Every entity is trivially "fully
+    # processed" (0/0), and we return 0 to avoid divide-by-zero confusion
+    # downstream.
+    lib_id, _ = _seed(
+        session,
+        n_plugins=0,
+        entity_specs=[(5, 0), (10, 0)],
+    )
+    assert crud.count_entities_fully_processed_in_window(lib_id, window_hours=1, db=session) == 0
