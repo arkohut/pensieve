@@ -6,7 +6,7 @@ from pydantic import (
     Field,
     model_validator,
 )
-from typing import List, Optional, Any, Dict
+from typing import List, Optional, Any, Dict, Tuple
 from datetime import datetime, timezone
 from enum import Enum
 
@@ -333,3 +333,30 @@ class EntityContext(BaseModel):
 
 class BatchIndexRequest(BaseModel):
     entity_ids: List[int]
+
+
+class ProcessingCoverageWindow(BaseModel):
+    total: int
+    fully_processed: int
+    pct: float
+
+
+class ProcessingBacklog(BaseModel):
+    total_unprocessed: int
+    oldest_age_seconds: int | None
+
+
+class ProcessingWatchState(BaseModel):
+    is_alive: bool
+    is_on_battery: bool
+    is_within_idle_window: bool
+    idle_window: Tuple[str, str]
+
+
+class ProcessingStatusResponse(BaseModel):
+    library_id: int
+    computed_at: datetime
+    window_hours: int
+    coverage_window: ProcessingCoverageWindow
+    backlog: ProcessingBacklog
+    watch: ProcessingWatchState
