@@ -1,5 +1,6 @@
 import logfire
 from typing import List, Tuple, Optional
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text, BigInteger
 from .schemas import (
@@ -749,3 +750,14 @@ def get_pending_plugins(entity_id: int, library_id: int, db: Session) -> List[in
 
     # Return plugins that need to process this entity
     return list(set(library_plugin_ids) - set(processed_plugin_ids))
+
+
+def count_entities_in_window(library_id: int, window_hours: int, db: Session) -> int:
+    """Count entities created in the rolling window for one library."""
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=window_hours)
+    return (
+        db.query(EntityModel)
+        .filter(EntityModel.library_id == library_id)
+        .filter(EntityModel.created_at >= cutoff)
+        .count()
+    )
