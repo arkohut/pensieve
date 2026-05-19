@@ -1,5 +1,8 @@
+import { useMemo } from 'react';
+
 import { Popover, PopoverContent, PopoverTrigger } from '$/components/ui/popover';
-import { cn } from '$/lib/utils';
+import { useLibraries } from '$/lib/api/libraries';
+import { useProcessingStatus } from '$/lib/api/processing-status';
 import {
   headlineReason,
   humanizeAge,
@@ -8,10 +11,7 @@ import {
   type PillColor,
   type ProcessingStatus,
 } from '$/lib/processing-status';
-
-interface Props {
-  status: ProcessingStatus;
-}
+import { cn } from '$/lib/utils';
 
 const DOT_CLASS: Record<PillColor, string> = {
   green: 'bg-emerald-500',
@@ -20,9 +20,20 @@ const DOT_CLASS: Record<PillColor, string> = {
   gray: 'bg-zinc-400',
 };
 
-export function ProcessingStatusPill({ status }: Props) {
-  const state = pillState(status);
+export function ProcessingStatusPill() {
+  const { data: libraries } = useLibraries();
+  const recordLibraryId = useMemo(
+    () => libraries?.find((l) => l.kind === 'record')?.id,
+    [libraries],
+  );
+  const { data: status } = useProcessingStatus(recordLibraryId);
 
+  if (!status) return null;
+  return <PillButton status={status} />;
+}
+
+function PillButton({ status }: { status: ProcessingStatus }) {
+  const state = pillState(status);
   return (
     <Popover>
       <PopoverTrigger asChild>

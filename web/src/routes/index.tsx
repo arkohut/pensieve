@@ -11,7 +11,6 @@ import { Logo } from '$/components/common/Logo';
 import { PageHeader } from '$/components/common/PageHeader';
 import { ProcessingStatusPill } from '$/components/common/ProcessingStatusPill';
 import { ThemeToggle } from '$/components/common/ThemeToggle';
-import { MOCK_LABELS, MOCK_ORDER, MOCK_PAYLOADS } from '$/lib/processing-status';
 import { HitViewerModal } from '$/components/entity/HitViewerModal';
 import { HitCard } from '$/components/search/HitCard';
 import { FacetFilter } from '$/components/search/FacetFilter';
@@ -49,8 +48,6 @@ function HomePage() {
   const navigate = useNavigate({ from: Route.fullPath });
   const [localQuery, setLocalQuery] = useState(search.q);
   const [isScrolled, setIsScrolled] = useState(false);
-  const [mockStatusKey, setMockStatusKey] = useState<string>('processing');
-
   const openEntity = useCallback(
     (entityId: number) => {
       void navigate({
@@ -238,19 +235,7 @@ function HomePage() {
         }
         right={
           <div className="flex items-center gap-1">
-            <select
-              value={mockStatusKey}
-              onChange={(e) => setMockStatusKey(e.target.value)}
-              className="h-7 rounded border border-dashed border-amber-400 bg-amber-50 px-1.5 text-[10px] text-amber-900 dark:bg-amber-950/30 dark:text-amber-200"
-              title="mock state (dev only)"
-            >
-              {MOCK_ORDER.map((k) => (
-                <option key={k} value={k}>
-                  {MOCK_LABELS[k]}
-                </option>
-              ))}
-            </select>
-            <ProcessingStatusPill status={MOCK_PAYLOADS[mockStatusKey]} />
+            <ProcessingStatusPill />
             <LanguageSwitcher />
             <ThemeToggle />
             <Link to="/config">
