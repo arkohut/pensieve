@@ -802,3 +802,58 @@ def count_entities_fully_processed_in_window(
         .filter(plugin_count_subq.c.plugin_count == len(library_plugin_ids))
         .count()
     )
+
+
+def _unprocessed_query(library_id: int, db: Session):
+    """Return a query of EntityModel rows that are NOT fully processed for
+    `library_id`. Returns None when the library has no plugins bound (no
+    notion of 'unprocessed' applies).
+    """
+    library_plugin_ids = [
+        p.id
+        for p in db.query(PluginModel.id)
+        .join(LibraryPluginModel)
+        .filter(LibraryPluginModel.library_id == library_id)
+        .all()
+    ]
+    if not library_plugin_ids:
+        return None
+
+    plugin_count_subq = (
+        db.query(
+            EntityPluginStatusModel.entity_id,
+            func.count(EntityPluginStatusModel.plugin_id).label("plugin_count"),
+        )
+        .filter(EntityPluginStatusModel.plugin_id.in_(library_plugin_ids))
+        .group_by(EntityPluginStatusModel.entity_id)
+        .subquery()
+    )
+
+    return (
+        db.query(EntityModel)
+        .filter(EntityModel.library_id == library_id)
+        .outerjoin(plugin_count_subq, EntityModel.id == plugin_count_subq.c.entity_id)
+        .filter(
+            or_(
+                plugin_count_subq.c.plugin_count.is_(None),
+                plugin_count_subq.c.plugin_count < len(library_plugin_ids),
+            )
+        )
+    )
+
+
+def count_unprocessed(library_id: int, db: Session) -> int:
+    q = _unprocessed_query(library_id, db)
+    if q is None:
+        return 0
+    return q.count()
+
+
+def get_oldest_unprocessed_created_at(library_id: int, db: Session):
+    """Return the created_at of the oldest not-fully-processed entity, or
+    None if everything is processed (or no plugins are bound)."""
+    q = _unprocessed_query(library_id, db)
+    if q is None:
+        return None
+    row = q.order_by(EntityModel.created_at.asc()).first()
+    return row.created_at if row else None

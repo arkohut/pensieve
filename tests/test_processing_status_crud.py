@@ -149,3 +149,57 @@ def test_count_fully_processed_returns_zero_when_no_plugins_bound(session):
         entity_specs=[(5, 0), (10, 0)],
     )
     assert crud.count_entities_fully_processed_in_window(lib_id, window_hours=1, db=session) == 0
+
+
+def test_count_unprocessed_counts_anything_missing_plugins(session):
+    lib_id, _ = _seed(
+        session,
+        n_plugins=3,
+        entity_specs=[
+            (1, 3),    # fully
+            (5, 2),    # missing 1
+            (10, 0),   # missing all
+            (60, 3),   # fully (old)
+            (120, 1),  # missing 2 (old)
+        ],
+    )
+    # 5 total, 2 fully processed → 3 unprocessed (regardless of window)
+    assert crud.count_unprocessed(lib_id, db=session) == 3
+
+
+def test_count_unprocessed_zero_plugins_returns_zero(session):
+    lib_id, _ = _seed(session, n_plugins=0, entity_specs=[(1, 0), (5, 0)])
+    assert crud.count_unprocessed(lib_id, db=session) == 0
+
+
+def test_oldest_unprocessed_returns_min_created_at(session):
+    lib_id, _ = _seed(
+        session,
+        n_plugins=2,
+        entity_specs=[
+            (5, 2),     # fully, ignored
+            (30, 1),    # unprocessed
+            (60, 0),    # unprocessed and older
+            (10, 2),    # fully, ignored
+        ],
+    )
+    oldest = crud.get_oldest_unprocessed_created_at(lib_id, db=session)
+    # The oldest unprocessed was 60 minutes ago. Allow 5 second jitter.
+    # SQLite stores datetimes without timezone, so strip tzinfo from now.
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    age = (now - oldest).total_seconds()
+    assert 60 * 60 - 5 <= age <= 60 * 60 + 5
+
+
+def test_oldest_unprocessed_returns_none_when_all_processed(session):
+    lib_id, _ = _seed(
+        session,
+        n_plugins=2,
+        entity_specs=[(1, 2), (10, 2)],
+    )
+    assert crud.get_oldest_unprocessed_created_at(lib_id, db=session) is None
+
+
+def test_oldest_unprocessed_returns_none_when_no_plugins_bound(session):
+    lib_id, _ = _seed(session, n_plugins=0, entity_specs=[(1, 0), (10, 0)])
+    assert crud.get_oldest_unprocessed_created_at(lib_id, db=session) is None
