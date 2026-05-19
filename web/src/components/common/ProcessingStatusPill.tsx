@@ -32,7 +32,7 @@ export function ProcessingStatusPill() {
   return <PillButton status={status} />;
 }
 
-function PillButton({ status }: { status: ProcessingStatus }) {
+export function PillButton({ status }: { status: ProcessingStatus }) {
   const state = pillState(status);
   return (
     <Popover>
