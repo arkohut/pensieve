@@ -992,7 +992,7 @@ _collection_size_lock = threading.Lock()
 # Processing-status cache: same shape and TTL story as the collection-size
 # one (cheap to recompute, harmless to be a few seconds stale, called by a
 # 30s frontend poll).
-_PROCESSING_STATUS_TTL = 10.0  # seconds
+_PROCESSING_STATUS_TTL = 60.0  # seconds
 _processing_status_cache: dict = {}
 _processing_status_lock = threading.Lock()
 
