@@ -2,7 +2,7 @@ import logfire
 from typing import List, Tuple, Optional
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
-from sqlalchemy import func, text, BigInteger
+from sqlalchemy import func, text, BigInteger, select
 from .schemas import (
     Library,
     NewLibraryParam,
@@ -843,10 +843,34 @@ def _unprocessed_query(library_id: int, db: Session):
 
 
 def count_unprocessed(library_id: int, db: Session) -> int:
-    q = _unprocessed_query(library_id, db)
-    if q is None:
+    # Compute as `total_in_library - fully_done`. The fully_done branch uses
+    # one semi-join per required plugin, which the planner can satisfy with
+    # cheap hash joins on (plugin_id) — orders of magnitude faster than
+    # aggregating entity_plugin_status across the whole table.
+    library_plugin_ids = [
+        p.id
+        for p in db.query(PluginModel.id)
+        .join(LibraryPluginModel)
+        .filter(LibraryPluginModel.library_id == library_id)
+        .all()
+    ]
+    if not library_plugin_ids:
         return 0
-    return q.count()
+
+    total_in_lib = (
+        db.query(EntityModel)
+        .filter(EntityModel.library_id == library_id)
+        .count()
+    )
+
+    fully_q = db.query(EntityModel).filter(EntityModel.library_id == library_id)
+    for pid in library_plugin_ids:
+        sub = select(EntityPluginStatusModel.entity_id).where(
+            EntityPluginStatusModel.plugin_id == pid
+        )
+        fully_q = fully_q.filter(EntityModel.id.in_(sub))
+    fully_done = fully_q.count()
+    return total_in_lib - fully_done
 
 
 def get_oldest_unprocessed_created_at(library_id: int, db: Session):
