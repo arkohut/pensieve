@@ -66,14 +66,10 @@ function PanelBody({ status }: { status: ProcessingStatus }) {
   return (
     <div className="text-sm">
       <div className="flex items-baseline justify-between px-4 pt-3.5 pb-2">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className={cn('h-2.5 w-2.5 rounded-full', DOT_CLASS[state.color])} aria-hidden />
-            <span className="font-medium text-foreground">{state.headline}</span>
-          </div>
-          {reason && (
-            <div className="ml-[18px] mt-0.5 text-[11px] text-muted-foreground">{reason}</div>
-          )}
+        <div className="flex items-center gap-2">
+          <span className={cn('h-2.5 w-2.5 rounded-full', DOT_CLASS[state.color])} aria-hidden />
+          <span className="font-medium text-foreground">{state.headline}</span>
+          {reason && <span className="text-[11px] text-muted-foreground">{reason}</span>}
         </div>
         <span className="text-[11px] text-muted-foreground">
           {humanizeComputedAt(status.computed_at)}
@@ -84,7 +80,7 @@ function PanelBody({ status }: { status: ProcessingStatus }) {
 
       <div className="px-4 py-3">
         <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-          过去 {status.window_hours} 小时
+          近 {status.window_hours} 小时新增
         </div>
         <div className="mt-1 flex items-baseline gap-2">
           <span className="text-2xl font-semibold tabular-nums text-foreground">
@@ -99,7 +95,7 @@ function PanelBody({ status }: { status: ProcessingStatus }) {
       <Divider />
 
       <div className="px-4 py-3">
-        <div className="text-[11px] uppercase tracking-wider text-muted-foreground">待处理</div>
+        <div className="text-[11px] uppercase tracking-wider text-muted-foreground">历史积压</div>
         <div className="mt-1 text-foreground">
           <span className="font-semibold tabular-nums">
             {backlog.total_unprocessed.toLocaleString()}
