@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:promo": "vite -c vite.config.promo.ts",
     "build": "tsc --noEmit && vite build",
+    "build:promo": "vite build -c vite.config.promo.ts",
     "preview": "vite preview",
     "check": "tsc --noEmit",
     "lint": "eslint .",
