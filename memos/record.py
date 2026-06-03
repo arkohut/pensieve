@@ -87,6 +87,10 @@ def get_browser_url(app_name):
 
 def get_active_window_info_darwin():
     active_app = NSWorkspace.sharedWorkspace().activeApplication()
+    if not active_app:
+        # activeApplication() returns None when no app is frontmost (screen lock,
+        # display wake, app switching). Degrade to empty info instead of crashing.
+        return "", "", None
     app_name = active_app["NSApplicationName"]
     app_pid = active_app["NSApplicationProcessIdentifier"]
 
