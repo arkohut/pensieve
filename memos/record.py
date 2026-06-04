@@ -97,6 +97,11 @@ def get_active_window_info_darwin():
     windows = CGWindowListCopyWindowInfo(
         kCGWindowListOptionOnScreenOnly, kCGNullWindowID
     )
+    if not windows:
+        # CGWindowListCopyWindowInfo() returns None when the window list is
+        # unavailable (screen lock, display wake, missing screen-recording
+        # permission). Degrade to app-only info instead of crashing.
+        return app_name, "", None
     for window in windows:
         if window["kCGWindowOwnerPID"] == app_pid:
             window_title = window.get("kCGWindowName", "")
