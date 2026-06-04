@@ -8,8 +8,10 @@ darwin helper indexed into it directly. The watch main loop only guarded
 ``KeyboardInterrupt``, so the exception killed the process and nothing restarted
 it.
 
-These tests cover the two fixes:
-  1. ``get_active_window_info_darwin`` degrades to empty info instead of raising.
+These tests cover the fixes:
+  1. ``get_active_window_info_darwin`` degrades to empty info instead of raising
+     when either ``activeApplication()`` or ``CGWindowListCopyWindowInfo()``
+     returns ``None`` (both happen on screen lock / display wake / app switch).
   2. The watch poll loop isolates each cycle so a failing cycle is logged and the
      watcher keeps running.
 """
@@ -30,6 +32,31 @@ def test_get_active_window_info_darwin_returns_default_when_no_active_app(monkey
     monkeypatch.setattr(record, "NSWorkspace", _FakeNSWorkspace, raising=False)
 
     assert record.get_active_window_info_darwin() == ("", "", None)
+
+
+def test_get_active_window_info_darwin_returns_app_only_when_no_window_list(monkeypatch):
+    import memos.record as record
+
+    class _FakeWorkspace:
+        def activeApplication(self):
+            return {
+                "NSApplicationName": "TestApp",
+                "NSApplicationProcessIdentifier": 4321,
+            }
+
+    class _FakeNSWorkspace:
+        @staticmethod
+        def sharedWorkspace():
+            return _FakeWorkspace()
+
+    monkeypatch.setattr(record, "NSWorkspace", _FakeNSWorkspace, raising=False)
+    # CGWindowListCopyWindowInfo() returns None when the window list is
+    # unavailable; the helper must not iterate over it.
+    monkeypatch.setattr(
+        record, "CGWindowListCopyWindowInfo", lambda *a, **k: None, raising=False
+    )
+
+    assert record.get_active_window_info_darwin() == ("TestApp", "", None)
 
 
 def test_watch_poll_loop_survives_failing_cycle(monkeypatch):
