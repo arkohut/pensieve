@@ -206,3 +206,48 @@ def test_cache_skips_db_within_ttl(client, engine, monkeypatch):
     client.get(f"/api/libraries/{lib_id}/processing-status").raise_for_status()
     client.get(f"/api/libraries/{lib_id}/processing-status").raise_for_status()
     assert calls["n"] == 1
+
+
+def test_watch_state_is_live_even_on_cache_hit(client, engine, monkeypatch):
+    """Watch liveness is evaluated fresh per request; only the DB counts are cached.
+
+    A dead/restarted watcher must be reflected immediately, not after the TTL.
+    """
+    from memos import server
+
+    monkeypatch.setattr("memos.utils.watch_state.is_on_battery", lambda: False)
+    monkeypatch.setattr("memos.utils.watch_state.is_within_idle_window", lambda *a, **kw: True)
+
+    monkeypatch.setattr(server, "_PROCESSING_STATUS_TTL", 60.0)
+    server._processing_status_cache.clear()
+
+    lib_id = _seed_record_lib(engine, n_plugins=1, entity_specs=[(5, 0)])
+
+    # Count the expensive DB call to prove the second response is a counts-cache hit.
+    calls = {"n": 0}
+    real_count = server.crud.count_entities_in_window
+
+    def counting_count(*args, **kwargs):
+        calls["n"] += 1
+        return real_count(*args, **kwargs)
+
+    monkeypatch.setattr(server.crud, "count_entities_in_window", counting_count)
+
+    alive = {"v": True}
+    monkeypatch.setattr("memos.utils.watch_state.is_alive", lambda: alive["v"])
+
+    first = client.get(f"/api/libraries/{lib_id}/processing-status").json()
+    assert first["watch"]["is_alive"] is True
+
+    # Watcher dies between polls.
+    alive["v"] = False
+    second = client.get(f"/api/libraries/{lib_id}/processing-status").json()
+
+    # Liveness reflects the present immediately...
+    assert second["watch"]["is_alive"] is False
+    # ...while the expensive counts came from cache (computed once) and are unchanged,
+    # and computed_at stays pinned to when those counts were taken (honest staleness).
+    assert calls["n"] == 1
+    assert second["coverage_window"] == first["coverage_window"]
+    assert second["backlog"] == first["backlog"]
+    assert second["computed_at"] == first["computed_at"]
