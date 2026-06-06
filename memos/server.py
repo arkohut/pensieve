@@ -261,37 +261,50 @@ def get_processing_status(
     with _processing_status_lock:
         cached = _processing_status_cache.get(key)
         if cached and now_mono - cached[1] < _PROCESSING_STATUS_TTL:
-            return cached[0]
+            computed_at, coverage_window, backlog = cached[0]
+        else:
+            computed_at = coverage_window = backlog = None
 
-    total = crud.count_entities_in_window(library_id, window_hours, db)
-    done = crud.count_entities_fully_processed_in_window(library_id, window_hours, db)
-    pct = 1.0 if total == 0 else done / total
+    if coverage_window is None:
+        total = crud.count_entities_in_window(library_id, window_hours, db)
+        done = crud.count_entities_fully_processed_in_window(library_id, window_hours, db)
+        pct = 1.0 if total == 0 else done / total
 
-    unprocessed_total = crud.count_unprocessed(library_id, db)
-    oldest_dt = crud.get_oldest_unprocessed_created_at(library_id, db)
-    if oldest_dt is None:
-        oldest_age_seconds = None
-    else:
-        # oldest_dt may be naive (SQLite). Coerce to UTC for arithmetic.
-        if oldest_dt.tzinfo is None:
-            oldest_dt = oldest_dt.replace(tzinfo=timezone.utc)
-        oldest_age_seconds = max(0, int((datetime.now(timezone.utc) - oldest_dt).total_seconds()))
+        unprocessed_total = crud.count_unprocessed(library_id, db)
+        oldest_dt = crud.get_oldest_unprocessed_created_at(library_id, db)
+        if oldest_dt is None:
+            oldest_age_seconds = None
+        else:
+            # oldest_dt may be naive (SQLite). Coerce to UTC for arithmetic.
+            if oldest_dt.tzinfo is None:
+                oldest_dt = oldest_dt.replace(tzinfo=timezone.utc)
+            oldest_age_seconds = max(0, int((datetime.now(timezone.utc) - oldest_dt).total_seconds()))
 
+        computed_at = datetime.now(timezone.utc)
+        coverage_window = ProcessingCoverageWindow(
+            total=total, fully_processed=done, pct=pct
+        )
+        backlog = ProcessingBacklog(
+            total_unprocessed=unprocessed_total,
+            oldest_age_seconds=oldest_age_seconds,
+        )
+        with _processing_status_lock:
+            _processing_status_cache[key] = ((computed_at, coverage_window, backlog), now_mono)
+
+    # Watch liveness is a cheap, time-sensitive probe; evaluate it fresh on every
+    # request rather than serving it from the cached (up to _PROCESSING_STATUS_TTL
+    # stale) payload, so a dead or restarted watcher shows up immediately. Only the
+    # expensive DB counts — and the computed_at that honestly dates them — are cached.
     idle_window = (
         settings.watch.idle_process_interval[0],
         settings.watch.idle_process_interval[1],
     )
-    response = ProcessingStatusResponse(
+    return ProcessingStatusResponse(
         library_id=library_id,
-        computed_at=datetime.now(timezone.utc),
+        computed_at=computed_at,
         window_hours=window_hours,
-        coverage_window=ProcessingCoverageWindow(
-            total=total, fully_processed=done, pct=pct
-        ),
-        backlog=ProcessingBacklog(
-            total_unprocessed=unprocessed_total,
-            oldest_age_seconds=oldest_age_seconds,
-        ),
+        coverage_window=coverage_window,
+        backlog=backlog,
         watch=ProcessingWatchState(
             is_alive=watch_state.is_alive(),
             is_on_battery=watch_state.is_on_battery(),
@@ -299,10 +312,6 @@ def get_processing_status(
             idle_window=idle_window,
         ),
     )
-
-    with _processing_status_lock:
-        _processing_status_cache[key] = (response, now_mono)
-    return response
 
 
 @api_router.patch("/libraries/{library_id}", response_model=Library, tags=["library"])
@@ -989,10 +998,11 @@ _COLLECTION_SIZE_TTL = 10.0  # seconds
 _collection_size_cache: dict = {}
 _collection_size_lock = threading.Lock()
 
-# Processing-status cache: same shape and TTL story as the collection-size
-# one (cheap to recompute, harmless to be a few seconds stale, called by a
-# 30s frontend poll).
-_PROCESSING_STATUS_TTL = 10.0  # seconds
+# Processing-status cache: caches only the expensive DB counts (coverage +
+# backlog) and the computed_at that dates them; watch liveness is evaluated
+# live per request. Harmless for the counts to be a few seconds stale; called
+# by a 30s frontend poll.
+_PROCESSING_STATUS_TTL = 60.0  # seconds
 _processing_status_cache: dict = {}
 _processing_status_lock = threading.Lock()
 

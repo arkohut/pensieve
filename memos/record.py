@@ -87,12 +87,21 @@ def get_browser_url(app_name):
 
 def get_active_window_info_darwin():
     active_app = NSWorkspace.sharedWorkspace().activeApplication()
+    if not active_app:
+        # activeApplication() returns None when no app is frontmost (screen lock,
+        # display wake, app switching). Degrade to empty info instead of crashing.
+        return "", "", None
     app_name = active_app["NSApplicationName"]
     app_pid = active_app["NSApplicationProcessIdentifier"]
 
     windows = CGWindowListCopyWindowInfo(
         kCGWindowListOptionOnScreenOnly, kCGNullWindowID
     )
+    if not windows:
+        # CGWindowListCopyWindowInfo() returns None when the window list is
+        # unavailable (screen lock, display wake, missing screen-recording
+        # permission). Degrade to app-only info instead of crashing.
+        return app_name, "", None
     for window in windows:
         if window["kCGWindowOwnerPID"] == app_pid:
             window_title = window.get("kCGWindowName", "")

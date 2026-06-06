@@ -1266,6 +1266,48 @@ class LibraryFileHandler(FileSystemEventHandler):
             # Add logic for handling deleted files if needed
 
 
+def run_watch_cycle(handlers):
+    """Run a single watch poll.
+
+    If the foreground app is blacklisted, drop any pending files; otherwise flush
+    each handler's pending files. May raise (e.g. when querying the active window);
+    callers isolate failures via ``_watch_poll_loop``.
+    """
+    app_name, _, _ = get_active_window_info()
+    if is_app_blacklisted(app_name):
+        # If app is blacklisted, clear all pending files from handlers
+        for handler in handlers:
+            with handler.lock:
+                if handler.pending_files:
+                    handler.logger.info(
+                        f"App '{app_name}' is blacklisted. Clearing {len(handler.pending_files)} pending files",
+                        extra={"log_type": "bg"},
+                    )
+                    handler.pending_files.clear()
+    else:
+        for handler in handlers:
+            handler.process_pending_files()
+
+
+def _watch_poll_loop(handlers, iterations=None, sleep_fn=time.sleep, interval=5):
+    """Poll handlers until interrupted, isolating each cycle.
+
+    A single failing cycle (e.g. the OS momentarily reporting no active window) is
+    logged and the loop keeps going, so the watch service survives transient errors
+    instead of crashing. ``iterations`` bounds the loop for tests (``None`` runs
+    forever). ``KeyboardInterrupt`` is intentionally not swallowed so the caller can
+    shut the observer down cleanly.
+    """
+    count = 0
+    while iterations is None or count < iterations:
+        sleep_fn(interval)
+        try:
+            run_watch_cycle(handlers)
+        except Exception:
+            logger.error("Watch cycle failed; continuing", exc_info=True)
+        count += 1
+
+
 @lib_app.command("watch")
 def watch(
     library_id: int,
@@ -1338,20 +1380,7 @@ def watch(
 
     observer.start()
     try:
-        while True:
-            time.sleep(5)
-            app_name, _, _ = get_active_window_info()
-            if is_app_blacklisted(app_name):
-                # If app is blacklisted, clear all pending files from handlers
-                for handler in handlers:
-                    with handler.lock:
-                        if handler.pending_files:
-                            handler.logger.info(f"App '{app_name}' is blacklisted. Clearing {len(handler.pending_files)} pending files", 
-                                                extra={"log_type": "bg"})
-                            handler.pending_files.clear()
-            else:
-                for handler in handlers:
-                    handler.process_pending_files()
+        _watch_poll_loop(handlers)
     except KeyboardInterrupt:
         observer.stop()
         for handler in handlers:
