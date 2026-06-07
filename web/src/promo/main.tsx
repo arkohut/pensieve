@@ -7,14 +7,14 @@ import '@fontsource/caveat';
 import '@fontsource/ma-shan-zheng';
 
 import { ThemeProvider } from '$/components/common/ThemeProvider';
-import { ChipPromo } from './ChipPromo';
+import { Deck } from './Deck';
 import '../styles/globals.css';
 import '$/lib/i18n';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider>
-      <ChipPromo />
+      <Deck />
     </ThemeProvider>
   </StrictMode>,
 );
