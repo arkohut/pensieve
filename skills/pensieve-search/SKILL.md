@@ -173,69 +173,45 @@ To drill into a bucket, re-issue with `?date=YYYY-MM` or `?date=YYYY-MM-DD`. The
 
 ### Strategy 6 — context around an entity (`grep -C` for the timeline)
 
-Search *pinpoints* a moment; it doesn't show what surrounds it. When a hit lands on the right frame but the answer isn't *on* that frame — the working directory a command ran in, what led up to it, what happened next — pull its temporal neighbors. Think of it as `grep -C N` for the screenshot timeline: a natural, first-class move, especially the *before* side, where the lead-up lives (the cwd, the command typed, the app you came from).
-
-This is exactly what the web UI's context strip does, so mirror it.
+Search *pinpoints* a moment; it doesn't show what surrounds it. When a hit lands on the right frame but the answer isn't *on* that frame — the working directory a command ran in, what led up to it, what happened next — pull its temporal neighbors. Think `grep -C N` for the screenshot timeline, especially the *before* side where the lead-up lives (the cwd, the command typed, the app you came from). This is what the web UI's context strip does.
 
 ```
 GET /api/libraries/{library_id}/entities/{entity_id}/context?prev=N&next=N
 ```
 
-- `prev` / `next` are **counts** (0–100 each), ordered by `file_created_at` — true temporal neighbors. This is robust where id arithmetic is **not**: entity ids are sparse and non-contiguous, so "fetch ids around X" silently misses frames. Always use this endpoint, never id math.
-- Returns `{ "prev": [entity…], "next": [entity…] }`. The target itself is **not** included — you supply it, like the frontend does. Each entity carries full `metadata_entries`.
-- **`library_id`** comes from the entity itself: `curl …/api/entities/{id} | jq .library_id` (or reuse `LIB` from the gap-audit section).
-- **Frontend parity** (`web/src/lib/api/entities.ts` → `fetchEntityContext`): the web UI calls `?prev=12&next=12` — a symmetric window of 12 (`grep -C 12`) — assembles `[...prev, target, ...next]` chronologically, and shows it raw (no dedup, no app-filtering). Match that default.
+- `prev` / `next` are **counts** (0–100 each), ordered by `file_created_at` — true temporal neighbors. Robust where id arithmetic is **not**: entity ids are sparse and non-contiguous, so "fetch ids around X" silently misses frames. Always use this endpoint, never id math.
+- Returns `{ "prev": [entity…], "next": [entity…] }`. **The target is not included** — you already have it (the id you passed), sitting chronologically between the last `prev` and the first `next`.
+- **`library_id`** comes from the entity itself: `curl …/api/entities/{id} | jq -r .library_id` (or reuse `LIB`). Frontend default (`web/src/lib/api/entities.ts` → `fetchEntityContext`) is a symmetric `?prev=12&next=12` (`grep -C 12`) — match it.
 
-**Two gotchas specific to this endpoint:**
+**Three gotchas, all differing from `/api/search`:**
 
-1. **It does NOT strip `ocr_result`** (unlike `/api/search`). A `prev=12&next=12` call is ~230 KB; `prev=100&next=100` is multi-MB. Always pipe to a tmp file and project only the fields you need.
-2. **Timestamps are naive UTC** — `2026-06-07T01:51:51`, no `Z`/offset (the rest of the API returns `+00:00`). To convert to local, normalize first: `.[0:19] + "Z" | fromdateiso8601 | strflocaltime(...)`. Skip this and you'll display the wrong hour.
+1. **It does NOT strip `ocr_result`.** A `prev=12&next=12` call is ~230 KB; `prev=100&next=100` is multi-MB. **Project only the fields you need** (jq below) — never dump the raw response.
+2. **Timestamps are naive UTC** — `2026-06-07T01:51:51`, no `Z`/offset. They *are* UTC; append `Z` (or convert) before you cite a time, or you'll report the wrong hour.
+3. **`structured_vlm` value is a JSON string**, not a parsed object — `fromjson` it to reach `.primary.what`.
 
-**Helper** (same spirit as `paged_search`): prints the chronological strip with the target marked, OCR stripped, times in local.
-
-```bash
-entity_context() {
-    local id="$1" size="${2:-12}"          # symmetric window, frontend default = 12
-    local tmp ctx lib
-    tmp=$(mktemp); ctx=$(mktemp)
-    curl -s "http://127.0.0.1:8839/api/entities/$id" > "$tmp"
-    lib=$(jq -r '.library_id' "$tmp")
-    curl -s "http://127.0.0.1:8839/api/libraries/$lib/entities/$id/context?prev=$size&next=$size" > "$ctx"
-    jq -r --slurpfile target "$tmp" '
-      def localt: .[0:19] + "Z" | fromdateiso8601 | strflocaltime("%H:%M:%S");
-      def row(tag): "\(.id)\t\(tag)\t\(.file_created_at|localt)\t"
-        + "\([.metadata_entries[]|select(.key=="active_app")|.value][0] // "?")\t"
-        + "\([.metadata_entries[]|select(.key=="active_window")|.value][0] // "-" | .[0:42])\t"
-        + ([.metadata_entries[]|select(.key|startswith("structured_vlm"))
-            | (.value | if type=="string" then fromjson else . end).primary.what][0] // "-" | .[0:40]);
-      (.prev[] | row("·")),
-      ($target[0] | row("▶ TARGET")),
-      (.next[] | row("·"))
-    ' "$ctx" | column -t -s $'\t'
-    rm -f "$tmp" "$ctx"
-}
-```
-
-Note the `(.value | if type=="string" then fromjson else . end)` branch: the `structured_vlm` value arrives as a **string** from `/api/entities` and `/context`, but as a **parsed object** from `/api/search` — this handles both. (`column -t` alignment drifts slightly with CJK widths; columns stay readable.)
-
-**Worked example — the directory a `codex` command ran in.** Search pinpointed the `codex` launch (entity `1748373`), but that frame was full-screen with the version-update prompt — no directory visible. Pull its context:
+**Recipe.** Get `library_id`, then project just the fields the question needs — that projection is the jq's only job (it keeps the bloated response small):
 
 ```bash
-entity_context 1748373 8
+B=http://127.0.0.1:8839; id=1748373
+lib=$(curl -s "$B/api/entities/$id" | jq -r .library_id)
+curl -s "$B/api/libraries/$lib/entities/$id/context?prev=12&next=12" | jq -r '
+  .prev[], .next[] | "\(.id)\t\(.file_created_at)Z\t"
+    + ([.metadata_entries[]|select(.key=="active_window").value][0] // "-") + "\t"
+    + ([.metadata_entries[]|select(.key|startswith("structured_vlm")).value][0] // "{}" | fromjson.primary.what // "-")'
 ```
 
+Don't capture the body with `$(curl …)` — OCR/VLM text mangles JSON in command substitution; pipe straight to `jq` (or a tmp file).
+
+**Worked example — the directory a `codex` command ran in.** Search pinpointed the `codex` launch (entity `1748373`), but that frame was full-screen with the version-update prompt — no directory visible. Pull its neighbors (the recipe above, `id=1748373`):
+
 ```
-1748370  ·         09:51:40  iTerm2  ✳ Make claim status update on assessment a   在终端中运行 AI 编程助手，执行代码审查…
-1748372  ·         09:51:45  iTerm2  you@host:~/projects/memos/pensieve-rpa       在终端中执行 'z pensieve' 命令切换目录并准备运行…
-1748373  ▶ TARGET  09:51:51  iTerm2  codex                                        终端显示 Codex CLI 更新提示，等待用户输入…
-1748374  ·         09:51:56  iTerm2  ✳ Review blocking feature project for addi   …
+1748372  2026-06-07T01:51:45Z  you@host:~/projects/memos/pensieve-rpa  在终端中执行 'z pensieve' 命令切换目录并准备运行…
+1748374  2026-06-07T01:51:56Z  ✳ Review blocking feature project for…  …
 ```
 
-The frame **6 s before** the launch (`1748372`) shows the shell prompt `…:~/projects/mem[os]` and a VLM note that the user ran `z pensieve` to jump directories — recovering the answer (`~/projects/memos/pensieve-rpa`) that wasn't on the target frame at all.
+The frame **6 s before** the launch (`1748372`) shows the shell prompt `…:~/projects/memos/pensieve-rpa` and a VLM note that the user ran `z pensieve` to jump directories — recovering the answer (`~/projects/memos/pensieve-rpa`) that wasn't on the target frame at all. (Target `1748373` itself isn't in the strip; you supply it.)
 
-**Adaptive widening** (mirrors clicking an edge thumbnail in the UI). If the lead-up frame isn't in the window yet:
-- bump the count: `entity_context <id> 30` → `60` → `100` (the per-side max), **or**
-- re-center on the oldest frame returned and pull *its* context — the same walk-further-back the UI does. Re-centering keeps each response small and lets you scan back indefinitely.
+**Widening** (mirrors clicking an edge thumbnail in the UI). If the lead-up frame isn't in the window yet: bump the counts (`prev=30&next=30` → `60` → `100`, the per-side max), **or** re-center on the oldest frame returned and pull *its* context — the same walk-further-back the UI does, keeping each response small so you can scan back indefinitely.
 
 **Citing it in a reply.** When context resolves the answer, cite the lead-up frame's entity URL next to the pinpoint hit, e.g. "ran in `~/projects/memos/pensieve-rpa` — the prompt is visible 6 s earlier → `http://127.0.0.1:8839/entities/1748372`". The user clicks through to verify the exact frame.
 
@@ -575,7 +551,7 @@ Don't open more than 2-3 at a time — overwhelming. Pick the top hit, show its 
 7. **Old data without VLM**: screenshots predating structured_vlm rollout (or where VLM failed) only have OCR text. Their hits will lack the `structured_vlm_v1_*` entry — fall back to `ocr_result` for context.
 8. **`ocr_result` is not in search hits** — it's stripped from `/api/search` responses to keep them small (the full payload is ~15 KB per entry × 48 hits). The other metadata (timestamp, active_app, active_window, url, structured_vlm_*) is intact. If you genuinely need the OCR text for a specific entity, fetch `/api/entities/{id}` directly.
 9. **Chinese FTS noise is real**: the PG index uses jieba word segmentation, so a multi-character Chinese phrase gets split into smaller tokens. Common single-character morphemes (`网` / `站` / `中` etc.) match a lot of unrelated OCR (网络 / 网站 / 网址), so FTS will surface low-relevance hits mixed with the real ones. Hybrid RRF mitigates this somewhat via vector search, but for Chinese brand / site names always cross-check hits with URL or `active_app` filters (see Strategy 0) — don't trust the FTS rank alone.
-10. **The `/context` endpoint behaves unlike `/api/search`** (see Strategy 6): it does **not** strip `ocr_result` (responses balloon — pipe to a tmp file and project only what you need), its timestamps are **naive UTC** with no `Z`/offset (normalize with `.[0:19] + "Z"` before converting to local), and its `structured_vlm` value is a **JSON string** (needs `fromjson`, unlike search hits). Use the `entity_context` helper rather than hand-rolling these each time.
+10. **The `/context` endpoint behaves unlike `/api/search`** — no `ocr_result` stripping, naive-UTC timestamps, and a stringified `structured_vlm` value. See Strategy 6 for the gotchas in full and the projection recipe.
 
 ## When to give up and ask
 
