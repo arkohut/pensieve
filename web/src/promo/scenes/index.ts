@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import { ProcessingPillScene } from './ProcessingPillScene';
+import { ScreensGalleryScene } from './ScreensGalleryScene';
 import { SearchScene } from './SearchScene';
 
 export interface Scene {
@@ -11,4 +12,5 @@ export interface Scene {
 export const SCENES: Scene[] = [
   { id: 'processing-pill', title: 'Processing status', Component: ProcessingPillScene },
   { id: 'search', title: 'Search', Component: SearchScene },
+  { id: 'screens', title: 'Mock screens', Component: ScreensGalleryScene },
 ];
