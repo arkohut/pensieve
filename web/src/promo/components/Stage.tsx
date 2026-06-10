@@ -12,15 +12,20 @@ export function Stage({
   children,
   caption,
   className,
+  width = STAGE_WIDTH,
+  height = STAGE_HEIGHT,
 }: {
   children: ReactNode;
   caption?: ReactNode;
   className?: string;
+  /** Per-scene canvas size; defaults to 1280×720. */
+  width?: number;
+  height?: number;
 }) {
   return (
     <div
       className={cn('relative flex flex-col items-center overflow-hidden bg-background', className)}
-      style={{ width: STAGE_WIDTH, height: STAGE_HEIGHT }}
+      style={{ width, height }}
     >
       <div
         className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent to-brand/5"
