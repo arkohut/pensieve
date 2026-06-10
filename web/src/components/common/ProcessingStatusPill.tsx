@@ -32,10 +32,10 @@ export function ProcessingStatusPill() {
   return <PillButton status={status} />;
 }
 
-export function PillButton({ status }: { status: ProcessingStatus }) {
+export function PillButton({ status, open }: { status: ProcessingStatus; open?: boolean }) {
   const state = pillState(status);
   return (
-    <Popover>
+    <Popover open={open}>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -58,7 +58,7 @@ export function PillButton({ status }: { status: ProcessingStatus }) {
   );
 }
 
-function PanelBody({ status }: { status: ProcessingStatus }) {
+export function PanelBody({ status }: { status: ProcessingStatus }) {
   const state = pillState(status);
   const reason = headlineReason(status, state.headlineKey);
   const { coverage_window: cov, backlog, watch } = status;
