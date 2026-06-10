@@ -46,5 +46,3 @@ export const STATUSES: ProcessingStatus[] = [
     },
   }),
 ];
-
-export const STATE_LABELS = ['Caught up', 'Processing', 'Backlog', 'Paused'];

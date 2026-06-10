@@ -11,9 +11,14 @@ import { Deck } from './Deck';
 import '../styles/globals.css';
 import '$/lib/i18n';
 
+// Promo images must be deterministic: theme is driven by ?theme=light|dark
+// (default light) and forced via next-themes, so it ignores localStorage / OS.
+const forcedTheme =
+  new URLSearchParams(window.location.search).get('theme') === 'dark' ? 'dark' : 'light';
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ThemeProvider>
+    <ThemeProvider forcedTheme={forcedTheme}>
       <Deck />
     </ThemeProvider>
   </StrictMode>,
