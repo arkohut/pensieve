@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { LucideIcon } from '$/components/common/LucideIcon';
 import { cn, translateAppName, filename } from '$/lib/utils';
 import type { Hit } from '$/lib/api/types';
@@ -54,9 +55,11 @@ interface Props {
   /** Total frames represented by this card; >= 2 renders a stack with a count badge. */
   stackCount?: number;
   onClick: () => void;
+  /** Optional thumbnail override (e.g. a rendered mock screen for promo shots). */
+  thumbnail?: ReactNode;
 }
 
-export function HitCard({ hit, stackCount = 1, onClick }: Props) {
+export function HitCard({ hit, stackCount = 1, onClick, thumbnail }: Props) {
   const title = getEntityTitle(hit.document);
   const appName = getAppName(hit.document);
   const screenName = getScreenName(hit.document);
@@ -79,13 +82,15 @@ export function HitCard({ hit, stackCount = 1, onClick }: Props) {
           'aspect-[16/10] overflow-hidden rounded-md border border-border bg-secondary transition-shadow duration-200 group-hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.18)]',
           stackClass && 'stack-top',
         )}>
-          <img
-            loading="lazy"
-            decoding="async"
-            className="h-full w-full object-cover"
-            src={`${apiEndpoint}/thumbnails/${hit.document.filepath.replace(/^\/+/, '')}`}
-            alt=""
-          />
+          {thumbnail ?? (
+            <img
+              loading="lazy"
+              decoding="async"
+              className="h-full w-full object-cover"
+              src={`${apiEndpoint}/thumbnails/${hit.document.filepath.replace(/^\/+/, '')}`}
+              alt=""
+            />
+          )}
         </figure>
         {stackCount >= 2 && (
           <span

@@ -1,5 +1,6 @@
 node_modules
 dist
+dist-promo
 .DS_Store
 *.local
 .env.*.local
