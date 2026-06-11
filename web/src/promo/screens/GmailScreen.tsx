@@ -3,7 +3,7 @@ import { cn } from '$/lib/utils';
 // Mock "screenshot" of Gmail. Hardcoded colors. Fills 1280×800.
 const ROWS = [
   { sender: 'Pensieve', subject: 'Your weekly recap is ready', snippet: '— 1,488,618 screens indexed this week', time: '9:24 AM', unread: true },
-  { sender: 'GitHub', subject: '[arkohut/pensieve] PR #99 merged', snippet: '— keep watch alive when macOS reports…', time: '8:02 AM', unread: true },
+  { sender: 'GitHub', subject: '[acme/pensieve] PR #128 merged', snippet: '— keep watch alive when the OS reports…', time: '8:02 AM', unread: true },
   { sender: 'Vercel', subject: 'Deployment ready', snippet: '— promo-deck is live in preview', time: 'Yesterday', unread: false },
   { sender: 'Figma', subject: 'A. commented on “Promo deck”', snippet: '— love the single-card treatment', time: 'Yesterday', unread: false },
   { sender: 'Stripe', subject: 'Your receipt', snippet: '— payment of $20.00 to OpenAI', time: 'Mon', unread: false },

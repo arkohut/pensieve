@@ -3,7 +3,7 @@ import { cn } from '$/lib/utils';
 // Mock "screenshot" of WeChat (微信). Hardcoded colors. Fills 1280×800.
 const CHATS = [
   { n: '文件传输助手', m: '[文件] promo-deck.fig', t: '上午 9:24', active: true },
-  { n: 'Pensieve 团队', m: '小川: 单卡那版定了', t: '上午 8:50', active: false },
+  { n: 'Pensieve 团队', m: '老王: 这版定了', t: '上午 8:50', active: false },
   { n: '张三', m: '收到，晚点看', t: '昨天', active: false },
   { n: '前端交流群', m: '李四: 这个截图体系不错', t: '昨天', active: false },
 ];

@@ -3,7 +3,7 @@
 export function TerminalScreen() {
   const prompt = (
     <>
-      <span className="text-emerald-400">arkohut@mac</span>{' '}
+      <span className="text-emerald-400">dev@mbp</span>{' '}
       <span className="text-sky-400">~/projects/memos</span>{' '}
       <span className="text-pink-400">❯</span>{' '}
     </>
@@ -14,7 +14,7 @@ export function TerminalScreen() {
         <span className="h-3.5 w-3.5 rounded-full bg-[#ff5f57]" />
         <span className="h-3.5 w-3.5 rounded-full bg-[#febc2e]" />
         <span className="h-3.5 w-3.5 rounded-full bg-[#28c840]" />
-        <span className="ml-3 text-[15px] text-zinc-400">arkohut — zsh — 120×30</span>
+        <span className="ml-3 text-[15px] text-zinc-400">dev — zsh — 120×30</span>
       </div>
       <div className="flex-1 space-y-2.5 p-8">
         <div>{prompt}git status</div>
