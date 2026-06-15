@@ -33,3 +33,12 @@ def test_health_check_notify_calls_alert(monkeypatch):
     monkeypatch.setattr("memos.notify.alert_if_changed", lambda problems: sent.__setitem__("n", sent["n"] + 1))
     runner.invoke(commands.app, ["health-check", "--notify"])
     assert sent["n"] == 1
+
+
+def test_doctor_shows_capture_health(monkeypatch):
+    monkeypatch.setattr("memos.health.capture_health", lambda: _fake_health([]))
+    # Keep doctor's own preflight from forcing a nonzero exit / prompts:
+    monkeypatch.setattr(commands, "is_macos", lambda: False)
+    monkeypatch.setattr(commands, "is_windows", lambda: False)
+    result = runner.invoke(commands.app, ["doctor"])
+    assert "Capture: record" in result.stdout

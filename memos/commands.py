@@ -655,6 +655,17 @@ def doctor():
         if autostart == "broken":
             failures.append("autostart")
 
+    # Runtime capture health (informational — does not affect preflight pass/fail).
+    from .health import capture_health
+    h = capture_health()
+    rows.append(("Capture: record", "UP" if h.record_up else "DOWN"))
+    rows.append(("Capture: serve", "UP" if h.serve_up else "DOWN"))
+    rows.append(("Capture: watch", "UP" if h.watch_up else "DOWN"))
+    if h.heartbeat_age is not None:
+        rows.append(("Capture: heartbeat", f"{int(h.heartbeat_age)}s ago"))
+    if h.problems:
+        rows.append(("Capture: problems", "; ".join(h.problems)))
+
     typer.echo("Pensieve diagnostics")
     typer.echo("=" * 64)
     for k, v in rows:
