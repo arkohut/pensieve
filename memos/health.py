@@ -30,10 +30,12 @@ def heartbeat_path() -> Path:
 
 
 def touch_heartbeat() -> None:
-    """Update the heartbeat file mtime. Called once per record loop iteration."""
-    p = heartbeat_path()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.touch()
+    """Update the heartbeat file mtime. Called once per record loop iteration.
+
+    The base directory is created at import time (config.py), so this stays off
+    the hot path (runs every record_interval) and just touches the file.
+    """
+    heartbeat_path().touch()
 
 
 def heartbeat_age(now: Optional[float] = None) -> Optional[float]:

@@ -74,7 +74,7 @@ def alert_if_changed(
             notify("Pensieve", "Screen capture issue:\n" + "\n".join(problems))
             _write_state(state_path, problems, now)
             return "problem"
-        _write_state(state_path, problems, prev_alerted_at)
+        # Same problems within cooldown: the persisted state is already current.
         return None
 
     # No problems now.
@@ -82,5 +82,5 @@ def alert_if_changed(
         notify("Pensieve", "Screen capture recovered.")
         _write_state(state_path, [], now)
         return "recovered"
-    _write_state(state_path, [], prev_alerted_at)
+    # Already healthy: nothing changed, nothing to persist.
     return None

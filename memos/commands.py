@@ -739,14 +739,28 @@ def ps():
     typer.echo(tabulate(table_data, headers=headers, tablefmt="plain"))
 
 
+# Canonical service order for lifecycle commands; stop uses the reverse (shutdown) order.
+_LIFECYCLE_SERVICES = ("serve", "record", "watch")
+
+
+def _resolve_targets(service: str, reverse: bool = False):
+    """Services a lifecycle command should act on, or None (after printing an
+    error) when the name is unknown. `reverse` gives shutdown order for stop."""
+    if service == "all":
+        return list(reversed(_LIFECYCLE_SERVICES)) if reverse else list(_LIFECYCLE_SERVICES)
+    if service not in _LIFECYCLE_SERVICES:
+        typer.echo(f"未知服务: {service}")
+        return None
+    return [service]
+
+
 @app.command()
 def stop(
     service: str = typer.Argument("all", help="Service to stop: serve, record, watch, or all (default: all)")
 ):
     """Stop a Memos service, or all services when no service is given."""
-    targets = ["watch", "record", "serve"] if service == "all" else [service]
-    if service != "all" and service not in ("serve", "record", "watch"):
-        typer.echo(f"未知服务: {service}")
+    targets = _resolve_targets(service, reverse=True)
+    if targets is None:
         return
 
     if is_macos():
@@ -771,9 +785,8 @@ def start(
     service: str = typer.Argument("all", help="Service to start: serve, record, watch, or all (default: all)")
 ):
     """Start a Memos service, or all services when no service is given."""
-    targets = ["serve", "record", "watch"] if service == "all" else [service]
-    if service != "all" and service not in ("serve", "record", "watch"):
-        typer.echo(f"未知服务: {service}")
+    targets = _resolve_targets(service)
+    if targets is None:
         return
 
     if is_macos():
@@ -1015,9 +1028,8 @@ def restart(
     service: str = typer.Argument("all", help="Service to restart: serve, record, watch, or all (default: all)")
 ):
     """Restart a Memos service, or all services when no service is given."""
-    targets = ["serve", "record", "watch"] if service == "all" else [service]
-    if service != "all" and service not in ("serve", "record", "watch"):
-        typer.echo(f"未知服务: {service}")
+    targets = _resolve_targets(service)
+    if targets is None:
         return
 
     if is_macos():
