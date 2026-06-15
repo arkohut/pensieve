@@ -91,3 +91,11 @@ def test_disable_boots_out_all_and_removes(tmp_path, monkeypatch):
     assert any("com.user.memos.record" in b for b in booted)
     assert any("com.user.memos.healthcheck" in b for b in booted)
     assert not (tmp_path / "com.user.memos.record.plist").exists()
+
+
+def test_restart_kickstarts(monkeypatch):
+    ran = []
+    monkeypatch.setattr(launchd, "_run", lambda argv: ran.append(argv))
+    monkeypatch.setattr(launchd, "_domain", lambda: "gui/501")
+    launchd.restart("record")
+    assert ran == [["launchctl", "kickstart", "-k", "gui/501/com.user.memos.record"]]
