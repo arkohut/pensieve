@@ -99,3 +99,69 @@ def base_dir_writable() -> bool:
         return True
     except OSError:
         return False
+
+
+@dataclass
+class CaptureHealth:
+    record_up: bool
+    serve_up: bool
+    watch_up: bool
+    heartbeat_age: Optional[float]
+    heartbeat_stale: bool
+    screen_recording_ok: bool
+    base_dir_writable: bool
+    problems: List[str]
+
+    @property
+    def healthy(self) -> bool:
+        return not self.problems
+
+
+def capture_health(now: Optional[float] = None) -> CaptureHealth:
+    now = time.time() if now is None else now
+    ups = {svc: is_service_running(svc)[0] for svc in SERVICES}
+
+    age = heartbeat_age(now)
+    threshold = stale_threshold()
+    stale = age is None or age > threshold
+
+    since_wake = seconds_since_wake(now)
+    in_wake_grace = since_wake is not None and since_wake < settings.health.wake_grace_seconds
+
+    problems: List[str] = []
+
+    # record: liveness is critical; only flag heartbeat staleness when it's up.
+    if not ups["record"]:
+        if not is_intentionally_stopped("record"):
+            problems.append("record process is not running")
+    else:
+        clear_intent_marker("record")  # it's up; forget any stale stop marker
+        if stale and not in_wake_grace:
+            problems.append("record heartbeat is stale (capture loop not ticking)")
+
+    # serve/watch: report when down unless intentionally stopped.
+    for svc in ("serve", "watch"):
+        if not ups[svc]:
+            if not is_intentionally_stopped(svc):
+                problems.append(f"{svc} process is not running")
+        else:
+            clear_intent_marker(svc)
+
+    sr_ok = screen_recording_ok()
+    if not sr_ok:
+        problems.append("screen recording permission not granted")
+
+    writable = base_dir_writable()
+    if not writable:
+        problems.append("base directory is not writable (disk full?)")
+
+    return CaptureHealth(
+        record_up=ups["record"],
+        serve_up=ups["serve"],
+        watch_up=ups["watch"],
+        heartbeat_age=age,
+        heartbeat_stale=stale,
+        screen_recording_ok=sr_ok,
+        base_dir_writable=writable,
+        problems=problems,
+    )

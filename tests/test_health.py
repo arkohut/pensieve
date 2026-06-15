@@ -64,3 +64,60 @@ def test_base_dir_writable_false_when_probe_raises(monkeypatch):
             raise OSError("disk full")
     monkeypatch.setattr(health, "_base_dir", lambda: Bad())
     assert health.base_dir_writable() is False
+
+
+def _stub_health(monkeypatch, *, ups, age, threshold=120.0, since_wake=9999.0,
+                 sr_ok=True, writable=True, stopped=()):
+    monkeypatch.setattr(health, "is_service_running", lambda s, **k: (ups.get(s, True), 1))
+    monkeypatch.setattr(health, "is_intentionally_stopped", lambda s: s in stopped)
+    monkeypatch.setattr(health, "clear_intent_marker", lambda s: None)
+    monkeypatch.setattr(health, "heartbeat_age", lambda now=None: age)
+    monkeypatch.setattr(health, "stale_threshold", lambda: threshold)
+    monkeypatch.setattr(health, "seconds_since_wake", lambda now=None: since_wake)
+    monkeypatch.setattr(health, "screen_recording_ok", lambda: sr_ok)
+    monkeypatch.setattr(health, "base_dir_writable", lambda: writable)
+
+
+def test_capture_health_all_ok(monkeypatch):
+    _stub_health(monkeypatch, ups={"record": True, "serve": True, "watch": True}, age=5.0)
+    h = health.capture_health()
+    assert h.healthy is True
+    assert h.problems == []
+
+
+def test_capture_health_record_down(monkeypatch):
+    _stub_health(monkeypatch, ups={"record": False, "serve": True, "watch": True}, age=5.0)
+    h = health.capture_health()
+    assert h.record_up is False
+    assert any("record process is not running" in p for p in h.problems)
+
+
+def test_capture_health_intentional_stop_is_silent(monkeypatch):
+    _stub_health(monkeypatch, ups={"record": False, "serve": True, "watch": True},
+                 age=5.0, stopped=("record",))
+    h = health.capture_health()
+    assert h.healthy is True
+
+
+def test_capture_health_stale_heartbeat(monkeypatch):
+    _stub_health(monkeypatch, ups={"record": True, "serve": True, "watch": True},
+                 age=999.0, threshold=120.0, since_wake=9999.0)
+    h = health.capture_health()
+    assert h.heartbeat_stale is True
+    assert any("heartbeat" in p for p in h.problems)
+
+
+def test_capture_health_wake_grace_suppresses_stale(monkeypatch):
+    _stub_health(monkeypatch, ups={"record": True, "serve": True, "watch": True},
+                 age=999.0, threshold=120.0, since_wake=10.0)  # just woke
+    h = health.capture_health()
+    assert h.heartbeat_stale is True
+    assert not any("heartbeat" in p for p in h.problems)  # suppressed
+
+
+def test_capture_health_permission_and_disk(monkeypatch):
+    _stub_health(monkeypatch, ups={"record": True, "serve": True, "watch": True},
+                 age=5.0, sr_ok=False, writable=False)
+    h = health.capture_health()
+    assert any("permission" in p for p in h.problems)
+    assert any("writable" in p or "disk" in p for p in h.problems)
