@@ -134,3 +134,85 @@ def kickstart_argv(label: str) -> list:
 
 def kill_argv(signal_name: str, label: str) -> list:
     return ["launchctl", "kill", signal_name, f"{_domain()}/{label}"]
+
+
+def get_python_path() -> str:
+    import sys
+    return sys.executable
+
+
+def _run(argv: list) -> None:
+    """Run a launchctl command, tolerating non-zero exit (e.g. not-loaded)."""
+    try:
+        subprocess.run(argv, check=False, capture_output=True, text=True)
+    except Exception as e:
+        logging.warning("launchctl command failed (%s): %s", argv, e)
+
+
+def write_plists() -> list:
+    """Write all four agent plists and return their paths."""
+    pdir = plist_dir()
+    pdir.mkdir(parents=True, exist_ok=True)
+    log_dir = settings.resolved_base_dir / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    python_path = get_python_path()
+    python_dir = os.path.dirname(python_path)
+    path_env = env_path(python_dir)
+
+    paths = []
+    for service in SERVICE_LABELS:
+        p = service_plist_path(service)
+        p.write_text(build_service_plist(service, python_path, log_dir, path_env))
+        paths.append(p)
+
+    hc = healthcheck_plist_path()
+    hc.write_text(build_healthcheck_plist(python_path, log_dir, path_env, settings.health.check_interval))
+    paths.append(hc)
+    return paths
+
+
+def _migrate_legacy() -> None:
+    """Tear down the old single-agent setup so launchd owns fresh per-service copies."""
+    from .service_manager import stop_service
+
+    _run(bootout_argv(LEGACY_LABEL))            # stop old wrapper job (kills its children)
+    for svc in ("watch", "record", "serve"):    # belt-and-suspenders: free any PID-file locks
+        stop_service(svc)
+
+    legacy = legacy_plist_path()
+    if legacy.exists():
+        legacy.unlink()
+    launch_sh = settings.resolved_base_dir / "launch.sh"
+    if launch_sh.exists():
+        launch_sh.unlink()
+
+
+def enable() -> None:
+    _migrate_legacy()
+    for p in write_plists():
+        _run(bootstrap_argv(p))
+
+
+def disable() -> None:
+    for label in (*SERVICE_LABELS.values(), HEALTHCHECK_LABEL, LEGACY_LABEL):
+        _run(bootout_argv(label))
+    for p in (
+        *[service_plist_path(s) for s in SERVICE_LABELS],
+        healthcheck_plist_path(),
+        legacy_plist_path(),
+    ):
+        if p.exists():
+            p.unlink()
+
+
+def start(service: str) -> None:
+    _run(kickstart_argv(SERVICE_LABELS[service]))
+
+
+def stop(service: str) -> None:
+    _run(kill_argv("SIGTERM", SERVICE_LABELS[service]))
+
+
+def restart(service: str) -> None:
+    _run(kickstart_argv(SERVICE_LABELS[service]))
