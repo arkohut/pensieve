@@ -71,3 +71,31 @@ def seconds_since_wake(now: Optional[float] = None) -> Optional[float]:
     wake = int(m.group(1))
     now = time.time() if now is None else now
     return now - wake
+
+
+def screen_recording_ok() -> bool:
+    """True if macOS screen-recording permission is granted (or N/A off macOS)."""
+    if platform.system() != "Darwin":
+        return True
+    try:
+        from Quartz import CGPreflightScreenCaptureAccess
+    except ImportError:
+        return True
+    return bool(CGPreflightScreenCaptureAccess())
+
+
+def _base_dir() -> Path:
+    return settings.resolved_base_dir
+
+
+def base_dir_writable() -> bool:
+    """True if the base directory exists and accepts a probe write."""
+    base = _base_dir()
+    try:
+        base.mkdir(parents=True, exist_ok=True)
+        probe = base / ".health_probe"
+        probe.write_text("ok")
+        probe.unlink()
+        return True
+    except OSError:
+        return False

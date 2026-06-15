@@ -46,3 +46,21 @@ def test_seconds_since_wake_none_on_error(monkeypatch):
         raise OSError("no sysctl")
     monkeypatch.setattr(health.subprocess, "check_output", boom)
     assert health.seconds_since_wake() is None
+
+
+def test_screen_recording_ok_true_off_darwin(monkeypatch):
+    monkeypatch.setattr(health.platform, "system", lambda: "Linux")
+    assert health.screen_recording_ok() is True
+
+
+def test_base_dir_writable_true(tmp_path, monkeypatch):
+    monkeypatch.setattr(health, "_base_dir", lambda: tmp_path)
+    assert health.base_dir_writable() is True
+
+
+def test_base_dir_writable_false_when_probe_raises(monkeypatch):
+    class Bad:
+        def mkdir(self, *a, **k):
+            raise OSError("disk full")
+    monkeypatch.setattr(health, "_base_dir", lambda: Bad())
+    assert health.base_dir_writable() is False
