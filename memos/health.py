@@ -118,6 +118,17 @@ class CaptureHealth:
 
 
 def capture_health(now: Optional[float] = None) -> CaptureHealth:
+    """Compute current capture health.
+
+    Side effect: for any service found running that still carries a `pen stop`
+    intent marker, the marker is cleared here. This is intentional — it lets a
+    service that came back on its own (e.g. relaunched at login by launchd
+    RunAtLoad after a `pen stop` followed by reboot) resume being monitored.
+    Callers using this only to display status should know it may clear stale markers.
+
+    A running `record` with no heartbeat file yet (heartbeat_age is None) is treated
+    as stale and flagged, since the loop has not yet proven it is ticking.
+    """
     now = time.time() if now is None else now
     ups = {svc: is_service_running(svc)[0] for svc in SERVICES}
 

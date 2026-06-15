@@ -121,3 +121,12 @@ def test_capture_health_permission_and_disk(monkeypatch):
     h = health.capture_health()
     assert any("permission" in p for p in h.problems)
     assert any("writable" in p or "disk" in p for p in h.problems)
+
+
+def test_capture_health_running_record_without_heartbeat_is_stale(monkeypatch):
+    # record is up but no heartbeat file exists yet (age None) -> treated as stale and flagged.
+    _stub_health(monkeypatch, ups={"record": True, "serve": True, "watch": True},
+                 age=None, threshold=120.0, since_wake=9999.0)
+    h = health.capture_health()
+    assert h.heartbeat_stale is True
+    assert any("heartbeat" in p for p in h.problems)
