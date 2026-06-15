@@ -66,6 +66,22 @@ def remove_pid_file(service_name: str) -> None:
     if pid_file.exists():
         pid_file.unlink()
 
+def intent_marker_file(service_name: str) -> Path:
+    """Path of the marker that records an intentional `pen stop` of a service."""
+    return get_pid_dir() / f"{service_name}.stopped"
+
+def mark_service_stopped(service_name: str) -> None:
+    """Record that the user intentionally stopped this service."""
+    intent_marker_file(service_name).touch()
+
+def clear_intent_marker(service_name: str) -> None:
+    """Forget any intentional-stop marker (called on start, or when the service is up)."""
+    intent_marker_file(service_name).unlink(missing_ok=True)
+
+def is_intentionally_stopped(service_name: str) -> bool:
+    """True when a `pen stop` marker is present for this service."""
+    return intent_marker_file(service_name).exists()
+
 def acquire_service_lock(service_name: str) -> Tuple[bool, Optional[int]]:
     """Try to claim the PID-file lock for this service.
 
