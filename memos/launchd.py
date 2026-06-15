@@ -10,7 +10,9 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+import sys
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 from memos.config import settings
 
@@ -49,6 +51,9 @@ def env_path(python_dir: str) -> str:
 
 def build_service_plist(service: str, python_path: str, log_dir: Path, env_path: str) -> str:
     label = SERVICE_LABELS[service]
+    py = escape(python_path)
+    log_path = escape(str(log_dir / f"{service}.log"))
+    path_env = escape(env_path)
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
     "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -58,7 +63,7 @@ def build_service_plist(service: str, python_path: str, log_dir: Path, env_path:
     <string>{label}</string>
     <key>ProgramArguments</key>
     <array>
-        <string>{python_path}</string>
+        <string>{py}</string>
         <string>-m</string>
         <string>memos.commands</string>
         <string>{service}</string>
@@ -73,13 +78,13 @@ def build_service_plist(service: str, python_path: str, log_dir: Path, env_path:
     <key>ThrottleInterval</key>
     <integer>10</integer>
     <key>StandardOutPath</key>
-    <string>{log_dir / f"{service}.log"}</string>
+    <string>{log_path}</string>
     <key>StandardErrorPath</key>
-    <string>{log_dir / f"{service}.log"}</string>
+    <string>{log_path}</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>{env_path}</string>
+        <string>{path_env}</string>
     </dict>
 </dict>
 </plist>
@@ -87,6 +92,9 @@ def build_service_plist(service: str, python_path: str, log_dir: Path, env_path:
 
 
 def build_healthcheck_plist(python_path: str, log_dir: Path, env_path: str, interval: int) -> str:
+    py = escape(python_path)
+    log_path = escape(str(log_dir / "healthcheck.log"))
+    path_env = escape(env_path)
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
     "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -96,7 +104,7 @@ def build_healthcheck_plist(python_path: str, log_dir: Path, env_path: str, inte
     <string>{HEALTHCHECK_LABEL}</string>
     <key>ProgramArguments</key>
     <array>
-        <string>{python_path}</string>
+        <string>{py}</string>
         <string>-m</string>
         <string>memos.commands</string>
         <string>health-check</string>
@@ -107,13 +115,13 @@ def build_healthcheck_plist(python_path: str, log_dir: Path, env_path: str, inte
     <key>StartInterval</key>
     <integer>{interval}</integer>
     <key>StandardOutPath</key>
-    <string>{log_dir / "healthcheck.log"}</string>
+    <string>{log_path}</string>
     <key>StandardErrorPath</key>
-    <string>{log_dir / "healthcheck.log"}</string>
+    <string>{log_path}</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>{env_path}</string>
+        <string>{path_env}</string>
     </dict>
 </dict>
 </plist>
@@ -128,8 +136,12 @@ def bootout_argv(label: str) -> list:
     return ["launchctl", "bootout", f"{_domain()}/{label}"]
 
 
-def kickstart_argv(label: str) -> list:
-    return ["launchctl", "kickstart", "-k", f"{_domain()}/{label}"]
+def kickstart_argv(label: str, kill: bool = False) -> list:
+    cmd = ["launchctl", "kickstart"]
+    if kill:
+        cmd.append("-k")
+    cmd.append(f"{_domain()}/{label}")
+    return cmd
 
 
 def kill_argv(signal_name: str, label: str) -> list:
@@ -137,14 +149,17 @@ def kill_argv(signal_name: str, label: str) -> list:
 
 
 def get_python_path() -> str:
-    import sys
     return sys.executable
 
 
 def _run(argv: list) -> None:
     """Run a launchctl command, tolerating non-zero exit (e.g. not-loaded)."""
     try:
-        subprocess.run(argv, check=False, capture_output=True, text=True)
+        result = subprocess.run(argv, check=False, capture_output=True, text=True)
+        if result.returncode != 0:
+            logging.debug(
+                "launchctl %s exited %s: %s", argv, result.returncode, (result.stderr or "").strip()
+            )
     except Exception as e:
         logging.warning("launchctl command failed (%s): %s", argv, e)
 
@@ -207,6 +222,7 @@ def disable() -> None:
 
 
 def start(service: str) -> None:
+    # No -k: start if down, no-op if already running (idempotent).
     _run(kickstart_argv(SERVICE_LABELS[service]))
 
 
@@ -215,4 +231,5 @@ def stop(service: str) -> None:
 
 
 def restart(service: str) -> None:
-    _run(kickstart_argv(SERVICE_LABELS[service]))
+    # -k: kill and restart even if currently running.
+    _run(kickstart_argv(SERVICE_LABELS[service], kill=True))
