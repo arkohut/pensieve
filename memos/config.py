@@ -102,6 +102,14 @@ class WatchSettings(BaseModel):
         return v
 
 
+class HealthSettings(BaseModel):
+    heartbeat_stale_factor: int = 5          # stale if heartbeat age > factor * record_interval
+    heartbeat_stale_min_seconds: int = 120   # floor for the stale threshold
+    wake_grace_seconds: int = 180            # suppress heartbeat-stale within this window after wake
+    check_interval: int = 600                # periodic healthcheck StartInterval (baked into plist)
+    alert_cooldown_seconds: int = 3600       # min gap between repeat alerts for the same problem
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         yaml_file=str(Path.home() / ".memos" / "config.yaml"),
@@ -137,6 +145,7 @@ class Settings(BaseSettings):
     app_blacklist: List[str] = []
 
     watch: WatchSettings = WatchSettings()
+    health: HealthSettings = HealthSettings()
 
     @classmethod
     def settings_customise_sources(
