@@ -51,3 +51,23 @@ def stale_threshold() -> float:
         settings.record_interval * settings.health.heartbeat_stale_factor,
         settings.health.heartbeat_stale_min_seconds,
     )
+
+
+def seconds_since_wake(now: Optional[float] = None) -> Optional[float]:
+    """Seconds since the machine last woke from sleep (macOS), else None.
+
+    Reads `sysctl -n kern.waketime`, which prints e.g. `{ sec = 1718000000, usec = 0 }`.
+    Returns None on non-macOS or any failure, so callers treat it as "no recent wake".
+    """
+    if platform.system() != "Darwin":
+        return None
+    try:
+        out = subprocess.check_output(["sysctl", "-n", "kern.waketime"], text=True)
+    except Exception:
+        return None
+    m = re.search(r"sec\s*=\s*(\d+)", out)
+    if not m:
+        return None
+    wake = int(m.group(1))
+    now = time.time() if now is None else now
+    return now - wake
