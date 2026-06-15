@@ -13,6 +13,7 @@ from mss import mss
 from memos.config import settings
 from memos.worklog import write_entry as worklog_write_entry
 from memos.tz_utils import LocalOffset, local_ts_to_utc
+from memos.health import touch_heartbeat
 import datetime
 
 # Import platform-specific modules
@@ -374,11 +375,14 @@ def run_screen_recorder_once(threshold, base_dir, previous_hashes):
         logging.info("Screen is locked. Skipping screenshot.")
 
 
-def run_screen_recorder(threshold, base_dir, previous_hashes):
-    while True:
+def run_screen_recorder(threshold, base_dir, previous_hashes, iterations=None, sleep_fn=time.sleep):
+    count = 0
+    while iterations is None or count < iterations:
+        # Heartbeat first, before the lock/blacklist checks, so a stale heartbeat
+        # means the loop stopped ticking — not merely that the screen was locked.
+        touch_heartbeat()
         try:
             if not is_screen_locked():
-                # Check if current app is blacklisted before taking screenshot
                 app_name, _, _ = get_active_window_info()
                 if is_app_blacklisted(app_name):
                     logging.info(f"App '{app_name}' is blacklisted. Skipping screenshot.")
@@ -401,7 +405,8 @@ def run_screen_recorder(threshold, base_dir, previous_hashes):
         except Exception as e:
             logging.error(f"An error occurred: {str(e)}. Skipping this iteration.")
 
-        time.sleep(settings.record_interval)
+        sleep_fn(settings.record_interval)
+        count += 1
 
 
 def main():
