@@ -707,16 +707,9 @@ def disable():
                 "Memos shortcut not found in startup folder. Memos is not set to run at startup."
             )
     elif is_macos():
-        plist_path = Path.home() / "Library/LaunchAgents/com.user.memos.plist"
-        if plist_path.exists():
-            if is_service_loaded("com.user.memos"):
-                subprocess.run(["launchctl", "unload", str(plist_path)], check=False)
-            plist_path.unlink()
-            typer.echo(
-                "Removed plist file. Memos will no longer run at startup."
-            )
-        else:
-            typer.echo("Plist file does not exist. Memos is not set to run at startup.")
+        import memos.launchd as launchd
+        launchd.disable()
+        typer.echo("Removed Memos launchd agents. Memos will no longer run at startup.")
     else:
         typer.echo("Unsupported operating system.")
 
@@ -738,14 +731,11 @@ def enable():
         setup_windows_autostart(vbs_path)
         typer.echo("Created startup shortcut for Windows.")
     elif is_macos():
-        launch_sh_path = generate_launch_sh()
-        typer.echo(f"Generated launch script at {launch_sh_path}")
-        plist_path = generate_plist()
-        typer.echo(f"Generated plist file at {plist_path}")
-        typer.echo(
-            "Memos will start automatically at next login. "
-            "Run 'memos start' to start the services now."
-        )
+        import memos.launchd as launchd
+        launchd.enable()
+        typer.echo("Generated per-service launchd agents (record, serve, watch, healthcheck).")
+        typer.echo("Each service auto-restarts on crash; the healthcheck notifies on capture gaps.")
+        typer.echo("Services have been (re)started under launchd.")
     else:
         typer.echo("Unsupported operating system.")
 
@@ -786,48 +776,56 @@ def ps():
 
 @app.command()
 def stop(
-    service: str = typer.Argument("all", help="Service to stop: serve, record, watch, or all")
+    service: str = typer.Argument("all", help="Service to stop: serve, record, watch, or all (default: all)")
 ):
-    """Stop specific Memos service or all services"""
-    from .service_manager import stop_service
-    
-    if service == "all":
-        # 停止所有服务
-        for svc in ["watch", "record", "serve"]:  # 注意停止顺序
-            if stop_service(svc):
-                typer.echo(f"已停止{svc}服务")
-            else:
-                typer.echo(f"停止{svc}服务失败")
-    elif service in ["serve", "record", "watch"]:
-        if stop_service(service):
-            typer.echo(f"已停止{service}服务")
-        else:
-            typer.echo(f"停止{service}服务失败")
-    else:
+    """Stop a Memos service, or all services when no service is given."""
+    targets = ["watch", "record", "serve"] if service == "all" else [service]
+    if service != "all" and service not in ("serve", "record", "watch"):
         typer.echo(f"未知服务: {service}")
+        return
+
+    if is_macos():
+        import memos.launchd as launchd
+        from .service_manager import mark_service_stopped
+        for svc in targets:
+            mark_service_stopped(svc)
+            launchd.stop(svc)
+            typer.echo(f"已停止{svc}服务")
+        return
+
+    from .service_manager import stop_service
+    for svc in targets:
+        if stop_service(svc):
+            typer.echo(f"已停止{svc}服务")
+        else:
+            typer.echo(f"停止{svc}服务失败")
 
 
 @app.command()
 def start(
-    service: str = typer.Argument("all", help="Service to start: serve, record, watch, or all")
+    service: str = typer.Argument("all", help="Service to start: serve, record, watch, or all (default: all)")
 ):
-    """Start specific Memos service or all services"""
-    from .service_manager import start_service
-    
-    if service == "all":
-        # 启动所有服务
-        for svc in ["serve", "record", "watch"]:
-            if start_service(svc):
-                typer.echo(f"已启动{svc}服务")
-            else:
-                typer.echo(f"启动{svc}服务失败或已在运行")
-    elif service in ["serve", "record", "watch"]:
-        if start_service(service):
-            typer.echo(f"已启动{service}服务")
-        else:
-            typer.echo(f"启动{service}服务失败或已在运行")
-    else:
+    """Start a Memos service, or all services when no service is given."""
+    targets = ["serve", "record", "watch"] if service == "all" else [service]
+    if service != "all" and service not in ("serve", "record", "watch"):
         typer.echo(f"未知服务: {service}")
+        return
+
+    if is_macos():
+        import memos.launchd as launchd
+        from .service_manager import clear_intent_marker
+        for svc in targets:
+            clear_intent_marker(svc)
+            launchd.start(svc)
+            typer.echo(f"已启动{svc}服务")
+        return
+
+    from .service_manager import start_service
+    for svc in targets:
+        if start_service(svc):
+            typer.echo(f"已启动{svc}服务")
+        else:
+            typer.echo(f"启动{svc}服务失败或已在运行")
 
 
 @app.command()
@@ -1049,21 +1047,29 @@ def migrate_sqlite_to_pg(
 
 @app.command()
 def restart(
-    service: str = typer.Argument("all", help="Service to restart: serve, record, watch, or all")
+    service: str = typer.Argument("all", help="Service to restart: serve, record, watch, or all (default: all)")
 ):
-    """Restart specific Memos service or all services"""
-    from .service_manager import restart_service, restart_processes
-    
-    if service == "all":
-        # 重启所有服务
-        results = restart_processes({"watch": True, "record": True, "serve": True})
-        for svc, success in results.items():
-            typer.echo(f"{'已' if success else '未'}重启{svc}服务")
-    elif service in ["serve", "record", "watch"]:
-        success = restart_service(service)
-        typer.echo(f"{'已' if success else '未'}重启{service}服务")
-    else:
+    """Restart a Memos service, or all services when no service is given."""
+    targets = ["serve", "record", "watch"] if service == "all" else [service]
+    if service != "all" and service not in ("serve", "record", "watch"):
         typer.echo(f"未知服务: {service}")
+        return
+
+    if is_macos():
+        import memos.launchd as launchd
+        from .service_manager import clear_intent_marker
+        for svc in targets:
+            clear_intent_marker(svc)
+            launchd.restart(svc)
+            typer.echo(f"已重启{svc}服务")
+        return
+
+    from .service_manager import restart_service
+    for svc in targets:
+        if restart_service(svc):
+            typer.echo(f"已重启{svc}服务")
+        else:
+            typer.echo(f"重启{svc}服务失败")
 
 
 if __name__ == "__main__":
