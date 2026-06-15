@@ -431,25 +431,6 @@ Set WshShell = Nothing
     return bat_path, vbs_path
 
 
-def generate_launch_sh():
-    memos_dir = settings.resolved_base_dir
-    python_path = get_python_path()
-    content = f"""#!/bin/bash
-# Use the absolute interpreter path so no venv activation is needed.
-{python_path} -m memos.commands record &
-{python_path} -m memos.commands serve &
-# watch retries on its own until serve is ready
-{python_path} -m memos.commands watch &
-
-wait
-"""
-    launch_sh_path = memos_dir / "launch.sh"
-    with open(launch_sh_path, "w") as f:
-        f.write(content)
-    launch_sh_path.chmod(0o755)
-    return launch_sh_path
-
-
 def setup_windows_autostart(launcher_path):
     import win32com.client
 
@@ -468,59 +449,6 @@ def setup_windows_autostart(launcher_path):
     shortcut.WorkingDirectory = str(launcher_path.parent)
     shortcut.WindowStyle = 7
     shortcut.save()
-
-
-def generate_plist():
-    memos_dir = settings.resolved_base_dir
-    python_dir = os.path.dirname(get_python_path())
-    log_dir = memos_dir / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-    "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.user.memos</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/bin/bash</string>
-        <string>{memos_dir}/launch.sh</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>StandardOutPath</key>
-    <string>{log_dir}/memos.log</string>
-    <key>StandardErrorPath</key>
-    <string>{log_dir}/memos.err</string>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>PATH</key>
-        <string>{python_dir}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
-    </dict>
-</dict>
-</plist>
-"""
-    plist_dir = Path.home() / "Library/LaunchAgents"
-    plist_dir.mkdir(parents=True, exist_ok=True)
-    plist_path = plist_dir / "com.user.memos.plist"
-    with open(plist_path, "w") as f:
-        f.write(plist_content)
-    return plist_path
-
-
-def is_service_loaded(service_name):
-    try:
-        result = subprocess.run(
-            ["launchctl", "list", service_name],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return "0" in result.stdout
-    except subprocess.CalledProcessError:
-        return False
 
 
 def is_macos():
