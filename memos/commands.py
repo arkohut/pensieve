@@ -694,6 +694,32 @@ def doctor():
     raise typer.Exit(code=1)
 
 
+@app.command("health-check")
+def health_check(
+    notify: bool = typer.Option(False, "--notify", help="Send a desktop notification on problems"),
+):
+    """Check that screen capture is alive and capturing; optionally notify on problems."""
+    from .health import capture_health
+
+    h = capture_health()
+
+    if notify:
+        from .notify import alert_if_changed
+        alert_if_changed(h.problems)
+
+    typer.echo("Capture health: " + ("OK" if h.healthy else "PROBLEMS"))
+    typer.echo(f"  record: {'UP' if h.record_up else 'DOWN'}  "
+               f"serve: {'UP' if h.serve_up else 'DOWN'}  "
+               f"watch: {'UP' if h.watch_up else 'DOWN'}")
+    if h.heartbeat_age is not None:
+        typer.echo(f"  heartbeat age: {int(h.heartbeat_age)}s")
+    for p in h.problems:
+        typer.echo(f"  - {p}")
+
+    if not h.healthy:
+        raise typer.Exit(code=1)
+
+
 @app.command()
 def disable():
     """Disable memos from running at startup"""
