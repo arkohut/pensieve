@@ -130,7 +130,12 @@ class EntityModel(Base):
         "TagModel",
         secondary="entity_tags",
         lazy="select",
-        cascade="all, delete",
+        # No delete cascade: tags are shared across entities (many-to-many).
+        # Deleting an entity must only drop its entity_tags association rows
+        # (handled by the secondary table + entity_tags.entity_id ON DELETE
+        # CASCADE), never the shared TagModel rows. Cascading the delete into
+        # `tags` raised a ForeignKeyViolation whenever a tag was still used by
+        # another entity — surfacing as a 500 from the delete-entity endpoint.
         overlaps="entities",
     )
     plugin_status: Mapped[List["EntityPluginStatusModel"]] = relationship(

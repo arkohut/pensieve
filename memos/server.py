@@ -235,6 +235,21 @@ def get_library_by_id(library_id: int, db: Session = Depends(get_db)):
     return library
 
 
+@api_router.delete(
+    "/libraries/{library_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["library"],
+)
+def delete_library(library_id: int, db: Session = Depends(get_db)):
+    """Delete a library and everything under it: its entities (with their FTS/
+    vector index rows and metadata), folders, and plugin bindings. Destructive
+    and irreversible."""
+    try:
+        crud.remove_library(library_id, db)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
 @api_router.get(
     "/libraries/{library_id}/processing-status",
     response_model=ProcessingStatusResponse,
@@ -257,39 +272,49 @@ def get_processing_status(
         )
 
     key = (library_id, window_hours)
-    now_mono = time.monotonic()
     with _processing_status_lock:
         cached = _processing_status_cache.get(key)
-        if cached and now_mono - cached[1] < _PROCESSING_STATUS_TTL:
+        if cached and time.monotonic() - cached[1] < _PROCESSING_STATUS_TTL:
             computed_at, coverage_window, backlog = cached[0]
         else:
-            computed_at = coverage_window = backlog = None
+            # Single-flight: compute the expensive backlog/coverage scans while
+            # holding the lock. Without this, every poller that arrives after the
+            # 60s cache expires fires the same multi-query scans at once — a cache
+            # stampede that piles concurrent full scans onto the DB, slows each one
+            # enough to time out, and wedges the endpoint under continuous polling.
+            # One caller computes (a few seconds); the rest block briefly and then
+            # reuse the cache it just populated. (~1 record library + 60s TTL, so
+            # the serialization cost is negligible.)
+            total = crud.count_entities_in_window(library_id, window_hours, db)
+            done = crud.count_entities_fully_processed_in_window(
+                library_id, window_hours, db
+            )
+            pct = 1.0 if total == 0 else done / total
 
-    if coverage_window is None:
-        total = crud.count_entities_in_window(library_id, window_hours, db)
-        done = crud.count_entities_fully_processed_in_window(library_id, window_hours, db)
-        pct = 1.0 if total == 0 else done / total
+            unprocessed_total = crud.count_unprocessed(library_id, db)
+            oldest_dt = crud.get_oldest_unprocessed_created_at(library_id, db)
+            if oldest_dt is None:
+                oldest_age_seconds = None
+            else:
+                # oldest_dt may be naive (SQLite). Coerce to UTC for arithmetic.
+                if oldest_dt.tzinfo is None:
+                    oldest_dt = oldest_dt.replace(tzinfo=timezone.utc)
+                oldest_age_seconds = max(
+                    0, int((datetime.now(timezone.utc) - oldest_dt).total_seconds())
+                )
 
-        unprocessed_total = crud.count_unprocessed(library_id, db)
-        oldest_dt = crud.get_oldest_unprocessed_created_at(library_id, db)
-        if oldest_dt is None:
-            oldest_age_seconds = None
-        else:
-            # oldest_dt may be naive (SQLite). Coerce to UTC for arithmetic.
-            if oldest_dt.tzinfo is None:
-                oldest_dt = oldest_dt.replace(tzinfo=timezone.utc)
-            oldest_age_seconds = max(0, int((datetime.now(timezone.utc) - oldest_dt).total_seconds()))
-
-        computed_at = datetime.now(timezone.utc)
-        coverage_window = ProcessingCoverageWindow(
-            total=total, fully_processed=done, pct=pct
-        )
-        backlog = ProcessingBacklog(
-            total_unprocessed=unprocessed_total,
-            oldest_age_seconds=oldest_age_seconds,
-        )
-        with _processing_status_lock:
-            _processing_status_cache[key] = ((computed_at, coverage_window, backlog), now_mono)
+            computed_at = datetime.now(timezone.utc)
+            coverage_window = ProcessingCoverageWindow(
+                total=total, fully_processed=done, pct=pct
+            )
+            backlog = ProcessingBacklog(
+                total_unprocessed=unprocessed_total,
+                oldest_age_seconds=oldest_age_seconds,
+            )
+            _processing_status_cache[key] = (
+                (computed_at, coverage_window, backlog),
+                time.monotonic(),
+            )
 
     # Watch liveness is a cheap, time-sensitive probe; evaluate it fresh on every
     # request rather than serving it from the cached (up to _PROCESSING_STATUS_TTL

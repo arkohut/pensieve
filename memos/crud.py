@@ -330,6 +330,44 @@ def remove_entity(entity_id: int, db: Session):
         raise ValueError(f"Entity with id {entity_id} not found")
 
 
+def remove_library(library_id: int, db: Session):
+    """Delete a library and everything under it.
+
+    Order matters: entities reference folders and folders reference the library
+    (all NO ACTION), so children must go first. Each entity is removed via
+    remove_entity so its FTS/vector index rows and metadata are cleaned too;
+    entity_plugin_status and entity_tags rows drop via their ON DELETE CASCADE.
+    Then plugin bindings, folders, and finally the library row itself.
+    """
+    exists = db.query(LibraryModel.id).filter(LibraryModel.id == library_id).first()
+    if exists is None:
+        raise ValueError(f"Library with id {library_id} not found")
+
+    entity_ids = [
+        e.id
+        for e in db.query(EntityModel.id)
+        .filter(EntityModel.library_id == library_id)
+        .all()
+    ]
+    for entity_id in entity_ids:
+        remove_entity(entity_id, db)
+
+    # Bulk Core deletes for the shell. Deliberately NOT db.delete(library_obj):
+    # that makes the ORM also try to clear the library<->plugins secondary
+    # association we just removed, double-deleting it (StaleDataError). Order:
+    # bindings & folders (both reference libraries NO ACTION) before the library.
+    db.query(LibraryPluginModel).filter(
+        LibraryPluginModel.library_id == library_id
+    ).delete(synchronize_session=False)
+    db.query(FolderModel).filter(FolderModel.library_id == library_id).delete(
+        synchronize_session=False
+    )
+    db.query(LibraryModel).filter(LibraryModel.id == library_id).delete(
+        synchronize_session=False
+    )
+    db.commit()
+
+
 def create_plugin(newPlugin: NewPluginParam, db: Session) -> Plugin:
     db_plugin = PluginModel(**newPlugin.model_dump(mode="json"))
     db.add(db_plugin)
@@ -819,26 +857,25 @@ def _unprocessed_query(library_id: int, db: Session):
     if not library_plugin_ids:
         return None
 
-    plugin_count_subq = (
-        db.query(
-            EntityPluginStatusModel.entity_id,
-            func.count(EntityPluginStatusModel.plugin_id).label("plugin_count"),
-        )
-        .filter(EntityPluginStatusModel.plugin_id.in_(library_plugin_ids))
+    # "Fully processed" = has a status row for every bound plugin. Expressed as a
+    # plain anti-join (id NOT IN <fully-done set>) rather than an outer join to a
+    # grouped subquery + OR(NULL, < N): the latter made the planner pick a plan
+    # that ran ~100s once entity_plugin_status grew large (e.g. after a backfill),
+    # while this hash anti-join returns in ~1s. entity_id is never NULL, so NOT IN
+    # is safe here.
+    fully_done = (
+        select(EntityPluginStatusModel.entity_id)
+        .where(EntityPluginStatusModel.plugin_id.in_(library_plugin_ids))
         .group_by(EntityPluginStatusModel.entity_id)
-        .subquery()
+        .having(
+            func.count(EntityPluginStatusModel.plugin_id) == len(library_plugin_ids)
+        )
     )
 
     return (
         db.query(EntityModel)
         .filter(EntityModel.library_id == library_id)
-        .outerjoin(plugin_count_subq, EntityModel.id == plugin_count_subq.c.entity_id)
-        .filter(
-            or_(
-                plugin_count_subq.c.plugin_count.is_(None),
-                plugin_count_subq.c.plugin_count < len(library_plugin_ids),
-            )
-        )
+        .filter(EntityModel.id.notin_(fully_done))
     )
 
 
